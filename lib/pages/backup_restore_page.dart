@@ -1119,7 +1119,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        content: Text(message),
+        content: SingleChildScrollView(child: Text(message)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),

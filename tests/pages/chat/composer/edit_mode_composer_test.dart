@@ -55,6 +55,7 @@ Widget wrapComposerInApp({
   bool showEditWarningOnEntry = false,
   int editWarningArmCount = 0,
   Locale locale = const Locale('zh', 'CN'),
+  double textScaleFactor = 1,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -79,22 +80,31 @@ Widget wrapComposerInApp({
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+        child: child!,
+      ),
       home: Scaffold(
-        body: ChatComposerWidget(
-          onSend: onSend ?? (text, attachments) {},
-          onStop: () {},
-          onEnabledToolsChanged: (_) {},
-          modelNames: const ['model-a', 'model-b'],
-          selectedModelIndex: 0,
-          onModelSelected: (_) {},
-          conversationId: conversationId,
-          editingMessageId: editingMessageId,
-          editingMessageText: editingMessageText,
-          editingMessageAttachments: editingMessageAttachments,
-          onEditSend: onEditSend,
-          onEditCancel: onEditCancel,
-          showEditWarningOnEntry: showEditWarningOnEntry,
-          editWarningArmCount: editWarningArmCount,
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: ChatComposerWidget(
+            onSend: onSend ?? (text, attachments) {},
+            onStop: () {},
+            onEnabledToolsChanged: (_) {},
+            modelNames: const ['model-a', 'model-b'],
+            selectedModelIndex: 0,
+            onModelSelected: (_) {},
+            conversationId: conversationId,
+            editingMessageId: editingMessageId,
+            editingMessageText: editingMessageText,
+            editingMessageAttachments: editingMessageAttachments,
+            onEditSend: onEditSend,
+            onEditCancel: onEditCancel,
+            showEditWarningOnEntry: showEditWarningOnEntry,
+            editWarningArmCount: editWarningArmCount,
+          ),
         ),
       ),
     ),
@@ -779,6 +789,138 @@ void main() {
         await tester.pump(const Duration(milliseconds: 250));
         expect(find.text(warningText), findsNothing);
         expect(find.text('编辑消息'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'long localized warning wraps in a narrow composer and editing stays usable',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        tester.view.viewInsets = FakeViewPadding(
+          bottom: 260 * tester.view.devicePixelRatio,
+        );
+        addTearDown(() {
+          tester.view.viewInsets = FakeViewPadding.zero;
+          tester.binding.setSurfaceSize(null);
+        });
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+            locale: const Locale('fr', 'FR'),
+            textScaleFactor: 1.2,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final localizedWarning = AppLocalizations.of(
+          tester.element(find.byType(ChatComposerWidget)),
+        )!
+            .chatEditWarning;
+        final warningFinder = find.text(localizedWarning);
+        expect(warningFinder, findsOneWidget);
+        expect(tester.getSize(warningFinder).height, greaterThan(24));
+        expect(tester.takeException(), isNull);
+        final closeButton = find.byKey(closeKey);
+        expect(tester.getRect(closeButton).bottom, lessThanOrEqualTo(380));
+
+        // The warning remains available while the native editor is focused
+        // and the user changes its contents. The keyboard inset bounds the
+        // composer, so the editor scrolls into view without clipping.
+        final editor = find.byType(TextField).first;
+        await tester.ensureVisible(editor);
+        expect(tester.getRect(editor).bottom, lessThanOrEqualTo(380));
+        await tester.tap(editor);
+        await tester.enterText(editor, 'edited draft');
+        await tester.pump();
+        expect(
+            tester.widget<TextField>(editor).controller!.text, 'edited draft');
+        expect(tester.widget<TextField>(editor).focusNode!.hasFocus, isTrue);
+        expect(warningFinder, findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // The close affordance remains available after the editor interaction.
+        await tester.ensureVisible(closeButton);
+        await tester.tap(closeButton);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(warningFinder, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'very short large-text viewport keeps warning text scrollable and controls reachable',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 200));
+        tester.view.viewInsets = FakeViewPadding(
+          bottom: 80 * tester.view.devicePixelRatio,
+        );
+        addTearDown(() async {
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.binding.setSurfaceSize(null);
+        });
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+            locale: const Locale('fr', 'FR'),
+            textScaleFactor: 3,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final localizedWarning = AppLocalizations.of(
+          tester.element(find.byType(ChatComposerWidget)),
+        )!
+            .chatEditWarning;
+        expect(find.text(localizedWarning), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text(localizedWarning), findsOneWidget);
+
+        final textScrollView = find.byKey(
+          const Key('editWarningTextScrollView'),
+        );
+        final warningScrollable = find.descendant(
+          of: textScrollView,
+          matching: find.byType(Scrollable),
+        );
+        expect(warningScrollable, findsOneWidget);
+        final warningScrollState = tester.state<ScrollableState>(
+          warningScrollable,
+        );
+        expect(warningScrollState.position.maxScrollExtent, greaterThan(0));
+        await tester.drag(textScrollView, const Offset(0, -40));
+        await tester.pump();
+        expect(warningScrollState.position.pixels, greaterThan(0));
+
+        final closeButton = find.byKey(closeKey);
+        expect(tester.getRect(closeButton).bottom, lessThanOrEqualTo(120));
+        final editor = find.byType(TextField).first;
+        await tester.ensureVisible(editor);
+        final editorRect = tester.getRect(editor);
+        expect(editorRect.top, lessThan(120));
+        expect(editorRect.bottom, greaterThan(0));
+        await tester.tapAt(const Offset(160, 80));
+        await tester.enterText(editor, 'edited draft');
+        await tester.pump();
+        expect(
+            tester.widget<TextField>(editor).controller!.text, 'edited draft');
+        expect(tester.widget<TextField>(editor).focusNode!.hasFocus, isTrue);
+        expect(tester.takeException(), isNull);
+
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(localizedWarning), findsNothing);
+        expect(tester.takeException(), isNull);
       },
     );
 

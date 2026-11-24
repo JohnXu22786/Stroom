@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_source_uri.dart';
+import 'tts_stream_audio_source.dart';
 
 // ===========================================================================
 // AudioPlayerAdapter — 用于 AudioPlayerPage 的跨平台播放器
@@ -13,6 +14,10 @@ import 'audio_source_uri.dart';
 /// Native 平台播放器适配器
 /// 内部使用 just_audio 的 AudioPlayer
 class AudioPlayerAdapter {
+  AudioPlayerAdapter({AudioPlayer Function()? createPlayer})
+      : _createPlayer = createPlayer ?? AudioPlayer.new;
+
+  final AudioPlayer Function() _createPlayer;
   AudioPlayer? _player;
 
   final StreamController<Duration> _positionCtrl =
@@ -24,6 +29,10 @@ class AudioPlayerAdapter {
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration?>? _durSub;
   StreamSubscription<PlayerState>? _stateSub;
+  Completer<void>? _streamPlaybackDone;
+  int _streamPlaybackGeneration = 0;
+  int? _streamSourceSetupGeneration;
+  Future<void>? _playerDisposal;
 
   /// 当前播放状态
   bool get playing => _player?.playing ?? false;
@@ -49,8 +58,11 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
+    _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
+    _finishStreamPlayback();
     await _disposePlayer();
-    _player = AudioPlayer();
+    _player = _createPlayer();
     _setupListeners();
 
     try {
@@ -59,6 +71,50 @@ class AudioPlayerAdapter {
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
       rethrow;
+    }
+  }
+
+  /// Plays TTS chunks through just_audio as they are synthesized.
+  Future<bool> playStream(
+    Stream<Uint8List> chunks, {
+    required String contentType,
+  }) async {
+    final generation = ++_streamPlaybackGeneration;
+    _streamSourceSetupGeneration = null;
+    _finishStreamPlayback();
+    await _disposePlayer();
+    if (generation != _streamPlaybackGeneration) return false;
+
+    _player = _createPlayer();
+    _setupListeners();
+    final source = TtsStreamAudioSource(chunks, contentType: contentType);
+    final playbackDone = Completer<void>();
+    _streamPlaybackDone = playbackDone;
+
+    try {
+      _streamSourceSetupGeneration = generation;
+      try {
+        await Future.any([
+          _player!.setAudioSource(source),
+          playbackDone.future,
+        ]);
+      } finally {
+        if (_streamSourceSetupGeneration == generation) {
+          _streamSourceSetupGeneration = null;
+        }
+      }
+      if (generation != _streamPlaybackGeneration) return false;
+
+      final playback = _player!.play();
+      await Future.any([
+        Future.wait([source.completed, playback]),
+        playbackDone.future,
+      ]);
+      return false;
+    } finally {
+      if (identical(_streamPlaybackDone, playbackDone)) {
+        _streamPlaybackDone = null;
+      }
     }
   }
 
@@ -74,7 +130,15 @@ class AudioPlayerAdapter {
 
   /// 停止
   void stop() {
-    _player?.stop();
+    final cancelSourceSetup = _streamSourceSetupGeneration != null;
+    _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
+    _finishStreamPlayback();
+    if (cancelSourceSetup) {
+      unawaited(_disposePlayer());
+    } else {
+      _player?.stop();
+    }
     _positionCtrl.add(Duration.zero);
     _stateCtrl.add(null);
   }
@@ -97,7 +161,18 @@ class AudioPlayerAdapter {
 
   /// 释放资源
   Future<void> dispose() async {
+    _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
+    _finishStreamPlayback();
     await _disposePlayer();
+  }
+
+  void _finishStreamPlayback() {
+    final playbackDone = _streamPlaybackDone;
+    if (playbackDone != null && !playbackDone.isCompleted) {
+      playbackDone.complete();
+    }
+    _streamPlaybackDone = null;
   }
 
   void _setupListeners() {
@@ -112,15 +187,25 @@ class AudioPlayerAdapter {
     });
   }
 
-  Future<void> _disposePlayer() async {
-    await _posSub?.cancel();
-    await _durSub?.cancel();
-    await _stateSub?.cancel();
+  Future<void> _disposePlayer() {
+    return _playerDisposal ??= _disposePlayerResources().whenComplete(() {
+      _playerDisposal = null;
+    });
+  }
+
+  Future<void> _disposePlayerResources() async {
+    final posSub = _posSub;
+    final durSub = _durSub;
+    final stateSub = _stateSub;
+    final player = _player;
     _posSub = null;
     _durSub = null;
     _stateSub = null;
-    await _player?.dispose();
     _player = null;
+    await posSub?.cancel();
+    await durSub?.cancel();
+    await stateSub?.cancel();
+    await player?.dispose();
   }
 }
 

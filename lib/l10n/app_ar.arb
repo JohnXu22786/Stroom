@@ -3720,6 +3720,14 @@
   "ankiStatsReviewRate": "معدل المراجعة",
   "ankiBrowserSearchHint": "البحث في البطاقات...",
   "ankiBrowserEmpty": "لا توجد بطاقات",
+  "ankiCardBrowserLoadError": "تعذّر تحميل البطاقات: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "المزامنة مع AnkiWeb",
   "ankiNewDeckTooltip": "مجموعة بطاقات جديدة",
   "ankiDeckLoadError": "تعذّر تحميل مجموعات البطاقات: {error}",

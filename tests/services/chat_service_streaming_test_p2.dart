@@ -401,14 +401,16 @@ void chatServiceStreamingGroup2() {
   group('imageExtension', () {
     test('returns correct extension for known MIME types', () {
       expect(imageExtension('image/png'), 'png');
+      expect(imageExtension('image/jpeg'), 'jpeg');
       expect(imageExtension('image/gif'), 'gif');
       expect(imageExtension('image/webp'), 'webp');
       expect(imageExtension('image/bmp'), 'bmp');
     });
 
-    test('falls back to jpeg for unknown image MIME types', () {
-      expect(imageExtension('image/tiff'), 'jpeg');
-      expect(imageExtension('image/avif'), 'jpeg');
+    test('returns null for unsupported image MIME types', () {
+      expect(imageExtension('image/tiff'), isNull);
+      expect(imageExtension('image/avif'), isNull);
+      expect(imageExtension('application/octet-stream'), isNull);
     });
   });
 }

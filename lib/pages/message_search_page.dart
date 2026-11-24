@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/chat_message.dart';
+import 'chat/chat_types.dart';
 import '../providers/conversation_provider.dart';
 
 import '../widgets/constrained_text.dart';
@@ -70,19 +71,17 @@ class MessageSearchPage extends ConsumerStatefulWidget {
     for (final conv in conversations) {
       final matches = <SearchResultMatch>[];
       for (final msg in conv.messages) {
-        final lowerContent = msg.content.toLowerCase();
-        int start = 0;
-        while (true) {
-          final idx = lowerContent.indexOf(lowerQuery, start);
-          if (idx == -1) break;
+        for (final (matchStart, matchEnd) in caseInsensitiveMatchOffsets(
+          msg.content,
+          lowerQuery,
+        )) {
           matches.add(
             SearchResultMatch(
               message: msg,
-              matchStart: idx,
-              matchEnd: idx + lowerQuery.length,
+              matchStart: matchStart,
+              matchEnd: matchEnd,
             ),
           );
-          start = idx + lowerQuery.length;
         }
       }
       if (matches.isNotEmpty) {

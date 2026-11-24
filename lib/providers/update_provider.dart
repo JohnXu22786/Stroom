@@ -91,6 +91,7 @@ class UpdateState {
     String? releaseNotes,
     String? downloadUrl,
     String? error,
+    bool clearError = false,
     bool? updateAvailable,
     bool? isDownloading,
     double? downloadProgress,
@@ -112,7 +113,7 @@ class UpdateState {
       latestVersion: latestVersion ?? this.latestVersion,
       releaseNotes: releaseNotes ?? this.releaseNotes,
       downloadUrl: downloadUrl ?? this.downloadUrl,
-      error: error ?? this.error,
+      error: clearError ? null : error ?? this.error,
       updateAvailable: updateAvailable ?? this.updateAvailable,
       isDownloading: isDownloading ?? this.isDownloading,
       downloadProgress: downloadProgress ?? this.downloadProgress,
@@ -401,7 +402,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       return;
     }
 
-    state = state.copyWith(isChecking: true, error: null);
+    state = state.copyWith(isChecking: true, clearError: true);
 
     final future = _performCheck(silent: silent);
     _inFlightCheck = future;
@@ -583,7 +584,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
             state = state.copyWith(
               isChecking: false,
               updateAvailable: false,
-              error: null,
+              clearError: true,
             );
           } else {
             state = _resetState();

@@ -6,6 +6,7 @@
 //   tests/pages/settings_page_ocr_test.dart
 //   tests/pages/settings_page_update_test.dart
 //   tests/pages/notification_settings_page_test.dart
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/notification_settings_page.dart';
 import 'package:stroom/pages/settings_page.dart';
@@ -23,6 +25,7 @@ import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/services/notification_service.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 /// Builds the SettingsPage test app without notification override.
@@ -68,6 +71,44 @@ class _FixedErrorUpdateNotifier extends UpdateNotifier {
 
   @override
   Future<void> checkForUpdate({bool silent = false}) async {}
+}
+
+class _BlockingInitialPrefsReadStore extends InMemorySharedPreferencesStore {
+  // ignore: use_super_parameters
+  _BlockingInitialPrefsReadStore(
+    Map<String, Object> values, {
+    this.failNotificationWrites = false,
+    this.blockNotificationWrites = false,
+  }) : super.withData(values);
+
+  final bool failNotificationWrites;
+  final bool blockNotificationWrites;
+
+  final initialReadStarted = Completer<void>();
+  final releaseInitialRead = Completer<void>();
+  final notificationWriteStarted = Completer<void>();
+  final releaseNotificationWrite = Completer<void>();
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (!initialReadStarted.isCompleted) {
+      initialReadStarted.complete();
+      await releaseInitialRead.future;
+    }
+    return super.getAll();
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (failNotificationWrites && key == 'flutter.notifications_enabled') {
+      return false;
+    }
+    if (blockNotificationWrites && key == 'flutter.notifications_enabled') {
+      notificationWriteStarted.complete();
+      await releaseNotificationWrite.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -227,6 +268,212 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('notifications_enabled'), isFalse);
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('provisional iOS permission allows saving notification toggle',
+      (tester) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 5;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    // The singleton may carry a completed queue from another fake-async zone.
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+    final prefsStore = _BlockingInitialPrefsReadStore(
+      {'flutter.notifications_enabled': false},
+    );
+    SharedPreferencesStorePlatform.instance = prefsStore;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await prefsStore.initialReadStarted.future;
+    await tester.pump();
+
+    final toggle = tester.widget<Switch>(find.byType(Switch));
+    expect(toggle.value, isFalse);
+    expect(toggle.onChanged, isNotNull);
+
+    await tester.tap(find.byType(Switch));
+    prefsStore.releaseInitialRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('notifications_enabled'), isTrue);
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('failed notification save does not block initial preference load',
+      (tester) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 5;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'notifications_enabled': true});
+    final prefsStore = _BlockingInitialPrefsReadStore(
+      {'flutter.notifications_enabled': true},
+      failNotificationWrites: true,
+    );
+    SharedPreferencesStorePlatform.instance = prefsStore;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await prefsStore.initialReadStarted.future;
+    await tester.pump();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    await tester.tap(find.byType(Switch));
+    prefsStore.releaseInitialRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    expect(
+      (await SharedPreferences.getInstance()).getBool('notifications_enabled'),
+      isTrue,
+    );
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('later toggle wins while initial load and save are pending', (
+    tester,
+  ) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 5;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'notifications_enabled': true});
+    final prefsStore = _BlockingInitialPrefsReadStore(
+      {'flutter.notifications_enabled': true},
+      blockNotificationWrites: true,
+    );
+    addTearDown(() {
+      if (!prefsStore.releaseInitialRead.isCompleted) {
+        prefsStore.releaseInitialRead.complete();
+      }
+      if (!prefsStore.releaseNotificationWrite.isCompleted) {
+        prefsStore.releaseNotificationWrite.complete();
+      }
+    });
+    SharedPreferencesStorePlatform.instance = prefsStore;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await prefsStore.initialReadStarted.future;
+    await tester.pump();
+
+    final toggle = tester.widget<Switch>(find.byType(Switch));
+    expect(toggle.onChanged, isNotNull);
+    // Hold the save while the initial read completes with the old value.
+    toggle.onChanged!(false);
+    prefsStore.releaseInitialRead.complete();
+    await prefsStore.notificationWriteStarted.future;
+    await tester.pump();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+
+    prefsStore.releaseNotificationWrite.complete();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await NotificationService().notificationSettingQueueForTesting;
+    await tester.pump();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('notifications_enabled'), isFalse);
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
     debugDefaultTargetPlatformOverride = null;
   });
 

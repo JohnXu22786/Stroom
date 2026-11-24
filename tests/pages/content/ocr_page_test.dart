@@ -991,6 +991,92 @@ void main() {
 
   group('OcrPage - model selector', () {
     testWidgets(
+      'unnamed instruction labels stay complete and reveal when clipped',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        const firstLine = 'Read every visible word from the image carefully';
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            ocrInstructions: const [
+              OcrInstruction(
+                content: '$firstLine\nKeep the original prompt unchanged.',
+              ),
+            ],
+            locale: const Locale('en', 'US'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          ocrInstructionLabel(
+            const OcrInstruction(name: 'Saved prompt name', content: 'Prompt'),
+          ),
+          'Saved prompt name',
+        );
+        expect(
+          ocrInstructionLabel(const OcrInstruction(content: '  \n  ')),
+          isEmpty,
+        );
+
+        final semantics = tester.ensureSemantics();
+        final selector = find.byType(DropdownButton<int>).last;
+        await tester.tap(selector);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        var label = find.descendant(
+          of: find.byType(Overlay),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == firstLine,
+          ),
+        );
+        expect(label, findsOneWidget);
+        expect(tester.getSemantics(label).label, firstLine);
+        final option = find.ancestor(
+          of: label,
+          matching: find.byType(DropdownMenuItem<int>),
+        );
+        await tester.tap(option.first);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        label = find.descendant(
+          of: selector,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == firstLine,
+          ),
+        );
+        expect(label, findsOneWidget);
+        final selectedText = find.descendant(
+          of: selector,
+          matching: find.text(firstLine),
+        );
+        expect(selectedText, findsOneWidget);
+        final start = tester.getTopLeft(selectedText);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 2));
+        expect(tester.getTopLeft(selectedText).dx, lessThan(start.dx));
+
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        label = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == firstLine,
+          ),
+        );
+        expect(label, findsOneWidget);
+        expect(tester.getSemantics(label).label, firstLine);
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+      },
+    );
+
+    testWidgets(
       'reflows selectors at narrow width and large text scale in LTR and RTL',
       (tester) async {
         tester.view.physicalSize = const Size(320, 640);
@@ -3932,10 +4018,13 @@ void main() {
   });
 
   group('OcrPage - instruction selector', () {
-    test('unnamed instruction label truncation keeps emoji intact', () {
-      final instruction = OcrInstruction(content: '${'a' * 19}😀more text');
+    test('unnamed instruction label keeps its complete first line', () {
+      final firstLine = '${'a' * 19}😀more text';
+      final instruction = OcrInstruction(
+        content: '$firstLine\nSecond line is still editable prompt content.',
+      );
 
-      expect(ocrInstructionLabel(instruction), '${'a' * 19}😀…');
+      expect(ocrInstructionLabel(instruction), firstLine);
       expect(
         ocrInstructionLabel(
           const OcrInstruction(name: 'A long instruction name', content: ''),

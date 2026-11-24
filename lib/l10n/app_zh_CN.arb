@@ -3718,6 +3718,14 @@
   "ankiStatsReviewRate": "复习率",
   "ankiBrowserSearchHint": "搜索卡片...",
   "ankiBrowserEmpty": "无卡片",
+  "ankiCardBrowserLoadError": "加载卡片失败：{error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "AnkiWeb 同步",
   "ankiNewDeckTooltip": "新建牌组",
   "ankiDeckLoadError": "加载失败: {error}",

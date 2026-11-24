@@ -3723,6 +3723,14 @@
   "ankiStatsReviewRate": "복습률",
   "ankiBrowserSearchHint": "카드 검색...",
   "ankiBrowserEmpty": "카드가 없습니다",
+  "ankiCardBrowserLoadError": "카드를 불러오지 못했습니다: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "AnkiWeb 동기화",
   "ankiNewDeckTooltip": "새 덱",
   "ankiDeckLoadError": "덱을 불러오지 못했습니다: {error}",

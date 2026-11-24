@@ -1937,6 +1937,14 @@
   "ankiStatsReviewRate": "レビュー率",
   "ankiBrowserSearchHint": "カードを検索...",
   "ankiBrowserEmpty": "カードなし",
+  "ankiCardBrowserLoadError": "カードを読み込めませんでした: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "AnkiWeb同期",
   "ankiNewDeckTooltip": "新しいデッキ",
   "ankiDeckLoadError": "デッキのロードに失敗しました: {error}",

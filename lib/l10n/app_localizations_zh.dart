@@ -7959,6 +7959,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ankiBrowserEmpty => '无卡片';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return '加载卡片失败：$error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';
 
   @override
@@ -19430,6 +19435,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ankiBrowserEmpty => '无卡片';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return '加载卡片失败：$error';
+  }
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';

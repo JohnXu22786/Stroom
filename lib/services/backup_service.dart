@@ -2555,7 +2555,12 @@ class BackupService {
 
     // 4b. Anki 闪卡数据库（原始格式）
     if (ankiDbPath != null) {
-      await addTaskFileToArchive(archive, 'anki/collection.anki2', ankiDbPath);
+      await addTaskFileToArchive(
+        archive,
+        'anki/collection.anki2',
+        ankiDbPath,
+        required: true,
+      );
       if (selection.includeMediaFiles) {
         await _addDirectoryToArchive(
           archive,

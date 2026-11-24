@@ -148,6 +148,7 @@ class Notetype {
         tags: (j['tags'] as List?)?.cast<String>() ?? [],
         latexPre: j['latexPre'] as String? ?? '',
         latexPost: j['latexPost'] as String? ?? '',
+        latex: j['latex'] as String? ?? 'dvipng',
       );
 }
 

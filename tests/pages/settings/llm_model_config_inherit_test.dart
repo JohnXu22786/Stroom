@@ -70,6 +70,40 @@ Future<void> _scrollToReasoning(
   await tester.pumpAndSettle();
 }
 
+Future<void> _selectAdditionalParamType(
+  WidgetTester tester,
+  String paramName,
+  String typeLabel,
+) async {
+  await _scrollToReasoning(tester, find.text(paramName));
+  final card = find
+      .ancestor(of: find.text(paramName), matching: find.byType(Card))
+      .first;
+  await tester.tap(
+    find.descendant(of: card, matching: find.byType(DropdownButton<String>)),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(typeLabel).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _addAdditionalParamOption(
+  WidgetTester tester,
+  String paramName,
+  String value,
+) async {
+  await _scrollToReasoning(tester, find.text(paramName));
+  final card = find
+      .ancestor(of: find.text(paramName), matching: find.byType(Card))
+      .first;
+  await tester.tap(find.descendant(of: card, matching: find.text('添加值')));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextField).last, value);
+  await tester.pump();
+  await tester.tap(find.text('确定'));
+  await tester.pumpAndSettle();
+}
+
 /// 构造一个「开关完整 + 推理力度带选项」的供应商配置。
 ProviderConfigItem _providerWithEffortOptions(List<String> options) {
   return ProviderConfigItem(
@@ -973,6 +1007,326 @@ void main() {
       final effort = saved!.reasoningParams.firstWhere((p) => p.isEffortParam);
       expect(effort.options, ['{"thinking": {"budget": 2048}}']);
     });
+
+    testWidgets('json and boolean additional params initialize option blocks', (
+      tester,
+    ) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'json_param',
+            type: 'json',
+            options: ['{"mode":"deep"}'],
+          ),
+          ReasoningParam(paramName: 'boolean_param', type: 'boolean'),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _selectAdditionalParamType(tester, 'json_param', '字符串');
+          expect(find.text('{"mode":"deep"}'), findsOneWidget);
+          await _addAdditionalParamOption(tester, 'json_param', 'quick');
+          expect(find.text('quick'), findsOneWidget);
+          await _selectAdditionalParamType(tester, 'json_param', 'JSON');
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'JSON 值'),
+            '{"mode":"edited"}',
+          );
+          await tester.pump();
+          await _selectAdditionalParamType(tester, 'json_param', '字符串');
+          expect(find.text('{"mode":"edited"}'), findsOneWidget);
+          await _selectAdditionalParamType(tester, 'boolean_param', '数字');
+          await _addAdditionalParamOption(tester, 'boolean_param', '42');
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams
+            .firstWhere((p) => p.paramName == 'json_param')
+            .type,
+        'string',
+      );
+      expect(
+        saved.reasoningParams
+            .firstWhere((p) => p.paramName == 'json_param')
+            .options,
+        ['{"mode":"edited"}', 'quick'],
+      );
+      expect(
+        saved.reasoningParams
+            .firstWhere((p) => p.paramName == 'boolean_param')
+            .options,
+        ['42'],
+      );
+    });
+
+    testWidgets('json edits and unsaved option blocks survive type changes', (
+      tester,
+    ) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(paramName: 'mode', type: 'string', options: ['old']),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _addAdditionalParamOption(tester, 'mode', 'pending');
+          await _selectAdditionalParamType(tester, 'mode', 'JSON');
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'JSON 值'),
+            '{"mode":"edited"}',
+          );
+          await tester.pump();
+          await _selectAdditionalParamType(tester, 'mode', '字符串');
+          expect(find.text('{"mode":"edited"}'), findsOneWidget);
+          await _selectAdditionalParamType(tester, 'mode', 'JSON');
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'JSON 值'),
+            '{"mode":"final"}',
+          );
+          await tester.pump();
+          await _selectAdditionalParamType(tester, 'mode', '布尔');
+          await _selectAdditionalParamType(tester, 'mode', '字符串');
+          expect(find.text('{"mode":"final"}'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.firstWhere((p) => p.paramName == 'mode').options,
+        ['{"mode":"final"}', 'pending'],
+      );
+    });
+
+    testWidgets('resetting to JSON discards converted option block state', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'mode',
+            type: 'json',
+            options: ['{"mode":"original"}'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _selectAdditionalParamType(tester, 'mode', '字符串');
+          await _addAdditionalParamOption(tester, 'mode', 'pending');
+          final card = find
+              .ancestor(of: find.text('mode'), matching: find.byType(Card))
+              .first;
+          await tester.tap(
+            find.descendant(of: card, matching: find.byIcon(Icons.refresh)),
+          );
+          await tester.pumpAndSettle();
+          await _selectAdditionalParamType(tester, 'mode', '字符串');
+          expect(find.text('{"mode":"original"}'), findsOneWidget);
+          expect(find.text('pending'), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.firstWhere((p) => p.paramName == 'mode').options,
+        ['{"mode":"original"}'],
+      );
+    });
+
+    testWidgets('resetting a newly added reasoning param clears its values', (
+      tester,
+    ) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: LlmModelConfigPage(model: model),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _scrollToReasoning(tester, find.text('添加推理参数'));
+      await tester.tap(find.text('添加推理参数'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).last, 'new_mode');
+      await tester.pumpAndSettle();
+      await _addAdditionalParamOption(tester, 'new_mode', 'pending');
+      final card = find
+          .ancestor(of: find.text('new_mode'), matching: find.byType(Card))
+          .first;
+      await tester.tap(
+        find.descendant(of: card, matching: find.byIcon(Icons.refresh)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('pending'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'new reasoning param matching provider definition remains deletable',
+      (tester) async {
+        final provider = ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            ReasoningParam(paramName: 'shared_mode', options: ['provider']),
+          ],
+        );
+        final model = ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: LlmModelConfigPage(model: model, provider: provider),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _scrollToReasoning(tester, find.text('添加推理参数'));
+        await tester.tap(find.text('添加推理参数'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextFormField).last, 'shared_mode');
+        await tester.pumpAndSettle();
+
+        final newCard = find
+            .ancestor(
+              of: find.text('shared_mode').last,
+              matching: find.byType(Card),
+            )
+            .first;
+        expect(
+          find.descendant(of: newCard, matching: find.byIcon(Icons.delete)),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'json value matching an existing option does not duplicate it',
+      (tester) async {
+        final model = ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            ReasoningParam(
+              paramName: 'mode',
+              type: 'string',
+              options: ['old', 'existing'],
+              optionOrder: ['old', 'existing'],
+            ),
+          ],
+        );
+
+        final saved = await _pumpAndSave(
+          tester,
+          model: model,
+          beforeSave: (tester) async {
+            await _selectAdditionalParamType(tester, 'mode', 'JSON');
+            await tester.enterText(
+              find.widgetWithText(TextFormField, 'JSON 值'),
+              'existing',
+            );
+            await tester.pump();
+            await _selectAdditionalParamType(tester, 'mode', '字符串');
+          },
+        );
+
+        expect(saved, isNotNull);
+        final param = saved!.reasoningParams.firstWhere(
+          (p) => p.paramName == 'mode',
+        );
+        expect(param.options.toSet(), {'existing'});
+        expect(param.options, ['existing']);
+        expect(param.optionOrder, ['existing']);
+      },
+    );
 
     testWidgets('boolean type has no value area', (tester) async {
       final model = ModelConfig(

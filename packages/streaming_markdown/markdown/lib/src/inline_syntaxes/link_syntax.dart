@@ -295,6 +295,10 @@ class LinkSyntax extends DelimiterSyntax {
         return null;
       } else if (char == $space) {
         buffer.write('%20');
+      } else if (char == $lt) {
+        // An opening angle bracket in an angle-bracketed destination must be
+        // escaped.
+        return null;
       } else if (char == $gt) {
         break;
       } else {
@@ -361,6 +365,8 @@ class LinkSyntax extends DelimiterSyntax {
           break;
 
         case $space:
+        case $tab:
+        case $vt:
         case $lf:
         case $cr:
         case $ff:
@@ -394,6 +400,12 @@ class LinkSyntax extends DelimiterSyntax {
           }
           buffer.writeCharCode(char);
           break;
+
+        case $lt:
+        case $gt:
+          // Angle brackets are not allowed in a bare destination unless
+          // escaped (which is handled by the backslash case above).
+          return null;
 
         default:
           buffer.writeCharCode(char);

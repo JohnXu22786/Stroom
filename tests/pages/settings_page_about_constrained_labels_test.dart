@@ -218,4 +218,34 @@ void main() {
     notifier.check.complete();
     await tester.pumpAndSettle();
   });
+
+  testWidgets('update check completes safely after leaving Settings', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final notifier = _PendingUpdateNotifier();
+    await tester.pumpWidget(
+      _buildApp(locale: const Locale('en'), updateNotifier: notifier),
+    );
+    await _showAbout(tester, label: 'Check for Updates');
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+
+    expect(find.text('Checking for updates…'), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(SettingsPage))).pushReplacement(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, _, _) => const Scaffold(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(SettingsPage), findsNothing);
+
+    notifier.check.complete();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
 }

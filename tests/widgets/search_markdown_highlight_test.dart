@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:markdown_widget/widget/link_recognizer_lifecycle.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 
 /// Recursively collects every [TextSpan] (including nested children) from
@@ -24,6 +25,11 @@ List<TextSpan> _collectSpans(InlineSpan span) {
   return result;
 }
 
+Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
+    widget is LinkRecognizerLifecycle
+        ? _unwrapLinkRecognizerLifecycle(widget.child)
+        : widget;
+
 /// Builds [markdown] with [gen] and returns every text span of the resulting
 /// widgets, so tests can inspect both the rendered plain text and the
 /// highlight styles.
@@ -35,7 +41,7 @@ List<TextSpan> _spansOf(MarkdownGenerator gen, String markdown) {
   final spans = <TextSpan>[];
   for (final widget in widgets) {
     final padded = widget as Padding;
-    final textWidget = padded.child as Text;
+    final textWidget = _unwrapLinkRecognizerLifecycle(padded.child!) as Text;
     spans.addAll(_collectSpans(textWidget.textSpan as TextSpan));
   }
   return spans;
@@ -262,7 +268,9 @@ void main() {
         config: MarkdownConfig.defaultConfig,
       );
       // Math renders as a WidgetSpan inside the first block's text span.
-      final firstBlock = (widgets.first as Padding).child as Text;
+      final firstBlock = _unwrapLinkRecognizerLifecycle(
+        (widgets.first as Padding).child!,
+      ) as Text;
       final root = firstBlock.textSpan as TextSpan;
       final hasMathWidget = _containsWidgetSpan(root);
       expect(hasMathWidget, isTrue,

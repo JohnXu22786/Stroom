@@ -44,6 +44,72 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 
 void main() {
   group('OpenAIProtocol.buildRequest', () {
+    test('only emits image data URIs for supported image MIME types', () async {
+      const supportedMimeTypes = {
+        'image/png',
+        'image/jpeg',
+        'image/gif',
+        'image/webp',
+        'image/bmp',
+      };
+      const unsupportedMimeTypes = {
+        'image/tiff',
+        'image/avif',
+        'image/unknown',
+        'application/octet-stream',
+      };
+      final attachments = [
+        for (final mimeType in [...supportedMimeTypes, ...unsupportedMimeTypes])
+          Attachment(
+            fileName: '$mimeType.bin',
+            mimeType: mimeType,
+            fileType: 'image',
+            hash: mimeType,
+            storagePath: '/unused',
+            fileSize: 1,
+            base64Data: base64Encode([0x01]),
+          ),
+      ];
+
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(
+              role: 'user', content: 'Inspect', attachments: attachments),
+        ],
+      );
+      final parts = req.messages.single['content'] as List;
+      final imageParts = parts
+          .where((part) => (part as Map)['type'] == 'image_url')
+          .cast<Map>()
+          .toList();
+      final skippedParts = parts
+          .where((part) => (part as Map)['type'] == 'text')
+          .cast<Map>()
+          .skip(1)
+          .toList();
+
+      expect(imageParts, hasLength(supportedMimeTypes.length));
+      for (final mimeType in supportedMimeTypes) {
+        expect(
+          imageParts.any((part) {
+            final url = (part['image_url'] as Map)['url'] as String;
+            return url.startsWith('data:$mimeType;base64,');
+          }),
+          isTrue,
+          reason: 'Supported MIME type should be preserved: $mimeType',
+        );
+      }
+      expect(skippedParts, hasLength(unsupportedMimeTypes.length));
+      for (final mimeType in unsupportedMimeTypes) {
+        expect(
+          skippedParts
+              .any((part) => (part['text'] as String).contains(mimeType)),
+          isTrue,
+          reason: 'Unsupported MIME type should be explained: $mimeType',
+        );
+      }
+    });
+
     test('前置 system 消息，历史逐条转换为 role/content', () async {
       final protocol = OpenAIProtocol();
       final req = await protocol.buildRequest(

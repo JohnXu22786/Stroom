@@ -8194,6 +8194,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ankiBrowserEmpty => 'カードなし';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'カードを読み込めませんでした: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb同期';
 
   @override
@@ -19989,6 +19994,11 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get ankiBrowserEmpty => 'カードなし';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'カードを読み込めませんでした: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb同期';

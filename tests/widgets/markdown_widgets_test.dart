@@ -10,9 +10,11 @@ import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:markdown_widget/widget/link_recognizer_lifecycle.dart';
 
 /// Helper: creates a [m.Document] with the [LatexSyntax] registered and
 /// parses [text], returning the root nodes so tests can inspect the AST.
@@ -38,6 +40,11 @@ List<m.Node> _parseLikeMarkdownGenerator(String text) {
   return doc.parse(text);
 }
 
+Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
+    widget is LinkRecognizerLifecycle
+        ? _unwrapLinkRecognizerLifecycle(widget.child)
+        : widget;
+
 List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   final found = <Widget>[];
 
@@ -51,8 +58,10 @@ List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   }
 
   for (final widget in widgets) {
-    if (widget is Padding && widget.child is Text) {
-      final textSpan = (widget.child as Text).textSpan;
+    if (widget is Padding) {
+      final child = _unwrapLinkRecognizerLifecycle(widget.child!);
+      if (child is! Text) continue;
+      final textSpan = child.textSpan;
       if (textSpan != null) visit(textSpan);
     }
   }
@@ -90,6 +99,18 @@ TextSpan? _leafSpanWithText(InlineSpan span, String text) {
   return null;
 }
 
+List<String> _renderedCodeLines(String markdown) {
+  final codeBlock = _widgetsFromInlineSpans(
+    MarkdownGenerator().buildWidgets(markdown),
+  ).single as Container;
+  final scrollView = codeBlock.child as SingleChildScrollView;
+  final lines = (scrollView.child as Column).children;
+  return lines
+      .cast<ProxyRichText>()
+      .map((line) => line.textSpan.toPlainText())
+      .toList();
+}
+
 /// Collects every [m.Text] leaf's plain text in [nodes], in document order.
 List<String> _collectPlainText(List<m.Node> nodes) {
   final texts = <String>[];
@@ -104,7 +125,406 @@ List<String> _collectPlainText(List<m.Node> nodes) {
   return texts;
 }
 
+class _VersionedPConfig extends PConfig {
+  final String rendererVersion;
+
+  const _VersionedPConfig({
+    required this.rendererVersion,
+    super.textStyle,
+  });
+}
+
 void main() {
+  testWidgets('incremental Markdown rebuilds with changed config snapshot',
+      (WidgetTester tester) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    addTearDown(() {
+      VisibilityDetectorController.instance.updateInterval =
+          const Duration(milliseconds: 500);
+    });
+    var fullText = 'First paragraph\n\nSecond paragraph';
+    MarkdownConfig configWithTextColor(Color color) =>
+        buildMarkdownConfig(isDark: false).copy(configs: [
+          PConfig(textStyle: TextStyle(color: color)),
+        ]);
+
+    final oldConfig = configWithTextColor(Colors.red);
+    final newConfig = configWithTextColor(Colors.blue);
+    var parsedNodes = 0;
+    final markdownGenerator = MarkdownGenerator(
+      onNodeAccepted: (node, index) => parsedNodes++,
+    );
+
+    Widget build(
+      MarkdownConfig config, {
+      String? append,
+      int? sequence,
+      MarkdownConfig Function(String activeText)? activeConfigBuilder,
+      Object? activeConfigBuilderKey,
+    }) =>
+        MaterialApp(
+          home: Scaffold(
+            body: MarkdownWidget(
+              data: '',
+              selectable: false,
+              incremental: true,
+              incrementalKey: 'same-session',
+              incrementalAppend: append,
+              incrementalSequence: sequence,
+              fullTextOnInvalidation: () => fullText,
+              config: config,
+              activeConfigBuilder: activeConfigBuilder,
+              activeConfigBuilderKey: activeConfigBuilderKey,
+              markdownGenerator: markdownGenerator,
+            ),
+          ),
+        );
+
+    Finder paragraph(String text) => find.byWidgetPredicate(
+          (widget) => widget is Text && widget.textSpan?.toPlainText() == text,
+        );
+
+    Color paragraphColor(String text) {
+      final span = tester.widget<Text>(paragraph(text)).textSpan!;
+      TextStyle? findStyle(InlineSpan current) {
+        if (current is! TextSpan) return null;
+        if (current.text == text && current.style != null) {
+          return current.style;
+        }
+        for (final child in current.children ?? const <InlineSpan>[]) {
+          final style = findStyle(child);
+          if (style != null) return style;
+        }
+        return null;
+      }
+
+      return findStyle(span)!.color!;
+    }
+
+    await tester.pumpWidget(build(oldConfig));
+    expect(paragraph('First paragraph'), findsOneWidget);
+    expect(paragraphColor('First paragraph'), Colors.red);
+
+    final parsedNodesBeforeEquivalentConfig = parsedNodes;
+    await tester.pumpWidget(build(configWithTextColor(Colors.red)));
+    expect(parsedNodes, parsedNodesBeforeEquivalentConfig);
+
+    // The callback's full snapshot may contain streamed text whose append
+    // widget update was coalesced. A config-only update must rebuild from it.
+    fullText += '\n\nCoalesced paragraph';
+    await tester.pumpWidget(build(newConfig));
+    expect(paragraph('First paragraph'), findsOneWidget);
+    expect(paragraphColor('First paragraph'), Colors.blue);
+    expect(paragraph('Second paragraph'), findsOneWidget);
+    expect(paragraphColor('Second paragraph'), Colors.blue);
+    expect(paragraph('Coalesced paragraph'), findsOneWidget);
+    expect(paragraphColor('Coalesced paragraph'), Colors.blue);
+
+    fullText += ' later';
+    await tester.pumpWidget(build(newConfig, append: ' later', sequence: 1));
+    expect(paragraph('Coalesced paragraph later'), findsOneWidget);
+    expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+
+    Widget firstRenderer(String code, String language) =>
+        Text('first:$code:$language');
+    Widget secondRenderer(String code, String language) =>
+        Text('second:$code:$language');
+    MarkdownConfig configWithRenderer(
+      Widget Function(String code, String language) renderer,
+    ) =>
+        buildMarkdownConfig(isDark: false).copy(configs: [
+          const PConfig(textStyle: TextStyle(color: Colors.blue)),
+          PreConfig(builder: renderer),
+        ]);
+
+    final parsedNodesBeforeRendererChange = parsedNodes;
+    await tester.pumpWidget(build(configWithRenderer(firstRenderer)));
+    expect(parsedNodes, greaterThan(parsedNodesBeforeRendererChange));
+    final parsedNodesAfterFirstRenderer = parsedNodes;
+    await tester.pumpWidget(build(configWithRenderer(secondRenderer)));
+    expect(parsedNodes, greaterThan(parsedNodesAfterFirstRenderer));
+
+    MarkdownConfig configWithCustomVersion(String version) => MarkdownConfig(
+          configs: [
+            _VersionedPConfig(
+              rendererVersion: version,
+              textStyle: const TextStyle(color: Colors.blue),
+            ),
+          ],
+          incrementalConfigKey: version,
+        );
+    final parsedNodesBeforeCustomConfigChange = parsedNodes;
+    await tester.pumpWidget(build(configWithCustomVersion('renderer-v1')));
+    expect(parsedNodes, greaterThan(parsedNodesBeforeCustomConfigChange));
+    final parsedNodesAfterCustomConfigV1 = parsedNodes;
+    await tester.pumpWidget(build(configWithCustomVersion('renderer-v2')));
+    expect(parsedNodes, greaterThan(parsedNodesAfterCustomConfigV1));
+
+    var firstActiveBuilderCalls = 0;
+    var secondActiveBuilderCalls = 0;
+    MarkdownConfig firstActiveConfig(String activeText) {
+      firstActiveBuilderCalls++;
+      return MarkdownConfig(configs: [
+        const PConfig(textStyle: TextStyle(color: Colors.red)),
+      ]);
+    }
+
+    MarkdownConfig secondActiveConfig(String activeText) {
+      secondActiveBuilderCalls++;
+      return MarkdownConfig(configs: [
+        const PConfig(textStyle: TextStyle(color: Colors.blue)),
+      ]);
+    }
+
+    final sameConfigKey = MarkdownConfig(
+      configs: [const PConfig()],
+      incrementalConfigKey: 'same-config-version',
+    );
+    await tester.pumpWidget(build(
+      sameConfigKey,
+      activeConfigBuilder: firstActiveConfig,
+    ));
+    expect(firstActiveBuilderCalls, greaterThan(0));
+    await tester.pumpWidget(build(
+      sameConfigKey,
+      activeConfigBuilder: secondActiveConfig,
+    ));
+    expect(secondActiveBuilderCalls, greaterThan(0));
+    expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+  });
+
+  group('Markdown link recognizer lifecycle', () {
+    testWidgets('releases links replaced or disposed during a pointer press',
+        (WidgetTester tester) async {
+      VisibilityDetectorController.instance.updateInterval = Duration.zero;
+      addTearDown(() {
+        VisibilityDetectorController.instance.updateInterval =
+            const Duration(milliseconds: 500);
+      });
+      final tappedUrls = <String>[];
+      final config = MarkdownConfig(configs: [
+        LinkConfig(onTap: tappedUrls.add),
+      ]);
+
+      Widget markdown(String data) => MaterialApp(
+            home: Scaffold(
+              body: MarkdownWidget(
+                key: const ValueKey('markdown'),
+                data: data,
+                selectable: false,
+                shrinkWrap: true,
+                config: config,
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(markdown('[old](https://old.example)'));
+      Finder link(String value) => find.textContaining(
+            value,
+            findRichText: true,
+          );
+
+      final oldLink = link('old');
+      expect(oldLink, findsOneWidget);
+      final oldLinkRect = tester.getRect(oldLink);
+      final linkStart = Offset(oldLinkRect.left + 1, oldLinkRect.center.dy);
+      final replacementGesture = await tester.startGesture(linkStart);
+      await tester.pump();
+
+      await tester.pumpWidget(markdown('[new](https://new.example)'));
+      await replacementGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, isEmpty,
+          reason: 'a replaced link must not retain its active pointer route');
+      final newLinkRect = tester.getRect(link('new'));
+      await tester.tapAt(Offset(newLinkRect.left + 1, newLinkRect.center.dy));
+      expect(tappedUrls, ['https://new.example']);
+
+      final disposalGesture = await tester.startGesture(
+        Offset(newLinkRect.left + 1, newLinkRect.center.dy),
+      );
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await disposalGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, ['https://new.example'],
+          reason: 'a disposed link must not invoke its stale callback');
+    });
+  });
+
+  group('Markdown image URL schemes', () {
+    testWidgets('routes uppercase HTTP and HTTPS URLs to network images',
+        (WidgetTester tester) async {
+      for (final imageUrl in [
+        'HTTP://example.com/image.png',
+        'HTTPS://example.com/image.png',
+      ]) {
+        final widgets = MarkdownGenerator().buildWidgets('![]($imageUrl)');
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: Column(children: widgets)),
+        ));
+
+        final image = tester.widget<Image>(find.byType(Image));
+        expect(image.image, isA<NetworkImage>(), reason: imageUrl);
+        expect((image.image as NetworkImage).url, imageUrl);
+      }
+    });
+
+    testWidgets('keeps non-HTTP URIs on the asset path',
+        (WidgetTester tester) async {
+      const imageUrl = 'ftp://example.com/image.png';
+      final widgets = MarkdownGenerator().buildWidgets('![]($imageUrl)');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.image, isA<AssetImage>());
+      expect((image.image as AssetImage).assetName, imageUrl);
+    });
+  });
+
+  group('Markdown image error rendering', () {
+    testWidgets('calls ImgConfig.errorBuilder for network image failures',
+        (WidgetTester tester) async {
+      const imageUrl = 'https://example.invalid/missing.png';
+      const alt = 'network image';
+      Object? callbackError;
+      String? callbackUrl;
+      String? callbackAlt;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, imageAlt, error) {
+          callbackUrl = url;
+          callbackAlt = imageAlt;
+          callbackError = error;
+          return const Text('custom image error');
+        }),
+      ]);
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![$alt]($imageUrl)',
+        config: config,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom image error'), findsOneWidget);
+      expect(callbackUrl, imageUrl);
+      expect(callbackAlt, alt);
+      expect(callbackError, isNotNull);
+    });
+
+    testWidgets('calls ImgConfig.errorBuilder for asset image failures',
+        (WidgetTester tester) async {
+      const imageUrl = 'missing-markdown-image.png';
+      const alt = 'asset image';
+      Object? callbackError;
+      String? callbackUrl;
+      String? callbackAlt;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, imageAlt, error) {
+          callbackUrl = url;
+          callbackAlt = imageAlt;
+          callbackError = error;
+          return const Text('custom image error');
+        }),
+      ]);
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![$alt]($imageUrl)',
+        config: config,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom image error'), findsOneWidget);
+      expect(callbackUrl, imageUrl);
+      expect(callbackAlt, alt);
+      expect(callbackError, isNotNull);
+    });
+
+    testWidgets('uses the default broken-image widget without a callback',
+        (WidgetTester tester) async {
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![missing image](missing.png)',
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+    });
+
+    testWidgets('ignores malformed width and preserves a valid height',
+        (WidgetTester tester) async {
+      final config = MarkdownConfig.defaultConfig;
+      final node = ImageNode(
+        {'src': 'missing.png', 'width': 'wide', 'height': '24'},
+        config,
+        WidgetVisitor(config: config),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.width, isNull);
+      expect(image.height, 24);
+    });
+
+    testWidgets('ignores malformed height before selecting a custom builder',
+        (WidgetTester tester) async {
+      Map<String, String>? callbackAttributes;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(builder: (url, attributes) {
+          callbackAttributes = attributes;
+          return const Text('custom image');
+        }),
+      ]);
+      final node = ImageNode(
+        {'src': 'image.png', 'width': '32', 'height': 'tall'},
+        config,
+        WidgetVisitor(config: config),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      expect(find.text('custom image'), findsOneWidget);
+      expect(callbackAttributes, containsPair('width', '32'));
+      expect(callbackAttributes, containsPair('height', 'tall'));
+    });
+
+    testWidgets('keeps the default rendering when a direct error is null',
+        (WidgetTester tester) async {
+      var callbackCalled = false;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, alt, error) {
+          callbackCalled = true;
+          return const Text('custom image error');
+        }),
+      ]);
+      final node = ImageNode({}, config, WidgetVisitor(config: config));
+
+      await tester.pumpWidget(MaterialApp(
+        home: node.buildErrorImage('image.png', 'image alt', null),
+      ));
+
+      expect(callbackCalled, isFalse);
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+    });
+  });
+
   group('HTML block source ranges', () {
     test(
       'unterminated block ends at EOF while terminated block is consumed',
@@ -124,6 +544,62 @@ void main() {
       },
     );
   });
+
+  group('GitHub Web color swatches', () {
+    test('accepts single-digit RGBA alpha and preserves decimal alpha', () {
+      final singleDigitAlpha = _findElement(
+        m.Document(extensionSet: m.ExtensionSet.gitHubWeb)
+            .parse('`rgba(0,0,0,1)`'),
+        'code',
+      );
+      expect(singleDigitAlpha, isNotNull);
+      expect(singleDigitAlpha!.attributes['class'], 'gfm-color_chip');
+      expect(singleDigitAlpha.children?.first.textContent, 'rgba(0,0,0,1)');
+
+      final decimalAlpha = _findElement(
+        m.Document(extensionSet: m.ExtensionSet.gitHubWeb)
+            .parse('`rgba(0,255,0,0.3)`'),
+        'code',
+      );
+      expect(decimalAlpha, isNotNull);
+      expect(decimalAlpha!.attributes['class'], 'gfm-color_chip');
+      expect(decimalAlpha.children?.first.textContent, 'rgba(0,255,0,0.3)');
+    });
+  });
+
+  group('GitHub footnote definitions', () {
+    test('two blank lines end a definition before an indented code block', () {
+      final nodes =
+          m.Document(extensionSet: m.ExtensionSet.gitHubFlavored).parse(
+        'Reference[^note]\n\n'
+        '[^note]: first paragraph\n\n'
+        '    second paragraph\n\n\n'
+        '    code block',
+      );
+
+      final footnote = _findElement(nodes, 'li');
+      expect(footnote, isNotNull);
+      expect(footnote!.textContent, contains('first paragraph'));
+      expect(footnote.textContent, contains('second paragraph'));
+      expect(footnote.textContent, isNot(contains('code block')));
+
+      final codeBlock = _findElement(nodes, 'pre');
+      expect(codeBlock, isNotNull);
+      expect(codeBlock!.textContent, 'code block\n');
+    });
+  });
+
+  group('Inline link titles', () {
+    test('tabs and vertical tabs separate a title from a bare destination', () {
+      for (final separator in ['\t', '\v']) {
+        expect(
+          m.markdownToHtml('[link](https://example.com$separator"title")'),
+          '<p><a href="https://example.com" title="title">link</a></p>\n',
+        );
+      }
+    });
+  });
+
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
@@ -198,8 +674,8 @@ $$
       );
       final spans = [
         for (final widget in widgets)
-          if (widget is Padding && widget.child is Text)
-            (widget.child as Text).textSpan!,
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
       ];
       TextSpan? findSpan(String text) {
         for (final span in spans) {
@@ -765,6 +1241,22 @@ $$
     });
   });
 
+  group('Fenced code whitespace', () {
+    test('preserves leading indentation and trailing line spaces', () {
+      expect(
+        _renderedCodeLines('```text\n    first  \n      second\n```'),
+        ['    first  ', '      second'],
+      );
+    });
+
+    test('preserves blank lines at the start and end of the code body', () {
+      expect(
+        _renderedCodeLines('```text\n\nfirst\n\n```'),
+        ['', 'first', ''],
+      );
+    });
+  });
+
   group('Mermaid code block builder', () {
     test('PreConfig.builder is set after adding mermaid support', () {
       final pre = codeBlockPreConfig(isDark: false);
@@ -808,6 +1300,49 @@ $$
       final builder = pre.builder!;
       final widget = builder('graph TD', 'mermaid');
       expect(widget, isA<MermaidRenderWidget>());
+    });
+  });
+
+  group('PreConfig.copy builder', () {
+    test('preserves the original builder unless a replacement is supplied', () {
+      final original = PreConfig(
+        builder: (_, _) => const Text('original code builder'),
+      );
+      final copied = original.copy();
+      final replaced = original.copy(
+        builder: (_, _) => const Text('replacement code builder'),
+      );
+
+      List<Widget> render(PreConfig config) {
+        return _widgetsFromInlineSpans(
+          MarkdownGenerator().buildWidgets(
+            '```dart\nprint("hello")\n```',
+            config: MarkdownConfig(configs: [config]),
+          ),
+        );
+      }
+
+      expect(
+        render(copied),
+        contains(isA<Text>()
+            .having((widget) => widget.data, 'data', 'original code builder')),
+      );
+      expect(
+        render(replaced),
+        contains(isA<Text>().having(
+            (widget) => widget.data, 'data', 'replacement code builder')),
+      );
+
+      final wrapped = original.copy(wrapper: (child, _, _) => child);
+      expect(wrapped.builder, isNull,
+          reason: 'a supplied wrapper replaces the copied builder');
+
+      final wrapperConfig = PreConfig(wrapper: (child, _, _) => child);
+      final built = wrapperConfig.copy(
+        builder: (_, _) => const Text('replacement code builder'),
+      );
+      expect(built.wrapper, isNull,
+          reason: 'a supplied builder replaces the copied wrapper');
     });
   });
 
@@ -2440,7 +2975,9 @@ $$
 
       // The underline must be scoped to exactly the tagged content: the
       // inner leaf span is underlined, the surrounding text is not.
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       expect(_leafSpanWithText(rootSpan.textSpan!, '下划线文本')!.style?.decoration,
           TextDecoration.underline,
           reason: 'the tagged text must carry TextDecoration.underline');
@@ -2466,7 +3003,9 @@ $$
         ),
       ));
 
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       final boldLeaf = _leafSpanWithText(rootSpan.textSpan!, '加粗')!;
       expect(boldLeaf.style?.fontWeight, FontWeight.bold,
           reason: 'nested **bold** must keep the bold weight');

@@ -104,31 +104,70 @@ String decodeHtmlCharacterFromMatch(Match match) {
   // Decimal numeric character references, see
   // https://spec.commonmark.org/0.30/#decimal-numeric-character-references.
   else if (decimalNumber != null) {
-    final decimalValue = int.parse(decimalNumber);
-    int hexValue;
-    if (decimalValue > 0 &&
-        decimalValue <= 0x10ffff &&
-        (decimalValue < 0xd800 || decimalValue > 0xdfff)) {
-      hexValue = int.parse(decimalValue.toRadixString(16), radix: 16);
-    } else {
-      hexValue = 0xFFFd;
-    }
-
-    return String.fromCharCode(hexValue);
+    return _decodeNumericCharacterReference(decimalNumber, radix: 10);
   }
   // Hexadecimal numeric character references, see
   // https://spec.commonmark.org/0.30/#hexadecimal-numeric-character-references.
   else if (hexadecimalNumber != null) {
-    var hexValue = int.parse(hexadecimalNumber, radix: 16);
-    if (hexValue > 0x10ffff ||
-        hexValue == 0 ||
-        (hexValue >= 0xd800 && hexValue <= 0xdfff)) {
-      hexValue = 0xFFFd;
-    }
-    return String.fromCharCode(hexValue);
+    return _decodeNumericCharacterReference(hexadecimalNumber, radix: 16);
   }
 
   return text;
+}
+
+const _windows1252C1Remappings = <int>[
+  0x20ac,
+  0x0081,
+  0x201a,
+  0x0192,
+  0x201e,
+  0x2026,
+  0x2020,
+  0x2021,
+  0x02c6,
+  0x2030,
+  0x0160,
+  0x2039,
+  0x0152,
+  0x008d,
+  0x017d,
+  0x008f,
+  0x0090,
+  0x2018,
+  0x2019,
+  0x201c,
+  0x201d,
+  0x2022,
+  0x2013,
+  0x2014,
+  0x02dc,
+  0x2122,
+  0x0161,
+  0x203a,
+  0x0153,
+  0x009d,
+  0x017e,
+  0x0178,
+];
+
+String _decodeNumericCharacterReference(String digits, {required int radix}) {
+  var value = 0;
+  for (final digit in digits.codeUnits) {
+    final digitValue =
+        digit <= 0x39 ? digit - 0x30 : (digit | 0x20) - 0x61 + 10;
+    if (value > (0x10ffff - digitValue) ~/ radix) {
+      return '\uFFFD';
+    }
+    value = value * radix + digitValue;
+  }
+
+  if (value == 0 || (value >= 0xd800 && value <= 0xdfff)) {
+    return '\uFFFD';
+  }
+  if (value >= 0x80 && value <= 0x9f) {
+    value = _windows1252C1Remappings[value - 0x80];
+  }
+  return String.fromCharCode(value);
 }
 
 extension MatchExtensions on Match {
@@ -182,8 +221,8 @@ extension StringExtensions on String {
       for (; start < whitespaces.length; start++) {
         final isTab = whitespaces[start] == '\t';
         if (isTab) {
-          indentLength += tabSize;
-          tabRemaining = 4;
+          indentLength += tabSize - (indentLength % tabSize);
+          tabRemaining = indentLength;
         } else {
           indentLength += 1;
         }

@@ -76,6 +76,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/context_management_settings_test.dart",
         "providers/provider_config*_test.dart",
         "providers/provider_entries_legacy_effort_migration_test.dart",
+        "pages/mcp_server_config_page_test.dart",
         "providers/temporary_conversation_test.dart",
         "utils/model_order_test.dart",
         "utils/attachment_preview_lifecycle_test.dart",
@@ -106,6 +107,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     ),
     "chat-ai-ui": (
         "reasoning_section_animation_test.dart",
+        "widgets/llm/jumping_dots_test.dart",
         "widgets/chat_error_heading_layout_test.dart",
         "pages/assistant/assistant_*_test.dart",
         "pages/assistant_pages_test.dart",
@@ -168,6 +170,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",
         "pages/backup_restore_page_test.dart",
+        "pages/backup_restore_info_dialog_test.dart",
         "pages/backup_restore_constrained_text_test.dart",
         "widgets/backup_operation_error_dialog_test.dart",
         "widgets/backup_restore_result_dialogs_test.dart",
@@ -193,6 +196,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/tts_config_persistence_test.dart",
         "providers/tts_save_cancellation_test.dart",
         "providers/tts_state_shared_test.dart",
+        "providers/tts_stream_playback_test.dart",
         "utils/ocr_page_failure_summary_test.dart",
         "utils/ocr_request_size_failure_summary_test.dart",
         "utils/ocr_diagnostics_test.dart",
@@ -213,10 +217,13 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/extended_image_editor_tool_bounds_test.dart",
         "pages/content/gallery_viewer_page_test.dart",
         "pages/gallery_shared_test.dart",
+        "widgets/voice_batch_add_page_test.dart",
         "pages/content/image_editor_page_test.dart",
         "pages/video_gallery_shared_test.dart",
         "pages/content/ocr*_test.dart",
         "pages/content/media_preview_sheet_test.dart",
+        "pages/content/media_preview_sheet_scroll_test.dart",
+        "qa/media_preview_sheet_scroll_capture_test.dart",
         "pages/media_preview_audio_classification_test.dart",
         "pages/audio_player_shared_test.dart",
         "widgets/audio_player_selection_toolbar_test.dart",
@@ -240,6 +247,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     ),
     "text-math": (
         "markdown_unicode_scalars_test.dart",
+        "markdown_alert_boundary_test.dart",
         "math_3d*_test.dart",
         "models/math*_test.dart",
         "utils/mhchem_syntax_test.dart",
@@ -248,6 +256,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/code_line_number_gutter_test.dart",
         "widgets/html_code_block_widget_test.dart",
         "widgets/markdown_widgets_test.dart",
+        "widgets/markdown_widget_toc_controller_test.dart",
         "widgets/markdown_table_style_test.dart",
         "markdown_list_marker_bounds_test.dart",
         "widgets/math*_test.dart",
@@ -335,6 +344,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 # These tests require a browser runtime and are executed by dedicated Chrome
 # steps in .github/workflows/ci.yml, not by the native Flutter test runner.
 BROWSER_ONLY_TESTS: dict[str, str] = {
+    "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 

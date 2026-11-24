@@ -8521,6 +8521,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get ankiBrowserEmpty => 'Nenhum cartão';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Não foi possível carregar os cartões: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'Sincronização com AnkiWeb';
 
   @override
@@ -20799,6 +20804,11 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get ankiBrowserEmpty => 'Nenhum cartão';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Não foi possível carregar os cartões: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'Sincronização com AnkiWeb';

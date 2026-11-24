@@ -508,6 +508,10 @@ Stream<String> sseConnect(
   xhr.responseType = 'text';
 
   final progressSub = xhr.onProgress.listen((_) {
+    final status = xhr.status;
+    if (status != null && status != 0 && (status < 200 || status >= 300)) {
+      return;
+    }
     final fullText = xhr.responseText ?? '';
     final lines = fullText.split('\n');
     final completeCount = lines.length - 1;
@@ -516,7 +520,7 @@ Stream<String> sseConnect(
     for (var i = processedLines; i < completeCount; i++) {
       final line = lines[i];
       // Yield ALL lines for full SSE protocol parsing
-      controller.add(line);
+      if (!controller.isClosed) controller.add(line);
     }
     processedLines = completeCount;
   });
@@ -550,6 +554,17 @@ Stream<String> sseConnect(
         }
       }
       onResponseHeaders(headerMap);
+    }
+    final status = xhr.status;
+    if (status != null && status != 0 && (status < 200 || status >= 300)) {
+      if (!controller.isClosed) {
+        controller.addError(_xhrFailure(xhr, url, locale));
+        controller.close();
+      }
+      progressSub.cancel();
+      errorSub.cancel();
+      xhr.abort();
+      return;
     }
     // Yield remaining lines
     final remainingText = xhr.responseText ?? '';

@@ -59,18 +59,31 @@ class AnkiStatsPage extends ConsumerWidget {
         db.cards.totalCountAll(),
         db.cards.countByQueueAll(0), // new
         db.cards.countByQueueAll(1), // learning
-        db.cards.countByQueueAll(2), // review
+        db.cards.countByQueueAll(3), // day learning
+        db.cards.countByQueueAll(2), // all review cards
+        db.cards.countDueReviewAll(now.millisecondsSinceEpoch ~/ 1000),
         db.revlog.count(),
-      ]),
+      ], eagerError: true),
       builder: (ctx, snap) {
+        if (snap.hasError) {
+          return LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(child: Text(snap.error.toString())),
+              ),
+            ),
+          );
+        }
         if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
         final data = snap.data as List<int>;
         final total = data[0];
         final newCount = data[1];
-        final learning = data[2];
-        final review = data[3];
-        final revlogCount = data[4];
+        final learning = data[2] + data[3];
+        final review = data[4];
+        final dueReview = data[5];
+        final revlogCount = data[6];
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -100,7 +113,7 @@ class AnkiStatsPage extends ConsumerWidget {
               icon: Icons.replay,
               color: Colors.green,
               title: l10n.ankiStatsDueForReview,
-              value: '$review',
+              value: '$dueReview',
             ),
             const SizedBox(height: 12),
             _StatCard(

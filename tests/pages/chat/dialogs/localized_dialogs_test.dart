@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -332,6 +333,48 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
+  testWidgets('audio preview initialization failure shows localized retry',
+      (tester) async {
+    var attempts = 0;
+    await tester.pumpWidget(localizedApp(AudioPreviewDialog(
+      filePath: '/missing/audio.wav',
+      fileName: 'audio.wav',
+      playerFactory: () => _FakeAudioPlayer(fail: attempts++ == 0),
+    )));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('加载失败'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    await tester.tap(find.text('重试'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(attempts, 2);
+    expect(find.text('加载失败'), findsNothing);
+    expect(find.text('重试'), findsNothing);
+    expect(find.byType(Slider), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('audio preview success still shows playback controls',
+      (tester) async {
+    await tester.pumpWidget(localizedApp(AudioPreviewDialog(
+      filePath: '/missing/audio.wav',
+      fileName: 'audio.wav',
+      playerFactory: _FakeAudioPlayer.new,
+    )));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(Slider), findsOneWidget);
+    expect(find.text('加载失败'), findsNothing);
+    expect(find.text('重试'), findsNothing);
+  });
+
   testWidgets('video preview dialog stops loading and shows localized errors',
       (tester) async {
     await tester.pumpWidget(localizedApp(const VideoPreviewDialog(
@@ -405,4 +448,47 @@ class _NeverCreatedWebView extends PlatformInAppWebViewWidget {
 
   @override
   void dispose() {}
+}
+
+class _FakeAudioPlayer extends AudioPlayer {
+  _FakeAudioPlayer({this.fail = false});
+
+  final bool fail;
+
+  @override
+  Future<Duration?> setFilePath(
+    String filePath, {
+    Duration? initialPosition,
+    bool preload = true,
+    dynamic tag,
+  }) async {
+    if (fail) throw Exception('test load failure');
+    return const Duration(seconds: 10);
+  }
+
+  @override
+  Duration? get duration => const Duration(seconds: 10);
+
+  @override
+  Stream<Duration> get positionStream => Stream.value(Duration.zero);
+
+  @override
+  Stream<PlayerState> get playerStateStream =>
+      Stream.value(PlayerState(false, ProcessingState.ready));
+
+  @override
+  Stream<ProcessingState> get processingStateStream =>
+      Stream.value(ProcessingState.ready);
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> seek(Duration? position, {int? index}) async {}
 }

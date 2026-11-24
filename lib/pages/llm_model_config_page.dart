@@ -64,6 +64,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 身份索引；工作副本实例在会话内不变）。
   late final Map<ReasoningParam, ReasoningParam> _initialParamSnapshots;
 
+  /// Params present when the page opened; session-added params have reset
+  /// snapshots but must remain distinct from provider-inherited params.
+  late final Set<ReasoningParam> _initialReasoningParams;
+
   /// 打开页面时力度块状态的初始快照（reset 还原用）。
   late List<String> _initialBlockValues;
   late Set<String> _initialSelectedValues;
@@ -83,6 +87,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 每个附加参数在供应商侧的选项值集合（删除按钮判定，顺序即供应商
   /// 顺序，用于块顺序回退）。
   final Map<ReasoningParam, List<String>> _providerAdditionalValues = {};
+
+  /// The selected option when an additional parameter entered JSON editing.
+  /// Used to reconcile a JSON edit back into its option block on type change.
+  final Map<ReasoningParam, String?> _additionalJsonInitialValues = {};
 
   /// 自定义参数（CustomParam）选项的勾选集合（照搬推理力度块交互，
   /// 默认全选；保存时 options = 勾选的选项）。
@@ -644,6 +652,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         : {...?providerEffort?.options};
 
     // 初始快照（reset 还原用）
+    _initialReasoningParams = {..._reasoningParams};
     _initialParamSnapshots = {for (final p in _reasoningParams) p: p.copy()};
     _initialBlockValues = List.of(_effortBlockValues);
     _initialSelectedValues = {..._effortSelectedValues};

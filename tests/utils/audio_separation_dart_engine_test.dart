@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'dart:isolate' show Isolate, ReceivePort, SendPort;
 import 'dart:math' show pi, sin;
 import 'dart:typed_data';
@@ -5,6 +6,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_separation_native.dart'
     show AudioSeparationEngine, extractAudioSync;
+import 'package:stroom/utils/audio_separation_web_audio.dart'
+    show extractAudioFromWebBytes;
 import 'package:stroom/utils/audio_utils.dart';
 
 /// Helper: read a little-endian 32-bit int from bytes at offset.
@@ -1614,6 +1617,215 @@ void main() {
 
       // Verify the returned format is WAV
       expect(detectAudioFormat(result), equals('wav'));
+    });
+
+    test('web extraction demuxes MP4 audio into WAV bytes', () async {
+      final mp4Bytes = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 4,
+        dataPattern: Uint8List.fromList([0x12, 0x34]),
+      );
+
+      final result = await extractAudioFromWebBytes(mp4Bytes, 'mp4');
+
+      expect(String.fromCharCodes(result.sublist(0, 4)), 'RIFF');
+      expect(
+        extractPcmFromWav(result),
+        [0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34],
+      );
+
+      final aacMp4 = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: [
+          Uint8List.fromList([0x10, 0x11]),
+          Uint8List.fromList([0x20, 0x21]),
+        ],
+      );
+      final webAac = await extractAudioFromWebBytes(aacMp4, 'mp4');
+      expect(
+        webAac,
+        extractAudioSync(videoBytes: aacMp4, videoFormat: 'mp4'),
+      );
+      expect(detectAudioFormat(webAac), 'm4a');
+
+      final editListFrames = [
+        Uint8List.fromList([0x30, 0x31]),
+        Uint8List.fromList([0x40, 0x41]),
+        Uint8List.fromList([0x50, 0x51]),
+      ];
+      final editedAacMp4 = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: editListFrames,
+        editListMediaTime: 1024,
+        editListSegmentDuration: 1024,
+      );
+      final webEditedAac = await extractAudioFromWebBytes(editedAacMp4, 'mp4');
+      expect(
+        webEditedAac,
+        extractAudioSync(videoBytes: editedAacMp4, videoFormat: 'mp4'),
+      );
+      expect(audioDataFromMp4(webEditedAac), editListFrames[1]);
+
+      final twosMov = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 2,
+        dataPattern: Uint8List.fromList([0x12, 0x34]),
+        codec: 'twos',
+      );
+      final webTwos = await extractAudioFromWebBytes(twosMov, 'mov');
+      expect(
+        webTwos,
+        extractAudioSync(videoBytes: twosMov, videoFormat: 'mov'),
+      );
+    });
+
+    test('web extraction rejects malformed and no-audio MP4 input', () async {
+      await expectLater(
+        extractAudioFromWebBytes(Uint8List.fromList([1, 2, 3]), 'mp4'),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('No audio track found in video'),
+        )),
+      );
+
+      final mp4WithoutAudio = Uint8List.fromList([
+        0x00,
+        0x00,
+        0x00,
+        0x14,
+        0x66,
+        0x74,
+        0x79,
+        0x70,
+        0x69,
+        0x73,
+        0x6F,
+        0x6D,
+        0x00,
+        0x00,
+        0x02,
+        0x00,
+        0x69,
+        0x73,
+        0x6F,
+        0x6D,
+      ]);
+      await expectLater(
+        extractAudioFromWebBytes(mp4WithoutAudio, 'mp4'),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('No audio track found in video'),
+        )),
+      );
+    });
+
+    test('web extraction yields so cancellation can be observed mid-demux',
+        () async {
+      var cancelled = false;
+      Timer.run(() => cancelled = true);
+      final largeMp4 = buildMinimalMp4WithPcmAudio(pcmFrames: 1024);
+
+      await expectLater(
+        extractAudioFromWebBytes(
+          largeMp4,
+          'mp4',
+          isCancelled: () => cancelled,
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('Audio extraction was cancelled'),
+        )),
+      );
+      expect(cancelled, isTrue);
+    });
+
+    test('web track parsing yields while reading variable sample sizes',
+        () async {
+      var cancellationChecks = 0;
+      final progress = <int>[];
+      final audioFrames = List.generate(
+        1024,
+        (index) => Uint8List.fromList([index & 0xFF, (index >> 8) & 0xFF]),
+      );
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: audioFrames,
+      );
+
+      await expectLater(
+        extractAudioFromWebBytes(
+          mp4Bytes,
+          'mp4',
+          isCancelled: () => ++cancellationChecks > 1,
+          onProgress: progress.add,
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('Audio extraction was cancelled'),
+        )),
+      );
+      expect(progress, isNot(contains(30)),
+          reason: 'The parser should yield before completing track parsing.');
+    });
+
+    test('web packaging yields and checks cancellation between chunks',
+        () async {
+      var cancelled = false;
+      final largeMp4 = buildMinimalMp4WithPcmAudio(pcmFrames: 1024);
+
+      await expectLater(
+        extractAudioFromWebBytes(
+          largeMp4,
+          'mp4',
+          isCancelled: () => cancelled,
+          onProgress: (progress) {
+            if (progress == 60) {
+              Timer.run(() => cancelled = true);
+            }
+          },
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('Audio extraction was cancelled'),
+        )),
+      );
+      expect(cancelled, isTrue);
+    });
+
+    test('web AAC packaging yields while building its sample table', () async {
+      var cancelled = false;
+      final audioFrames = List.generate(
+        2048,
+        (index) => Uint8List.fromList([index & 0xFF, (index >> 8) & 0xFF]),
+      );
+      final aacMp4 = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: audioFrames,
+      );
+
+      await expectLater(
+        extractAudioFromWebBytes(
+          aacMp4,
+          'mp4',
+          isCancelled: () => cancelled,
+          onProgress: (progress) {
+            if (progress == 60) Timer.run(() => cancelled = true);
+          },
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('Audio extraction was cancelled'),
+        )),
+      );
+      expect(cancelled, isTrue);
     });
 
     test(

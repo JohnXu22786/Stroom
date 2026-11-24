@@ -163,12 +163,21 @@ jobs:
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
+              lib/services/assistant_catalog_transport.dart|\
+              lib/services/assistant_catalog_transport_io.dart|\
+              lib/services/assistant_catalog_transport_stub.dart|\
+              lib/services/assistant_catalog_transport_types.dart)
+                test_f="tests/services/assistant_catalog_service_test.dart"
+                ;;
               lib/utils/audio_playback_stub.dart)
                 test_f="tests/utils/audio_source_uri_test.dart"
                 ;;
               lib/services/sse_client_web_error.dart|\
               lib/services/sse_client_io.dart)
                 test_f="tests/services/sse_client_web_test.dart"
+                ;;
+              lib/providers/update_provider_shared.dart)
+                test_f="tests/providers/update_provider_test.dart"
                 ;;
               lib/pages/gallery_page.dart|\
               lib/pages/tts_page.dart|\
@@ -339,12 +348,17 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
+      - name: Run Web MCP SSE connection regressions in Chrome
+        if: matrix.suite == 'chat-taskflow-core'
+        run: flutter test --reporter expanded --platform chrome test/services/sse_client_web_connect_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Mermaid preview web controls regression
         if: matrix.suite == 'chat-ai-ui'
         run: flutter test --reporter expanded --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart

@@ -76,7 +76,15 @@ class OpenAIProtocol implements ChatProtocol {
               case AttachmentReadStatus.ok:
                 break;
             }
-            final ext = imageExtension(outcome.mimeType ?? att.mimeType);
+            final mimeType = outcome.mimeType ?? att.mimeType;
+            final ext = imageExtension(mimeType);
+            if (ext == null) {
+              parts.add({
+                'type': 'text',
+                'text': '[不支持的图片格式已跳过: ${att.fileName} ($mimeType)]',
+              });
+              continue;
+            }
             parts.add({
               'type': 'image_url',
               'image_url': {'url': 'data:image/$ext;base64,${outcome.base64}'},

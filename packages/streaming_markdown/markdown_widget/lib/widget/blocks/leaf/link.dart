@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../config/configs.dart';
+import '../../link_recognizer_lifecycle.dart';
 import '../../span_node.dart';
 
 ///Tag: [MarkdownTag.a]
@@ -14,6 +15,7 @@ import '../../span_node.dart';
 class LinkNode extends ElementNode {
   final Map<String, String> attributes;
   final LinkConfig linkConfig;
+  LinkRecognizerOwner? recognizerOwner;
 
   LinkNode(this.attributes, this.linkConfig);
 
@@ -25,6 +27,7 @@ class LinkNode extends ElementNode {
         _toLinkInlineSpan(
           child.build(),
           () => _onLinkTap(linkConfig, url),
+          recognizerOwner,
         ),
       if (children.isNotEmpty)
         // FIXME: this is a workaround, maybe need fixed by flutter framework.
@@ -62,13 +65,21 @@ class LinkConfig implements LeafConfig {
 }
 
 // add a tap gesture recognizer to the span.
-InlineSpan _toLinkInlineSpan(InlineSpan span, VoidCallback onTap) {
+InlineSpan _toLinkInlineSpan(
+  InlineSpan span,
+  VoidCallback onTap,
+  LinkRecognizerOwner? recognizerOwner,
+) {
   if (span is TextSpan) {
+    final recognizer = TapGestureRecognizer()..onTap = onTap;
+    recognizerOwner?.register(recognizer);
     span = TextSpan(
       text: span.text,
-      children: span.children?.map((e) => _toLinkInlineSpan(e, onTap)).toList(),
+      children: span.children
+          ?.map((e) => _toLinkInlineSpan(e, onTap, recognizerOwner))
+          .toList(),
       style: span.style,
-      recognizer: TapGestureRecognizer()..onTap = onTap,
+      recognizer: recognizer,
       onEnter: span.onEnter,
       onExit: span.onExit,
       semanticsLabel: span.semanticsLabel,

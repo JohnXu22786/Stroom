@@ -31,11 +31,19 @@ class AudioPlayerAdapter {
   final html.AudioElement Function() _createAudio;
   html.AudioElement? _audio;
   _PendingAudioLoad? _pendingLoad;
+  String? _streamObjectUrl;
+  StreamSubscription<Uint8List>? _streamInputSubscription;
+  StreamSubscription<html.Event>? _streamEndedSubscription;
+  StreamSubscription<html.Event>? _streamErrorSubscription;
+  Completer<void>? _streamInputDone;
+  Completer<void>? _streamPlaybackDone;
   int _loadGeneration = 0;
   bool _disposed = false;
   Timer? _positionTimer;
   StreamSubscription<html.Event>? _endedSub;
   bool _playing = false;
+  bool _streamInputCancelled = false;
+  bool _streamLoadInProgress = false;
 
   final StreamController<Duration> _positionCtrl =
       StreamController<Duration>.broadcast();
@@ -67,6 +75,29 @@ class AudioPlayerAdapter {
   /// 从 URL 加载音频
   Future<void> load(String url) async {
     if (_disposed) return;
+
+    final isStreamLoad = _streamLoadInProgress && url == _streamObjectUrl;
+    if (!isStreamLoad &&
+        (_streamInputSubscription != null ||
+            _streamLoadInProgress ||
+            _streamPlaybackDone != null)) {
+      final wasLoadingStream = _streamLoadInProgress;
+      _cancelStreamPlayback();
+      if (wasLoadingStream) {
+        _pendingLoad?.cancel();
+        _pendingLoad = null;
+        _loadGeneration++;
+        _streamLoadInProgress = false;
+      }
+      _playing = false;
+      _stateCtrl.add(null);
+    }
+
+    final previousStreamObjectUrl = _streamObjectUrl;
+    if (previousStreamObjectUrl != null && previousStreamObjectUrl != url) {
+      html.Url.revokeObjectUrl(previousStreamObjectUrl);
+      _streamObjectUrl = null;
+    }
 
     final generation = ++_loadGeneration;
     _pendingLoad?.cancel();
@@ -164,13 +195,109 @@ class AudioPlayerAdapter {
     });
   }
 
+  /// Buffers streamed bytes into a browser media resource and plays it.
+  /// HTMLAudioElement does not support appending arbitrary TTS chunks.
+  Future<bool> playStream(
+    Stream<Uint8List> chunks, {
+    required String contentType,
+  }) async {
+    if (_disposed) return false;
+    _streamInputCancelled = false;
+    final bytes = BytesBuilder(copy: false);
+    final inputDone = Completer<void>();
+    _streamInputDone = inputDone;
+    final subscription = chunks.listen(
+      (chunk) {
+        if (chunk.isNotEmpty) bytes.add(chunk);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!inputDone.isCompleted) inputDone.completeError(error, stackTrace);
+      },
+      onDone: () {
+        if (!inputDone.isCompleted) inputDone.complete();
+      },
+    );
+    _streamInputSubscription = subscription;
+    try {
+      await inputDone.future;
+    } finally {
+      if (identical(_streamInputSubscription, subscription)) {
+        _streamInputSubscription = null;
+        _streamInputDone = null;
+      }
+      await subscription.cancel();
+    }
+    if (_disposed || _streamInputCancelled) return false;
+
+    _revokeStreamObjectUrl();
+    final url = html.Url.createObjectUrl(
+      html.Blob([bytes.takeBytes()], contentType),
+    );
+    _streamObjectUrl = url;
+    _streamLoadInProgress = true;
+    try {
+      await load(url);
+    } finally {
+      _streamLoadInProgress = false;
+    }
+    if (_disposed || _streamInputCancelled) return false;
+
+    final playbackDone = Completer<void>();
+    _streamPlaybackDone = playbackDone;
+    final audio = _audio!;
+    final endedSubscription = audio.onEnded.listen((_) {
+      if (!playbackDone.isCompleted) playbackDone.complete();
+    });
+    _streamEndedSubscription = endedSubscription;
+    final errorSubscription = audio.onError.listen((_) {
+      if (playbackDone.isCompleted) return;
+      final message = audio.error?.message;
+      playbackDone.completeError(
+        Exception(
+          message == null || message.isEmpty
+              ? 'Audio playback failed'
+              : 'Audio playback failed: $message',
+        ),
+      );
+    });
+    _streamErrorSubscription = errorSubscription;
+    try {
+      try {
+        await Future.any([play(), playbackDone.future]);
+      } on Object catch (error) {
+        if (_isAutoplayBlocked(error)) return true;
+        rethrow;
+      }
+      await playbackDone.future;
+      return false;
+    } finally {
+      await endedSubscription.cancel();
+      await errorSubscription.cancel();
+      if (identical(_streamEndedSubscription, endedSubscription)) {
+        _streamEndedSubscription = null;
+        _streamErrorSubscription = null;
+        _streamPlaybackDone = null;
+      }
+    }
+  }
+
   /// 播放
   Future<void> play() async {
     if (_audio == null) return;
     _playing = true;
-    _audio!.play();
+    final playback = _audio!.play();
     _stateCtrl.add(null);
+    try {
+      await playback;
+    } catch (_) {
+      _playing = false;
+      _stateCtrl.add(null);
+      rethrow;
+    }
   }
+
+  bool _isAutoplayBlocked(Object error) =>
+      error.toString().contains('NotAllowedError');
 
   /// 暂停
   void pause() {
@@ -182,12 +309,46 @@ class AudioPlayerAdapter {
 
   /// 停止
   void stop() {
-    if (_audio == null) return;
-    _playing = false;
-    _audio!.pause();
-    _audio!.currentTime = 0;
-    _positionCtrl.add(Duration.zero);
-    _stateCtrl.add(null);
+    final wasLoadingStream = _streamLoadInProgress;
+    _cancelStreamPlayback();
+    if (wasLoadingStream) {
+      _pendingLoad?.cancel();
+      _pendingLoad = null;
+      _loadGeneration++;
+    }
+    if (_audio != null) {
+      _playing = false;
+      _audio!.pause();
+      _audio!.currentTime = 0;
+      _positionCtrl.add(Duration.zero);
+      _stateCtrl.add(null);
+    }
+    _revokeStreamObjectUrl();
+  }
+
+  void _revokeStreamObjectUrl() {
+    final url = _streamObjectUrl;
+    if (url == null) return;
+    html.Url.revokeObjectUrl(url);
+    _streamObjectUrl = null;
+  }
+
+  void _cancelStreamPlayback() {
+    _streamInputCancelled = true;
+    unawaited(_streamInputSubscription?.cancel());
+    _streamInputSubscription = null;
+    final inputDone = _streamInputDone;
+    if (inputDone != null && !inputDone.isCompleted) inputDone.complete();
+    _streamInputDone = null;
+    unawaited(_streamEndedSubscription?.cancel());
+    _streamEndedSubscription = null;
+    unawaited(_streamErrorSubscription?.cancel());
+    _streamErrorSubscription = null;
+    final playbackDone = _streamPlaybackDone;
+    if (playbackDone != null && !playbackDone.isCompleted) {
+      playbackDone.complete();
+    }
+    _streamPlaybackDone = null;
   }
 
   /// 跳转到指定位置
@@ -220,6 +381,8 @@ class AudioPlayerAdapter {
     _endedSub = null;
     _audio?.pause();
     _positionTimer?.cancel();
+    _cancelStreamPlayback();
+    _revokeStreamObjectUrl();
     _audio = null;
     _positionTimer = null;
     _playing = false;

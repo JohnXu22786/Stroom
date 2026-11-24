@@ -18,21 +18,27 @@ void showAssistantRemoteSourceDialog(
   BuildContext context,
   WidgetRef ref, {
   String initialUrl = '',
+  AssistantCatalogService Function()? serviceFactory,
 }) {
   showDialog<void>(
     context: context,
-    builder: (context) =>
-        _AssistantRemoteSourceDialog(ref: ref, initialUrl: initialUrl),
+    builder: (context) => _AssistantRemoteSourceDialog(
+      ref: ref,
+      initialUrl: initialUrl,
+      serviceFactory: serviceFactory,
+    ),
   );
 }
 
 class _AssistantRemoteSourceDialog extends StatefulWidget {
   final WidgetRef ref;
   final String initialUrl;
+  final AssistantCatalogService Function()? serviceFactory;
 
   const _AssistantRemoteSourceDialog({
     required this.ref,
     required this.initialUrl,
+    required this.serviceFactory,
   });
 
   @override
@@ -44,9 +50,12 @@ class _AssistantRemoteSourceDialogState
     extends State<_AssistantRemoteSourceDialog> {
   late final TextEditingController _urlController;
   RemoteAssistantCatalog? _catalog;
+  int _catalogRequestGeneration = 0;
+  bool _loadingCatalog = false;
   bool _busy = false;
   bool _autoUpdate = false;
   bool _reviewSafety = false;
+  bool _dismissed = false;
   String? _error;
 
   @override
@@ -62,6 +71,8 @@ class _AssistantRemoteSourceDialogState
 
   bool get _isZh => Localizations.localeOf(context).languageCode == 'zh';
 
+  bool get _canContinueImport => mounted && !_dismissed;
+
   @override
   void dispose() {
     _urlController.dispose();
@@ -69,27 +80,38 @@ class _AssistantRemoteSourceDialogState
   }
 
   Future<void> _loadCatalog() async {
+    final requestGeneration = ++_catalogRequestGeneration;
+    final catalogUrl = _urlController.text;
     setState(() {
       _busy = true;
+      _loadingCatalog = true;
       _error = null;
       _catalog = null;
     });
-    final service = AssistantCatalogService();
+    final service = widget.serviceFactory?.call() ?? AssistantCatalogService();
     try {
-      final catalog = await service.fetchCatalog(_urlController.text);
-      if (!mounted) return;
+      final catalog = await service.fetchCatalog(catalogUrl);
+      if (!mounted || requestGeneration != _catalogRequestGeneration) return;
       setState(() => _catalog = catalog);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted && requestGeneration == _catalogRequestGeneration) {
+        setState(() => _error = '$error');
+      }
     } finally {
       service.close();
-      if (mounted) setState(() => _busy = false);
+      if (mounted && requestGeneration == _catalogRequestGeneration) {
+        setState(() {
+          _busy = false;
+          _loadingCatalog = false;
+        });
+      }
     }
   }
 
   Future<void> _importDirectFile() async {
     await _performImport(() async {
-      final service = AssistantCatalogService();
+      final service =
+          widget.serviceFactory?.call() ?? AssistantCatalogService();
       try {
         return await service.fetchDirectAssistant(_urlController.text);
       } finally {
@@ -101,7 +123,8 @@ class _AssistantRemoteSourceDialogState
   Future<void> _importEntry(RemoteAssistantCatalogEntry entry) async {
     final catalogUrl = _urlController.text.trim();
     await _performImport(() async {
-      final service = AssistantCatalogService();
+      final service =
+          widget.serviceFactory?.call() ?? AssistantCatalogService();
       try {
         return await service.fetchCatalogEntry(
           catalogUrl: catalogUrl,
@@ -125,6 +148,7 @@ class _AssistantRemoteSourceDialogState
     var imported = false;
     try {
       final remote = await download();
+      if (!_canContinueImport) return;
       final definition = remote.definition;
 
       final refs = widget.ref.read(providerEntriesProvider);
@@ -152,6 +176,7 @@ class _AssistantRemoteSourceDialogState
           prompt: definition.prompt,
           settings: definition.settings.toMap(),
         );
+        if (!_canContinueImport) return;
         if (!review.approved) {
           throw FormatException(
             '${_isZh ? '安全审查未通过' : 'Safety review rejected this assistant'}: ${review.reason}',
@@ -221,10 +246,15 @@ class _AssistantRemoteSourceDialogState
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: ConstrainedText(
-        _isZh ? '接入远程助手' : 'Connect remote assistants',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      title: PopScope<void>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) _dismissed = true;
+        },
+        child: ConstrainedText(
+          _isZh ? '接入远程助手' : 'Connect remote assistants',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       content: SizedBox(
         width: 560,
@@ -255,10 +285,17 @@ class _AssistantRemoteSourceDialogState
                     ),
                   ),
                 ),
-                onChanged: (_) => setState(() {
-                  _catalog = null;
-                  _error = null;
-                }),
+                onChanged: (_) {
+                  _catalogRequestGeneration++;
+                  setState(() {
+                    if (_loadingCatalog) {
+                      _busy = false;
+                      _loadingCatalog = false;
+                    }
+                    _catalog = null;
+                    _error = null;
+                  });
+                },
               ),
               const SizedBox(height: 10),
               SwitchListTile(

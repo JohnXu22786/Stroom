@@ -41,7 +41,12 @@ const _fadeDuration = Duration(milliseconds: 250);
 /// Seeds [conversationsProvider] state directly (the async `_load()` is
 /// library-private and skipped by provider overrides) — this is the
 /// established pattern used by other conversation-seeded tests.
-Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
+Widget createChatTestAppWithMessages(
+  List<ChatMessage> messages, {
+  Locale locale = const Locale('zh', 'CN'),
+  double textScaleFactor = 1,
+  bool configuredProvider = false,
+}) {
   SharedPreferences.setMockInitialValues({});
   final conversation = Conversation(
     id: 'test-conv-id',
@@ -59,19 +64,48 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
       }),
       activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
-        return ProviderEntriesNotifier();
+        final notifier = ProviderEntriesNotifier();
+        if (!configuredProvider) return notifier;
+        notifier.state = ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'fixture_llm',
+              type: 'llm',
+              name: 'Fixture provider',
+              configs: [
+                ProviderConfigItem(
+                  providerName: 'Fixture',
+                  host: 'https://example.invalid/v1',
+                  key: 'fixture-key',
+                  models: [
+                    ModelConfig(
+                        name: 'Fixture model', modelId: 'fixture-model'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+        return notifier;
       }),
     ],
-    child: const MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: ChatPage()),
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+        child: child!,
+      ),
+      home: const Scaffold(body: ChatPage()),
+    ),
   );
 }
 
@@ -168,6 +202,88 @@ void main() {
         await tester.pump(_fadeDuration);
         expect(find.text(_warningText), findsNothing);
         expect(find.text(_capsuleText), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'short keyboard viewport keeps the localized warning and editor reachable',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+        tester.view.viewInsets = FakeViewPadding.zero;
+        addTearDown(() {
+          tester.view.viewInsets = FakeViewPadding.zero;
+          tester.binding.setSurfaceSize(null);
+        });
+        await tester.pumpWidget(
+          createChatTestAppWithMessages(
+            _alternatingMessages(3),
+            locale: const Locale('fr', 'FR'),
+            textScaleFactor: 1.5,
+            configuredProvider: true,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        for (var frame = 0; frame < 12; frame++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(find.text('Fixture model | Fixture'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        final editButton = _editButton(last: false);
+        await tester.ensureVisible(editButton);
+        await tester.tap(editButton);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        final warning = AppLocalizations.of(
+          tester.element(find.byType(ChatComposerWidget)),
+        )!
+            .chatEditWarning;
+        expect(find.text(warning), findsOneWidget);
+
+        // Resize the production page to a short phone viewport and open the
+        // software keyboard while edit mode is active.
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        tester.view.viewInsets = FakeViewPadding(
+          bottom: 260 * tester.view.devicePixelRatio,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(warning), findsOneWidget);
+        expect(
+            tester.getRect(find.text(warning)).bottom, lessThanOrEqualTo(380));
+        await expectLater(
+          find.byType(ChatPage),
+          matchesGoldenFile(
+            'goldens/chat_page_edit_warning_fr_320x380_keyboard.png',
+          ),
+        );
+
+        final closeButton = find.byKey(_closeButtonKey);
+        expect(tester.getRect(closeButton).bottom, lessThanOrEqualTo(380));
+        await tester.tap(closeButton);
+        await tester.pump(_fadeDuration);
+        expect(find.text(warning), findsNothing);
+
+        final editor = find.byType(TextField).first;
+        await tester.ensureVisible(editor);
+        expect(tester.getRect(editor).bottom, lessThanOrEqualTo(380));
+        await tester.tap(editor);
+        await tester.enterText(editor, 'modified text');
+        await tester.pump();
+        expect(tester.widget<TextField>(editor).focusNode!.hasFocus, isTrue);
+        expect(tester.takeException(), isNull);
+
+        // Hiding the keyboard restores the full conversation list while the
+        // edit session and composer draft remain available.
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Message 1 content'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
 

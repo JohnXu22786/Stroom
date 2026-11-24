@@ -123,25 +123,48 @@ class _TocWidgetState extends State<TocWidget> {
   @override
   void initState() {
     super.initState();
-    tocController._onListChanged = (list) {
-      if (list.length < _tocList.length && currentIndex >= list.length) {
-        currentIndex = list.length - 1;
-      }
-      _refreshList(list);
+    _attachController(tocController);
+  }
+
+  @override
+  void didUpdateWidget(covariant TocWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _detachController(oldWidget.controller);
+      currentIndex = 0;
+      _attachController(widget.controller);
+    }
+  }
+
+  void _attachController(TocController controller) {
+    controller._onListChanged = (list) {
+      _updateTocList(list);
 
       WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
         refresh();
       });
     };
-    tocController._onIndexChangedCallback = (index) {
-      final selfIndex = tocController._index2toc[index]?.selfIndex;
+    controller._onIndexChangedCallback = (index) {
+      final selfIndex = controller._index2toc[index]?.selfIndex;
       if (selfIndex != null && _tocList.length > selfIndex) {
         refreshIndex(selfIndex);
-        controller.scrollToIndex(currentIndex,
+        this.controller.scrollToIndex(currentIndex,
             preferPosition: AutoScrollPosition.begin);
       }
     };
-    _refreshList(tocController.tocList);
+    _updateTocList(controller.tocList);
+  }
+
+  void _detachController(TocController controller) {
+    controller._onIndexChangedCallback = null;
+    controller._onListChanged = null;
+  }
+
+  void _updateTocList(List<Toc> list) {
+    if (list.isNotEmpty && currentIndex >= list.length) {
+      currentIndex = list.length - 1;
+    }
+    _refreshList(list);
   }
 
   void _refreshList(List<Toc> list) {
@@ -151,11 +174,10 @@ class _TocWidgetState extends State<TocWidget> {
 
   @override
   void dispose() {
-    super.dispose();
+    _detachController(tocController);
     controller.dispose();
     _tocList.clear();
-    tocController._onIndexChangedCallback = null;
-    tocController._onListChanged = null;
+    super.dispose();
   }
 
   @override
@@ -171,7 +193,9 @@ class _TocWidgetState extends State<TocWidget> {
         if (itemBuilder != null) {
           final result = itemBuilder.call(TocItemBuilderData(
               index, currentToc, currentIndex, refreshIndex));
-          if (result != null) return result;
+          if (result != null) {
+            return wrapByAutoScroll(index, result, controller);
+          }
         }
         final node = currentToc.node.copy(
             headingConfig: _TocHeadingConfig(

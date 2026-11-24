@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:markdown/markdown.dart' as m;
 
 import '../widget/blocks/leaf/heading.dart';
+import '../widget/blocks/leaf/link.dart';
+import '../widget/link_recognizer_lifecycle.dart';
 import '../widget/span_node.dart';
 import '../widget/widget_visitor.dart';
 import 'configs.dart';
@@ -94,9 +96,19 @@ class MarkdownGenerator {
     onTocList?.call(tocList);
     final List<Widget> widgets = [];
     for (var span in spans) {
+      final recognizerOwner = LinkRecognizerOwner();
+      _attachLinkRecognizerOwner(span, recognizerOwner);
       final textSpan = spanNodeBuilder?.call(span) ?? span.build();
       final richText = richTextBuilder?.call(textSpan) ?? Text.rich(textSpan);
-      widgets.add(Padding(padding: linesMargin, child: richText));
+      widgets.add(Padding(
+        padding: linesMargin,
+        child: LinkRecognizerLifecycle(
+          span: textSpan,
+          owner: recognizerOwner,
+          disposeOwner: true,
+          child: richText,
+        ),
+      ));
     }
     return widgets;
   }
@@ -127,6 +139,18 @@ class MarkdownGenerator {
   }
 
   static bool allowAll(HeadingNode toc) => true;
+}
+
+void _attachLinkRecognizerOwner(
+  SpanNode node,
+  LinkRecognizerOwner owner,
+) {
+  if (node is LinkNode) node.recognizerOwner = owner;
+  if (node is ElementNode) {
+    for (final child in node.children) {
+      _attachLinkRecognizerOwner(child, owner);
+    }
+  }
 }
 
 typedef SpanNodeBuilder = TextSpan Function(SpanNode spanNode);

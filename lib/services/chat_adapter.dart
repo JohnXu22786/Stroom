@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
-import '../l10n/app_localizations.dart';
 import '../models/assistant.dart'
     show Assistant, AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
@@ -40,8 +39,9 @@ const kMcpSearchToolNames = <String>{
 
 bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
   if (!entriesState.isLoaded) return false;
-  final mcpEntry =
-      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  final mcpEntry = entriesState.entries
+      .where((entry) => entry.type == 'mcp')
+      .firstOrNull;
   return mcpEntry?.enabled ?? true;
 }
 
@@ -99,6 +99,15 @@ bool routedAccountChoiceMatches({
     selectedModelIdentity == modelIdentity;
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
+class _ConversationAssistantConfig {
+  String? prompt;
+  bool hasPrompt = false;
+  AssistantSettings? settings;
+  bool hasSettings = false;
+  List<CustomParameter>? customParams;
+  bool hasCustomParams = false;
+}
+
 class ChatAdapter {
   final Future<AiGatewayFacade>? _routingRuntime;
   final Locale? Function()? _localeOverride;
@@ -106,8 +115,8 @@ class ChatAdapter {
   ChatAdapter({
     Future<AiGatewayFacade>? routingRuntime,
     Locale? Function()? localeOverride,
-  })  : _routingRuntime = routingRuntime,
-        _localeOverride = localeOverride;
+  }) : _routingRuntime = routingRuntime,
+       _localeOverride = localeOverride;
 
   /// Per-conversation ChatService instances, keyed by conversation ID.
   /// Each conversation gets its own independent HTTP connection, enabling
@@ -155,12 +164,14 @@ class ChatAdapter {
     return {'configId': config.id, 'modelId': model.id};
   }
 
-  /// 当前缓存的对话助手 system prompt（供上下文管理注入用）。
-  String? get assistantPrompt => _cachedAssistantPrompt;
+  /// Assistant prompt and settings for the specific conversation.
+  String? assistantPromptFor(String convId) =>
+      _activeServices[convId]?.assistantPrompt ??
+      _assistantConfigsByConversation[convId]?.prompt;
 
-  /// 当前缓存的对话助手设置（供上下文管理估算用：
-  /// 工具结果渲染截断上限与发送侧保持同一来源）。
-  AssistantSettings? get assistantSettings => _cachedAssistantSettings;
+  AssistantSettings? assistantSettingsFor(String convId) =>
+      _activeServices[convId]?.assistantSettings ??
+      _assistantConfigsByConversation[convId]?.settings;
 
   /// The first active [ChatService] instance, or null if none are running.
   /// **Warning**: nondeterministic when multiple conversations are streaming
@@ -246,14 +257,15 @@ class ChatAdapter {
       final modelRef = hasBoundModelId
           ? assistant.modelId
           : assistant.defaultModelId?.isNotEmpty == true
-              ? assistant.defaultModelId
-              : null;
+          ? assistant.defaultModelId
+          : null;
       final resolved = _resolveAssistantModel(
         modelRef,
         entriesState,
         providerName: useDefaultRef ? assistant.defaultProviderName : null,
-        modelDisplayName:
-            hasBoundModelId ? assistant.modelId : assistant.defaultModelName,
+        modelDisplayName: hasBoundModelId
+            ? assistant.modelId
+            : assistant.defaultModelName,
       );
       if (resolved == null) return null;
       final (config, model) = resolved;
@@ -291,7 +303,8 @@ class ChatAdapter {
     if (group == null) return const [];
     final accounts = await gateway.accountManagement.listAccounts();
     final accountsById = {for (final account in accounts) account.id: account};
-    final modelOverride = model.apiProtocolOverride ??
+    final modelOverride =
+        model.apiProtocolOverride ??
         (model.endpointType == null
             ? null
             : apiProtocolFromLegacyEndpointType(model.endpointType));
@@ -353,8 +366,9 @@ class ChatAdapter {
     final modelEffort = findEffortParam(config.reasoningParams);
     var merged = mergeReasoningParams(providerParams, config.reasoningParams);
     if (modelEffort != null) {
-      merged =
-          merged.where((p) => !p.isEffortParam || p == modelEffort).toList();
+      merged = merged
+          .where((p) => !p.isEffortParam || p == modelEffort)
+          .toList();
     }
     final providerNames = providerParams
         .map((p) => p.paramName.trim())
@@ -366,7 +380,8 @@ class ChatAdapter {
         .toSet();
     return merged.map((p) {
       final name = p.paramName.trim();
-      final isProviderOrigin = name.isNotEmpty &&
+      final isProviderOrigin =
+          name.isNotEmpty &&
           providerNames.contains(name) &&
           !modelNames.contains(name);
       return isProviderOrigin ? p.copy() : p;
@@ -435,6 +450,7 @@ class ChatAdapter {
           config,
           endpointType,
           assistant: assistant,
+          convId: convId,
         ),
       );
     }
@@ -453,14 +469,15 @@ class ChatAdapter {
       final modelRef = hasBoundModelId
           ? assistant.modelId
           : assistant.defaultModelId?.isNotEmpty == true
-              ? assistant.defaultModelId
-              : null;
+          ? assistant.defaultModelId
+          : null;
       final resolved = _resolveAssistantModel(
         modelRef,
         entriesState,
         providerName: useDefaultRef ? assistant.defaultProviderName : null,
-        modelDisplayName:
-            hasBoundModelId ? assistant.modelId : assistant.defaultModelName,
+        modelDisplayName: hasBoundModelId
+            ? assistant.modelId
+            : assistant.defaultModelName,
       );
       if (resolved != null) {
         final (config, modelConfig) = resolved;
@@ -484,6 +501,7 @@ class ChatAdapter {
             config,
             endpointType,
             assistant: assistant,
+            convId: convId,
           );
         });
       }
@@ -498,7 +516,8 @@ class ChatAdapter {
     if (existing != null) return existing;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _activeServices.putIfAbsent(convId, () {
-      final provider = _cachedProviderConfig == null ||
+      final provider =
+          _cachedProviderConfig == null ||
               !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
           ? _cachedProvider!
           : _providerForModel(
@@ -514,6 +533,7 @@ class ChatAdapter {
         _cachedProviderConfig,
         _cachedEndpointType,
         assistant: assistant,
+        convId: convId,
       );
       return svc;
     });
@@ -525,6 +545,7 @@ class ChatAdapter {
     ProviderConfigItem? providerConfig,
     String endpointType, {
     Assistant? assistant,
+    String? convId,
   }) {
     final svc = ChatService(
       provider: provider,
@@ -533,11 +554,25 @@ class ChatAdapter {
       endpointType: legacyEndpointTypeForApiProtocol(endpointType),
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
-    // the global cached assistant template).
-    final prompt = assistant?.prompt ?? _cachedAssistantPrompt;
-    final settings = assistant?.settings ?? _cachedAssistantSettings;
+    // this conversation's adapter-set assistant template).
+    final conversationConfig = convId == null
+        ? null
+        : _assistantConfigsByConversation[convId];
+    final prompt =
+        assistant?.prompt ??
+        (conversationConfig?.hasPrompt == true
+            ? conversationConfig!.prompt
+            : null);
+    final settings =
+        assistant?.settings ??
+        (conversationConfig?.hasSettings == true
+            ? conversationConfig!.settings
+            : null);
     final customParams =
-        assistant?.settings.customParameters ?? _cachedAssistantCustomParams;
+        assistant?.settings.customParameters ??
+        (conversationConfig?.hasCustomParams == true
+            ? conversationConfig!.customParams
+            : null);
     if (prompt != null) {
       svc.setAssistantPrompt(prompt);
     }
@@ -594,8 +629,9 @@ class ChatAdapter {
     String? providerName,
     String? modelDisplayName,
   }) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null) return null;
 
     final candidates = flattenProviderModels(
@@ -621,24 +657,24 @@ class ChatAdapter {
       final hasProvider = providerName != null && providerName.isNotEmpty;
       final providerMatches = hasProvider
           ? idMatches
-              .where((pair) => pair.$1.providerName == providerName)
-              .toList(growable: false)
+                .where((pair) => pair.$1.providerName == providerName)
+                .toList(growable: false)
           : const <(ProviderConfigItem, ModelConfig)>[];
       final groupReference = llmModelGroupMemberReferenceForModelId(id);
       final stableGroupMatches = groupReference == null
           ? const <(ProviderConfigItem, ModelConfig)>[]
           : idMatches
-              .where(
-                (pair) =>
-                    llmModelGroupIdForConfig(pair.$1) ==
-                        groupReference.groupId &&
-                    pair.$2.id == groupReference.localModelId,
-              )
-              .toList(growable: false);
+                .where(
+                  (pair) =>
+                      llmModelGroupIdForConfig(pair.$1) ==
+                          groupReference.groupId &&
+                      pair.$2.id == groupReference.localModelId,
+                )
+                .toList(growable: false);
       final preferred = hasProvider
           ? providerMatches.isNotEmpty
-              ? providerMatches
-              : stableGroupMatches
+                ? providerMatches
+                : stableGroupMatches
           : idMatches;
       if (preferred.length == 1) return preferred.single;
       if (preferred.length > 1) {
@@ -674,18 +710,21 @@ class ChatAdapter {
   /// （"UI 显示模型 B、请求走模型 A"）。用后即弃，随 GC 回收。
   /// 返回 null 表示 adapter 尚未配置当前模型。
   ChatService? createTransientService({
+    String? convId,
     String? conversationId,
     String? selectedAccountId,
   }) {
+    final targetConversationId = conversationId ?? convId;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
-    final provider = _cachedProviderConfig == null ||
+    final provider =
+        _cachedProviderConfig == null ||
             !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
         ? _cachedProvider!
         : _providerForModel(
             _cachedProviderConfig!,
             _cachedModelConfig!,
             _cachedEndpointType,
-            conversationId: conversationId,
+            conversationId: targetConversationId,
             selectedAccountId: selectedAccountId,
           );
     return _buildTransientService(
@@ -693,6 +732,7 @@ class ChatAdapter {
       _cachedModelConfig!,
       _cachedProviderConfig,
       _cachedEndpointType,
+      convId: targetConversationId,
     );
   }
 
@@ -740,6 +780,7 @@ class ChatAdapter {
       svc = _buildTransientService(provider, modelConfig, config, endpointType);
     } else {
       svc = createTransientService(
+        convId: convId,
         conversationId: convId,
         selectedAccountId: selectedAccountId,
       );
@@ -769,22 +810,35 @@ class ChatAdapter {
     BaseChatProvider provider,
     ModelConfig modelConfig,
     ProviderConfigItem? providerConfig,
-    String endpointType,
-  ) {
+    String endpointType, {
+    String? convId,
+  }) {
     final svc = ChatService(
       provider: provider,
       modelConfig: modelConfig,
       providerConfig: providerConfig,
       endpointType: endpointType,
     );
-    if (_cachedAssistantPrompt != null) {
-      svc.setAssistantPrompt(_cachedAssistantPrompt);
+    final conversationConfig = convId == null
+        ? null
+        : _assistantConfigsByConversation[convId];
+    final prompt = conversationConfig?.hasPrompt == true
+        ? conversationConfig!.prompt
+        : null;
+    final settings = conversationConfig?.hasSettings == true
+        ? conversationConfig!.settings
+        : null;
+    final customParams = conversationConfig?.hasCustomParams == true
+        ? conversationConfig!.customParams
+        : null;
+    if (prompt != null) {
+      svc.setAssistantPrompt(prompt);
     }
-    if (_cachedAssistantSettings != null) {
-      svc.setAssistantSettings(_cachedAssistantSettings);
+    if (settings != null) {
+      svc.setAssistantSettings(settings);
     }
-    if (_cachedAssistantCustomParams != null) {
-      svc.setAssistantCustomParams(_cachedAssistantCustomParams);
+    if (customParams != null) {
+      svc.setAssistantCustomParams(customParams);
     }
     return svc;
   }
@@ -794,6 +848,7 @@ class ChatAdapter {
     final svc = _activeServices.remove(convId);
     svc?.cancel();
     svc?.dispose();
+    _assistantConfigsByConversation.remove(convId);
     // 同步中止该对话的任务瞬时服务（压缩等）。
     releaseTaskService(convId);
   }
@@ -814,6 +869,7 @@ class ChatAdapter {
       svc.dispose();
     }
     _activeServices.clear();
+    _assistantConfigsByConversation.clear();
     for (final svc in _pendingTaskServices.values) {
       svc.cancel();
       svc.dispose();
@@ -821,10 +877,8 @@ class ChatAdapter {
     _pendingTaskServices.clear();
   }
 
-  // Cached assistant config applied to newly created services.
-  String? _cachedAssistantPrompt;
-  AssistantSettings? _cachedAssistantSettings;
-  List<CustomParameter>? _cachedAssistantCustomParams;
+  final Map<String, _ConversationAssistantConfig>
+  _assistantConfigsByConversation = {};
 
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
@@ -835,8 +889,9 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     final firstModel = availableLlmModels(entriesState).firstOrNull;
     if (llmEntry == null || firstModel == null) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
@@ -877,8 +932,9 @@ class ChatAdapter {
     int configIndex,
     int modelIndex,
   ) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
@@ -953,12 +1009,14 @@ class ChatAdapter {
     if (routingRuntime != null && isLlmModelGroupProviderConfig(config)) {
       return LlmRoutedChatProvider(
         runtime: routingRuntime,
-        groupId: llmModelGroupIdForConfig(config) ??
+        groupId:
+            llmModelGroupIdForConfig(config) ??
             stableLlmModelGroupId(config.id, model.id),
         localModelId: model.id,
         endpointType: endpointType,
         apiProtocol: endpointType,
-        apiProtocolOverride: model.apiProtocolOverride ??
+        apiProtocolOverride:
+            model.apiProtocolOverride ??
             (model.endpointType == null
                 ? null
                 : apiProtocolFromLegacyEndpointType(model.endpointType)),
@@ -1021,30 +1079,48 @@ class ChatAdapter {
 
   /// Pass assistant-level custom parameters to the underlying ChatService.
   /// These will be merged into the API request body alongside model-level params.
-  void setAssistantCustomParams(List<CustomParameter>? params) {
-    _cachedAssistantCustomParams = params;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantCustomParams(params);
-    }
+  void setAssistantCustomParams(
+    List<CustomParameter>? params, {
+    required String convId,
+  }) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..customParams = params
+      ..hasCustomParams = true;
+    _activeServices[convId]?.setAssistantCustomParams(params);
   }
 
   /// Pass the assistant's system prompt to the underlying ChatService.
   /// This prompt will be prepended as a system-role message in API requests.
-  void setAssistantPrompt(String? prompt) {
-    _cachedAssistantPrompt = prompt;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantPrompt(prompt);
-    }
+  void setAssistantPrompt(String? prompt, {required String convId}) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..prompt = prompt
+      ..hasPrompt = true;
+    _activeServices[convId]?.setAssistantPrompt(prompt);
   }
 
   /// Pass assistant-level settings to the underlying ChatService.
   /// When an assistant setting's enable flag is true, it overrides the
   /// corresponding model parameter. When false, the model parameter is used.
-  void setAssistantSettings(AssistantSettings? settings) {
-    _cachedAssistantSettings = settings;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantSettings(settings);
-    }
+  void setAssistantSettings(
+    AssistantSettings? settings, {
+    required String convId,
+  }) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..settings = settings
+      ..hasSettings = true;
+    _activeServices[convId]?.setAssistantSettings(settings);
   }
 
   Stream<String> sendStream(
@@ -1056,8 +1132,9 @@ class ChatAdapter {
     Map<String, String>? customParamValues,
     String convId = '',
   }) {
-    final svc =
-        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    final svc = convId.isNotEmpty
+        ? getOrCreateService(convId)
+        : currentChatService;
     if (svc == null) {
       return Stream.error(
         appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
@@ -1108,7 +1185,7 @@ class ChatAdapter {
         _hasConfiguredAssistantModelReference(assistant)
             ? '助手配置的模型不可用，请检查助手模型选择。'
             : appLocalizationsForLocale(_localeOverride?.call())
-                .chatMissingProvider,
+                  .chatMissingProvider,
       );
     }
     return svc.sendStreamWithTools(
@@ -1208,8 +1285,9 @@ String? perConversationModelToRestore({
 /// Legacy configs need host/key; in-memory model-group configs intentionally
 /// omit both because the routed provider reads endpoint credentials at runtime.
 List<AvailableModel> availableLlmModels(ProviderEntriesState entriesState) {
-  final llmEntry =
-      entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+  final llmEntry = entriesState.entries
+      .where((e) => e.type == 'llm')
+      .firstOrNull;
   if (llmEntry == null) return const [];
 
   final result = <AvailableModel>[];

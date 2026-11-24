@@ -1138,6 +1138,8 @@ class MainActivity : FlutterActivity() {
         bytes: ByteArray,
         result: MethodChannel.Result
     ) {
+        var stagedFile: DocumentFile? = null
+        var stagedDocumentCreated = false
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -1154,25 +1156,72 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 删除已存在的同名文件，然后创建新文件
-            val existingFile = backupDir.findFile(fileName)
-            if (existingFile != null) {
-                existingFile.delete()
-            }
-
-            val newFile = backupDir.createFile("application/zip", fileName)
-            if (newFile != null) {
-                val outputStream = contentResolver.openOutputStream(newFile.uri)
-                outputStream?.use { stream ->
-                    stream.write(bytes)
-                    stream.flush()
+            synchronized(backupSafWriteLock) {
+                val existingFile = backupDir.findFile(fileName)
+                val stagedName = "$fileName.tmp_${java.util.UUID.randomUUID()}"
+                val rollbackName = "$fileName.rollback_${java.util.UUID.randomUUID()}"
+                val writeSucceeded = SafStagedWrite.writeAndPublish(
+                    createStagedDocument = {
+                        backupDir.createFile("application/zip", stagedName)?.also {
+                            stagedFile = it
+                            stagedDocumentCreated = true
+                        } != null
+                    },
+                    openOutputStream = {
+                        stagedFile?.let { contentResolver.openOutputStream(it.uri) }
+                    },
+                    writePayload = { stream ->
+                        stream.write(bytes)
+                        stream.flush()
+                    },
+                    publish = {
+                        if (existingFile == null) {
+                            backupDir.findFile(fileName) == null &&
+                                (stagedFile?.renameTo(fileName) == true)
+                        } else {
+                            SafDocumentReplacement.commit(
+                                originalName = fileName,
+                                stagedName = stagedName,
+                                rollbackName = rollbackName,
+                                renameDocument = { fromName, toName ->
+                                    backupDir.findFile(fromName)?.renameTo(toName) == true
+                                },
+                                deleteDocument = { name ->
+                                    backupDir.findFile(name)?.delete() == true
+                                },
+                            )
+                        }
+                    },
+                    deleteStagedDocument = {
+                        stagedFile?.let {
+                            if (!it.delete()) throw java.io.IOException("无法清理临时备份文件")
+                            stagedFile = null
+                        }
+                    },
+                )
+                if (!writeSucceeded && !stagedDocumentCreated && existingFile == null) {
+                    result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
+                    return
                 }
+                if (!writeSucceeded) {
+                    result.error(
+                        "WRITE_FAILED",
+                        "无法安全写入备份文件，原有备份已保留",
+                        null,
+                    )
+                    return
+                }
+
+                stagedFile = null
                 result.success(null)
-            } else {
-                result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
             }
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 写入文件失败", e)
+            try {
+                stagedFile?.delete()
+            } catch (cleanupException: Exception) {
+                Log.w(TAG, "SAF: 清理临时备份文件失败", cleanupException)
+            }
             result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
         }
     }
@@ -1193,6 +1242,7 @@ class MainActivity : FlutterActivity() {
     ) {
         Thread {
             var createdBackupFile: DocumentFile? = null
+            var stagedDocumentCreated = false
             try {
                 val uri = Uri.parse(uriStr)
                 val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -1222,60 +1272,73 @@ class MainActivity : FlutterActivity() {
 
                 // 检查与创建必须在同一把锁内，防止并发导出覆盖已有备份。
                 var destinationAlreadyExists = false
-                val newFile = synchronized(backupSafWriteLock) {
-                    if (backupDir.findFile(fileName) != null) {
-                        destinationAlreadyExists = true
-                        null
-                    } else {
-                        backupDir.createFile("application/zip", fileName)
-                    }
-                }
+                val stagedName = "$fileName.tmp_${java.util.UUID.randomUUID()}"
+                val writeSucceeded = SafStagedWrite.writeAndPublish(
+                    createStagedDocument = {
+                        synchronized(backupSafWriteLock) {
+                            if (backupDir.findFile(fileName) != null) {
+                                destinationAlreadyExists = true
+                                false
+                            } else {
+                                backupDir.createFile("application/zip", stagedName)?.also {
+                                    createdBackupFile = it
+                                    stagedDocumentCreated = true
+                                } != null
+                            }
+                        }
+                    },
+                    openOutputStream = {
+                        createdBackupFile?.let { contentResolver.openOutputStream(it.uri) }
+                    },
+                    writePayload = { out ->
+                        val buf = ByteArray(65536)
+                        FileInputStream(srcFile).use { input ->
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n == -1) break
+                                out.write(buf, 0, n)
+                            }
+                            out.flush()
+                        }
+                    },
+                    publish = {
+                        synchronized(backupSafWriteLock) {
+                            backupDir.findFile(fileName) == null &&
+                                (createdBackupFile?.renameTo(fileName) == true)
+                        }
+                    },
+                    deleteStagedDocument = {
+                        createdBackupFile?.let {
+                            if (!it.delete()) {
+                                throw java.io.IOException("无法清理临时备份文件 $stagedName")
+                            }
+                            createdBackupFile = null
+                        }
+                    },
+                )
                 if (destinationAlreadyExists) {
                     runOnUiThread {
                         result.error("FILE_EXISTS", "同名备份文件已存在", null)
                     }
                     return@Thread
                 }
-
-                if (newFile == null) {
+                if (!writeSucceeded && !stagedDocumentCreated) {
                     runOnUiThread {
                         result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
                     }
                     return@Thread
                 }
-                createdBackupFile = newFile
-
-                val outputStream = contentResolver.openOutputStream(newFile.uri)
-                if (outputStream == null) {
-                    val deleted = try {
-                        newFile.delete()
-                    } catch (cleanupException: Exception) {
-                        Log.w(TAG, "SAF: 无法打开输出流后清理空备份文件失败", cleanupException)
-                        false
-                    }
-                    if (deleted) createdBackupFile = null
+                if (!writeSucceeded) {
                     runOnUiThread {
-                        val cleanupHint = if (deleted) {
-                            ""
-                        } else {
-                            "，且无法删除残留备份文件 $fileName，请通过系统文件管理器手动删除"
-                        }
-                        result.error("WRITE_FAILED", "无法打开输出流$cleanupHint", null)
+                        result.error(
+                            "WRITE_FAILED",
+                            "写入备份文件失败，临时文件已清理",
+                            null,
+                        )
                     }
                     return@Thread
                 }
-
-                val buf = ByteArray(65536)
-                outputStream.use { out ->
-                    FileInputStream(srcFile).use { input ->
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n == -1) break
-                            out.write(buf, 0, n)
-                        }
-                        out.flush()
-                    }
-                }
+                createdBackupFile = null
                 runOnUiThread { result.success(null) }
             } catch (e: Exception) {
                 Log.e(TAG, "SAF: 流式写入文件失败", e)
@@ -1392,27 +1455,59 @@ class MainActivity : FlutterActivity() {
 
             val file = backupDir.findFile(oldName)
             if (file != null) {
-                val renamed = file.renameTo(newName)
+                val renamed = synchronized(backupSafWriteLock) {
+                    backupDir.findFile(newName) == null && file.renameTo(newName)
+                }
                 if (renamed) {
                     result.success(null)
                 } else {
-                    // 重命名失败（SAF 不支持直接重命名），使用先读后写再删的方式
+                    // SAF 不支持直接重命名时，先完整写入并发布副本，再删除旧文件。
                     val inputStream = contentResolver.openInputStream(file.uri)
                     val bytes = inputStream?.use { stream -> stream.readBytes() }
                     if (bytes != null) {
-                        // 删除旧文件
-                        file.delete()
-                        // 创建新文件
-                        val newFile = backupDir.createFile("application/zip", newName)
-                        if (newFile != null) {
-                            val outputStream = contentResolver.openOutputStream(newFile.uri)
-                            outputStream?.use { stream ->
-                                stream.write(bytes)
-                                stream.flush()
-                            }
+                        val stagedName = "$newName.tmp_${java.util.UUID.randomUUID()}"
+                        var stagedFile: DocumentFile? = null
+                        val renamedSafely = synchronized(backupSafWriteLock) {
+                            SafStagedWrite.writeAndPublish(
+                                createStagedDocument = {
+                                    if (backupDir.findFile(newName) != null) {
+                                        false
+                                    } else {
+                                        backupDir.createFile("application/zip", stagedName)?.also {
+                                            stagedFile = it
+                                        } != null
+                                    }
+                                },
+                                openOutputStream = {
+                                    stagedFile?.let { contentResolver.openOutputStream(it.uri) }
+                                },
+                                writePayload = { stream ->
+                                    stream.write(bytes)
+                                    stream.flush()
+                                },
+                                publish = {
+                                    backupDir.findFile(newName) == null &&
+                                        (stagedFile?.renameTo(newName) == true)
+                                },
+                                deleteStagedDocument = {
+                                    stagedFile?.let {
+                                        if (!it.delete()) {
+                                            throw java.io.IOException("无法清理临时备份文件")
+                                        }
+                                        stagedFile = null
+                                    }
+                                },
+                            )
+                        }
+                        if (renamedSafely) {
+                            file.delete()
                             result.success(null)
                         } else {
-                            result.error("RENAME_FAILED", "无法创建新文件", null)
+                            result.error(
+                                "RENAME_FAILED",
+                                "无法安全发布新文件，原有备份已保留",
+                                null,
+                            )
                         }
                     } else {
                         result.error("RENAME_FAILED", "无法读取原文件", null)
@@ -1469,10 +1564,59 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result
     ) {
         try {
-            // 使用 Environment 获取外部存储的可用空间
-            val stat = Environment.getExternalStorageDirectory()
-            val freeBytes = stat?.freeSpace ?: -1L
-            result.success(freeBytes)
+            val treeUri = Uri.parse(uriStr)
+            val authority = treeUri.authority
+            if (!DocumentsContract.isTreeUri(treeUri) || authority.isNullOrBlank()) {
+                result.success(-1L)
+                return
+            }
+
+            val documentPath =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    DocumentsContract.findDocumentPath(contentResolver, treeUri)
+                } else {
+                    null
+                }
+            val providerRootDocumentId = documentPath?.path?.firstOrNull()
+            if (providerRootDocumentId.isNullOrBlank()) {
+                result.success(-1L)
+                return
+            }
+
+            val projection =
+                arrayOf(
+                    DocumentsContract.Root.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Root.COLUMN_AVAILABLE_BYTES,
+                )
+            val roots = mutableListOf<SafRootAvailableSpace.Root>()
+            contentResolver.query(
+                DocumentsContract.buildRootsUri(authority),
+                projection,
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                val documentIdColumn =
+                    cursor.getColumnIndex(DocumentsContract.Root.COLUMN_DOCUMENT_ID)
+                val availableBytesColumn =
+                    cursor.getColumnIndex(DocumentsContract.Root.COLUMN_AVAILABLE_BYTES)
+                if (documentIdColumn >= 0 && availableBytesColumn >= 0) {
+                    while (cursor.moveToNext()) {
+                        roots.add(
+                            SafRootAvailableSpace.Root(
+                                documentId = cursor.getString(documentIdColumn),
+                                availableBytes =
+                                    if (cursor.isNull(availableBytesColumn)) {
+                                        -1L
+                                    } else {
+                                        cursor.getLong(availableBytesColumn)
+                                    },
+                            ),
+                        )
+                    }
+                }
+            }
+            result.success(SafRootAvailableSpace.select(providerRootDocumentId, roots))
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 获取可用空间失败", e)
             result.success(-1L)

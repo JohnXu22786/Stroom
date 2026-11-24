@@ -8551,6 +8551,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get ankiBrowserEmpty => 'Keine Karten';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Karten konnten nicht geladen werden: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'Mit AnkiWeb synchronisieren';
 
   @override
@@ -20834,6 +20839,11 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get ankiBrowserEmpty => 'Keine Karten';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Karten konnten nicht geladen werden: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'Mit AnkiWeb synchronisieren';

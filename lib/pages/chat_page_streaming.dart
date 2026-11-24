@@ -399,15 +399,22 @@ extension _ChatPageStreamingExt on _ChatPageState {
       assistants: assistants,
     );
     if (selectedAssistant != null) {
-      _adapter.setAssistantPrompt(selectedAssistant.prompt);
-      _adapter.setAssistantSettings(selectedAssistant.settings);
+      _adapter.setAssistantPrompt(
+        selectedAssistant.prompt,
+        convId: effectiveConvId,
+      );
+      _adapter.setAssistantSettings(
+        selectedAssistant.settings,
+        convId: effectiveConvId,
+      );
       _adapter.setAssistantCustomParams(
         selectedAssistant.settings.customParameters,
+        convId: effectiveConvId,
       );
     } else {
-      _adapter.setAssistantPrompt(null);
-      _adapter.setAssistantSettings(null);
-      _adapter.setAssistantCustomParams(null);
+      _adapter.setAssistantPrompt(null, convId: effectiveConvId);
+      _adapter.setAssistantSettings(null, convId: effectiveConvId);
+      _adapter.setAssistantCustomParams(null, convId: effectiveConvId);
     }
     final allTools = _adapter.getAllToolDefinitions();
     final enabledTools = ref.read(enabledToolNamesProvider);

@@ -3720,6 +3720,14 @@
   "ankiStatsReviewRate": "Taux de révision",
   "ankiBrowserSearchHint": "Rechercher des cartes…",
   "ankiBrowserEmpty": "Aucune carte",
+  "ankiCardBrowserLoadError": "Échec du chargement des cartes : {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "Synchronisation AnkiWeb",
   "ankiNewDeckTooltip": "Nouveau paquet",
   "ankiDeckLoadError": "Échec du chargement des paquets : {error}",

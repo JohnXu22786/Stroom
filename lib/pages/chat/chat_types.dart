@@ -77,6 +77,77 @@ class SearchMatch {
   });
 }
 
+/// Finds case-insensitive matches in [text] and returns source UTF-16 ranges.
+List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) =>
+    _caseInsensitiveMatchOffsets(text, query, (value) => value.toLowerCase());
+
+/// Allows tests to model lowercase mappings that expand a Unicode character.
+List<(int, int)> caseInsensitiveMatchOffsetsForTesting(
+  String text,
+  String query, {
+  required String Function(String) lowercase,
+}) =>
+    _caseInsensitiveMatchOffsets(text, query, lowercase);
+
+/// Maps offsets from lowercased text back to the original [text].
+List<(int, int)> _caseInsensitiveMatchOffsets(
+  String text,
+  String query,
+  String Function(String) lowercase,
+) {
+  if (query.isEmpty) return [];
+
+  final lowerText = lowercase(text);
+  final lowerQuery = lowercase(query);
+  final boundaries = <(int, int)>[(0, 0)];
+  var sourceOffset = 0;
+  var lowerOffset = 0;
+  for (final rune in text.runes) {
+    final sourceCharacter = String.fromCharCode(rune);
+    sourceOffset += sourceCharacter.length;
+    lowerOffset += lowercase(sourceCharacter).length;
+    boundaries.add((lowerOffset, sourceOffset));
+  }
+
+  int sourceStart(int offset) {
+    var low = 0;
+    var high = boundaries.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (boundaries[middle].$1 <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return boundaries[low - 1].$2;
+  }
+
+  int sourceEnd(int offset) {
+    var low = 0;
+    var high = boundaries.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (boundaries[middle].$1 < offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low < boundaries.length ? boundaries[low].$2 : text.length;
+  }
+
+  final matches = <(int, int)>[];
+  var searchOffset = 0;
+  while (true) {
+    final index = lowerText.indexOf(lowerQuery, searchOffset);
+    if (index == -1) break;
+    matches.add((sourceStart(index), sourceEnd(index + lowerQuery.length)));
+    searchOffset = index + lowerQuery.length;
+  }
+  return matches;
+}
+
 /// Search mode: within current conversation or across all conversations.
 enum SearchMode { current, global }
 

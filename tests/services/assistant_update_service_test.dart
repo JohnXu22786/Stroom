@@ -23,11 +23,12 @@ void main() {
     test('returns a changed direct-file version for a remote assistant',
         () async {
       final body = _assistantJson(id: 'stroom.test', version: '2.0.0');
-      final service = AssistantCatalogService(
+      final service = AssistantCatalogService.testing(
         client: MockClient((request) async {
           expect(request.url.toString(), 'https://example.com/test.json');
           return http.Response(body, 200, request: request);
         }),
+        addressLookup: _publicAddressLookup,
       );
       final assistant = Assistant(
         id: 'local-id',
@@ -51,12 +52,13 @@ void main() {
     });
 
     test('rejects a direct file whose stable assistant ID changed', () async {
-      final service = AssistantCatalogService(
+      final service = AssistantCatalogService.testing(
         client: MockClient((request) async => http.Response(
               _assistantJson(id: 'stroom.changed', version: '2.0.0'),
               200,
               request: request,
             )),
+        addressLookup: _publicAddressLookup,
       );
       final assistant = Assistant(
         id: 'local-id',
@@ -88,3 +90,6 @@ String _assistantJson({required String id, required String version}) => '''
   "prompt": "Be helpful."
 }
 ''';
+
+Future<List<String>> _publicAddressLookup(String _) async =>
+    const ['93.184.216.34'];

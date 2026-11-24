@@ -14,15 +14,20 @@ class ImageNode extends SpanNode {
 
   @override
   InlineSpan build() {
-    double? width;
-    double? height;
-    if (attributes['width'] != null) width = double.parse(attributes['width']!);
-    if (attributes['height'] != null) {
-      height = double.parse(attributes['height']!);
+    double? parseDimension(String? value) {
+      final dimension = value == null ? null : double.tryParse(value);
+      if (dimension == null || !dimension.isFinite || dimension < 0) {
+        return null;
+      }
+      return dimension;
     }
+
+    final width = parseDimension(attributes['width']);
+    final height = parseDimension(attributes['height']);
     final imageUrl = attributes['src'] ?? '';
     final alt = attributes['alt'] ?? '';
-    final isNetImage = imageUrl.startsWith('http');
+    final scheme = Uri.tryParse(imageUrl)?.scheme.toLowerCase();
+    final isNetImage = scheme == 'http' || scheme == 'https';
     final imgWidget = isNetImage
         ? Image.network(imageUrl,
             width: width,
@@ -47,6 +52,11 @@ class ImageNode extends SpanNode {
   }
 
   Widget buildErrorImage(String url, String alt, Object? error) {
+    final errorBuilder = imgConfig.errorBuilder;
+    if (errorBuilder != null && error != null) {
+      return errorBuilder(url, alt, error);
+    }
+
     return ProxyRichText(
       TextSpan(children: [
         WidgetSpan(

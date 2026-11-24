@@ -146,6 +146,86 @@ void main() {
     return archive;
   }
 
+  test('unreadable Anki database fails backup and cannot overwrite live data',
+      () async {
+    WebFileStore.disableTestMode();
+    final previousPathProvider = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _RestoreTestPathProvider(workDir);
+    AppStorage.resetCache();
+    addTearDown(() {
+      PathProviderPlatform.instance = previousPathProvider;
+      AppStorage.resetCache();
+    });
+    final database = File('$workDir/collection.anki2');
+    await database.writeAsBytes([1, 2, 3]);
+    if (Platform.isWindows) {
+      await database.delete();
+    } else {
+      final chmod = await Process.run('chmod', ['000', database.path]);
+      expect(chmod.exitCode, 0);
+      addTearDown(() => Process.run('chmod', ['600', database.path]));
+    }
+    final archive = Archive();
+    const ankiOnly = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+    );
+    await expectLater(
+      addTaskFileToArchive(
+        archive,
+        'anki/collection.anki2',
+        database.path,
+        required: true,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    if (!Platform.isWindows) {
+      await expectLater(
+        BackupService.buildBackupBytesForTest(selection: ankiOnly),
+        throwsA(isA<FileSystemException>()),
+      );
+    }
+    expect(
+      archive.files.where((file) => file.name == 'anki/collection.anki2'),
+      isEmpty,
+    );
+
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final testModeArchive = Archive();
+    await expectLater(
+      addTaskFileToArchive(
+        testModeArchive,
+        'anki/collection.anki2',
+        database.path,
+        required: true,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(testModeArchive.files, isEmpty);
+
+    final existingDatabase = Uint8List.fromList([9, 8, 7]);
+    await WebFileStore.write('/collection.anki2', existingDatabase);
+    final backupWithoutAnki = Uint8List.fromList(
+      ZipEncoder().encode(buildV2Archive(dataParts: [])),
+    );
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        backupWithoutAnki,
+        selection: ankiOnly,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+    expect(await WebFileStore.read('/collection.anki2'), existingDatabase);
+  });
+
   test(
     'no-media restore removes unavailable task-flow file references',
     () async {

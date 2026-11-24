@@ -31,9 +31,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   ];
 
   String _selectedSeparator = 'Tab';
-  String _customSeparator = '';
   bool _nameFirst = true; // true → 第1个=名称, 第2个=ID
   final TextEditingController _inputController = TextEditingController();
+  final TextEditingController _customSeparatorController =
+      TextEditingController();
   List<ParsedLine> _parsedLines = [];
 
   /// 检测到的最大列数（多行取最大值）
@@ -48,6 +49,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   @override
   void dispose() {
     _inputController.dispose();
+    _customSeparatorController.dispose();
     super.dispose();
   }
 
@@ -66,7 +68,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       case '竖线 (|)':
         return '|';
       case '自定义...':
-        return _customSeparator;
+        return _customSeparatorController.text;
       default:
         return '\t';
     }
@@ -112,20 +114,33 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
     final lines = text.split('\n');
     final separator = _separatorChar;
+    if (separator.isEmpty) {
+      setState(() {
+        _parsedLines = [];
+        _detectedColumns = 0;
+        _columnSamples = [];
+      });
+      return;
+    }
     final List<ParsedLine> parsed = [];
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
 
-    int maxColumns = 0;
+    final fieldsByLine =
+        lines.map((line) => _extractFields(line, separator)).toList();
+    final maxColumns = fieldsByLine.fold<int>(
+      0,
+      (max, fields) => fields.length > max ? fields.length : max,
+    );
+    final selectedColumnStart = maxColumns > 2 && _detectedColumns == maxColumns
+        ? _selectedColumnStart
+        : 0;
     List<String>? firstRowFields;
 
-    for (int i = 0; i < lines.length; i++) {
-      final fields = _extractFields(lines[i], separator);
+    for (int i = 0; i < fieldsByLine.length; i++) {
+      final fields = fieldsByLine[i];
       if (fields.isEmpty) continue;
 
-      if (fields.length > maxColumns) {
-        maxColumns = fields.length;
-      }
       firstRowFields ??= List.from(fields);
 
       // ── 根据不同列数解析 ──
@@ -140,9 +155,20 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         parsed.add(ParsedLine(index: i, name: id, id: id, status: status));
       } else if (fields.length >= 2) {
         // 两列或更多列：取用户选择的起始列开始的两个字段
-        final start = (_detectedColumns > 2) ? _selectedColumnStart : 0;
+        final start = selectedColumnStart;
+        if (start + 1 >= fields.length) {
+          parsed.add(
+            ParsedLine(
+              index: i,
+              name: '',
+              id: '',
+              status: LineStatus.formatError,
+            ),
+          );
+          continue;
+        }
         final first = fields[start];
-        final second = (start + 1 < fields.length) ? fields[start + 1] : '';
+        final second = fields[start + 1];
 
         if (second.isEmpty || first.isEmpty) {
           parsed.add(
@@ -167,15 +193,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       }
     }
 
-    final prevDetected = _detectedColumns;
-
     setState(() {
       _detectedColumns = maxColumns;
       _columnSamples = firstRowFields ?? [];
-      // 如果是首次检测到多列，重置列选择
-      if (prevDetected != maxColumns && maxColumns > 2) {
-        _selectedColumnStart = 0;
-      }
+      _selectedColumnStart = selectedColumnStart;
       _parsedLines = parsed;
     });
   }
@@ -266,6 +287,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // ============================================================
 
   void _autoDetectSeparator(String text) {
+    if (_selectedSeparator == '自定义...') return;
+
     const candidates = [
       ('Tab', '\t'),
       ('逗号 (,)', ','),
@@ -398,11 +421,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 }
 
                 return Row(
-                  children: [
-                    label,
-                    const SizedBox(width: 8),
-                    dropdown,
-                  ],
+                  children: [label, const SizedBox(width: 8), dropdown],
                 );
               },
             ),
@@ -410,12 +429,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             if (_selectedSeparator == '自定义...') ...[
               const SizedBox(height: 8),
               TextField(
+                controller: _customSeparatorController,
                 decoration: InputDecoration(
                   hint: ConstrainedText(
                     l10n.voiceBatchCustomSeparatorHint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  errorText: _customSeparatorController.text.isEmpty
+                      ? l10n.voiceBatchCustomSeparatorHint
+                      : null,
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
@@ -424,7 +447,6 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   ),
                 ),
                 onChanged: (val) {
-                  _customSeparator = val;
                   _parseInput();
                 },
               ),

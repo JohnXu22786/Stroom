@@ -118,6 +118,9 @@ class LinkParser extends TextParser {
       final char = charAt(pos);
       if (char == $backslash) {
         advance();
+        if (isDone) {
+          return false;
+        }
       } else if (char == $lbracket) {
         return false;
       } else if (char == $rbracket) {
@@ -169,6 +172,9 @@ class LinkParser extends TextParser {
       final char = charAt();
       if (char == $backslash) {
         advance();
+        if (isDone) {
+          return false;
+        }
       } else if (char == $lf || char == $cr || char == $ff) {
         return false;
       } else if (char == $gt) {
@@ -200,11 +206,17 @@ class LinkParser extends TextParser {
       final char = charAt();
       if (char == $backslash) {
         advance();
+        if (isDone) {
+          break;
+        }
       } else if (char == $space || char == $lf || char == $cr || char == $ff) {
         break;
       } else if (char == $lparen) {
         parenCount++;
       } else if (char == $rparen) {
+        if (parenCount == 0) {
+          break;
+        }
         parenCount--;
         if (parenCount == 0) {
           advance();
@@ -218,6 +230,10 @@ class LinkParser extends TextParser {
       if (isDone) {
         break;
       }
+    }
+
+    if (parenCount != 0) {
+      return false;
     }
 
     _destination = substring(start, pos);
@@ -248,6 +264,9 @@ class LinkParser extends TextParser {
       final char = charAt();
       if (char == $backslash) {
         advance();
+        if (isDone) {
+          return false;
+        }
       } else if (char == closeDelimiter) {
         break;
       }

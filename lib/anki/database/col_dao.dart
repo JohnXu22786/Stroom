@@ -473,12 +473,14 @@ class ColDao {
   // ── High-level operations ─────────────────────────────────
 
   Future<DeckStats> getDeckStats(int did) async {
+    await load();
     final deck = _decks[did];
     final newCnt = await cards.countByQueue(did, 0);
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final today = dayOrdinalAt(now);
     final learnCnt = await _db.rawQuery(
-      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND (queue = 1 OR queue = 3) AND due <= ?',
-      [did, now],
+      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND ((queue = 1 AND due <= ?) OR (queue = 3 AND due <= ?))',
+      [did, now, today],
     );
     final revCnt = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND queue = 2 AND due <= ?',
@@ -492,6 +494,14 @@ class ColDao {
       reviewCount: revCnt.first['cnt'] as int,
       totalCount: total,
     );
+  }
+
+  /// Returns Anki's collection-relative day ordinal for [nowSec].
+  ///
+  /// Card due values in queue 3 are day ordinals since the collection's
+  /// creation day, unlike queue 1/2 values which this app stores in seconds.
+  int dayOrdinalAt(int nowSec) {
+    return (nowSec - creationDate) ~/ Duration(days: 1).inSeconds;
   }
 
   // ── JSON helpers ──────────────────────────────────────────

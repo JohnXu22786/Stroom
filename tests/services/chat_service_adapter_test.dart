@@ -1826,23 +1826,54 @@ void main() {
       adapter.cancelService('conv-fallback');
     });
     test('per-conversation services are independent (concurrent flows)', () {
-      final svcA = adapter.getOrCreateService(
-        'flow_conv_a',
-        assistant: _assistant(modelId: 'gpt-4o', prompt: '助手A'),
-        entriesState: entriesState,
+      adapter.setAssistantPrompt('助手A', convId: 'flow_conv_a');
+      adapter.setAssistantSettings(
+        AssistantSettings(temperature: 0.2, enableTemperature: true),
+        convId: 'flow_conv_a',
       );
-      final svcB = adapter.getOrCreateService(
-        'flow_conv_b',
-        assistant: _assistant(modelId: 'claude-3', prompt: '助手B'),
-        entriesState: entriesState,
+      adapter.setAssistantCustomParams([
+        CustomParameter(name: 'mode', type: 'string', value: 'focused'),
+      ], convId: 'flow_conv_a');
+      adapter.setAssistantPrompt('助手B', convId: 'flow_conv_b');
+      adapter.setAssistantSettings(
+        AssistantSettings(temperature: 0.8, enableTemperature: true),
+        convId: 'flow_conv_b',
       );
+      adapter.setAssistantCustomParams([
+        CustomParameter(name: 'mode', type: 'string', value: 'creative'),
+      ], convId: 'flow_conv_b');
+
+      final svcA = adapter.getOrCreateService('flow_conv_a');
+      final svcB = adapter.getOrCreateService('flow_conv_b');
+      final unboundSvc = adapter.getOrCreateService('flow_conv_unbound');
       expect(svcA, isNotNull);
       expect(svcB, isNotNull);
+      expect(unboundSvc, isNotNull);
       expect(svcA!.assistantPrompt, '助手A');
       expect(svcB!.assistantPrompt, '助手B');
+      expect(adapter.assistantPromptFor('flow_conv_a'), '助手A');
+      expect(adapter.assistantPromptFor('flow_conv_b'), '助手B');
+      expect(adapter.assistantSettingsFor('flow_conv_a')!.temperature, 0.2);
+      expect(adapter.assistantSettingsFor('flow_conv_b')!.temperature, 0.8);
+      expect(unboundSvc!.assistantPrompt, isNull);
       expect(identical(svcA, svcB), isFalse);
+      adapter.setAssistantPrompt('更新后的助手A', convId: 'flow_conv_a');
+      adapter.setAssistantSettings(
+        AssistantSettings(temperature: 0.4, enableTemperature: true),
+        convId: 'flow_conv_a',
+      );
+      adapter.setAssistantCustomParams([
+        CustomParameter(name: 'mode', type: 'string', value: 'focused'),
+      ], convId: 'flow_conv_a');
+      expect(svcA.assistantPrompt, '更新后的助手A');
+      expect(svcB.assistantPrompt, '助手B');
       adapter.cancelService('flow_conv_a');
+      final recreatedSvcA = adapter.getOrCreateService('flow_conv_a');
+      expect(recreatedSvcA, isNotNull);
+      expect(recreatedSvcA!.assistantPrompt, isNull);
       adapter.cancelService('flow_conv_b');
+      adapter.cancelService('flow_conv_a');
+      adapter.cancelService('flow_conv_unbound');
     });
 
     test(

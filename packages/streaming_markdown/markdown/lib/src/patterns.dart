@@ -138,7 +138,7 @@ const asciiPunctuationEscaped = r'''!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~''';
 /// A pattern to match HTML entity references and numeric character references.
 // https://spec.commonmark.org/0.30/#entity-and-numeric-character-references
 final htmlCharactersPattern = RegExp(
-  '&(?:([a-z0-9]+)|#([0-9]{1,7})|#x([a-f0-9]{1,6}));',
+  '&(?:([a-z0-9]+)|#([0-9]+)|#x([a-f0-9]+));',
   caseSensitive: false,
 );
 

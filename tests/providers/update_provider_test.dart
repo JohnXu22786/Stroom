@@ -256,6 +256,15 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 }
 
 void main() {
+  group('UpdateState', () {
+    test('copyWith preserves an omitted error and explicitly clears it', () {
+      const state = UpdateState(error: 'previous check failed');
+
+      expect(state.copyWith().error, 'previous check failed');
+      expect(state.copyWith(clearError: true).error, isNull);
+    });
+  });
+
   group('ZIP self-update extraction', () {
     test('selects a named app executable from a valid package layout',
         () async {
@@ -637,6 +646,18 @@ void main() {
       expect(b2 > b1, true);
     });
 
+    test('pre-release identifiers follow SemVer precedence rules', () {
+      expect(Version.parse('1.0.0-beta.10') > Version.parse('1.0.0-beta.2'),
+          isTrue);
+      expect(Version.parse('1.0.0-beta.2') < Version.parse('1.0.0-beta.alpha'),
+          isTrue);
+      expect(
+          Version.parse('1.0.0-beta.alpha') < Version.parse('1.0.0-beta.beta'),
+          isTrue);
+      expect(
+          Version.parse('1.0.0-beta') < Version.parse('1.0.0-beta.1'), isTrue);
+    });
+
     test('rc.1 > beta.5 in pre-release ordering (lexicographic)', () {
       // 'beta.5' vs 'rc.1': 'b' < 'r' → beta < rc
       final rc = Version.parse('1.0.0-rc.1');
@@ -725,6 +746,7 @@ void main() {
         },
       ));
       final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(error: 'previous failure');
 
       final future = notifier.checkForUpdate();
       expect(notifier.state.isChecking, true);
@@ -931,6 +953,7 @@ void main() {
           },
         ));
         final notifier = UpdateNotifier(dio: dio);
+        notifier.state = notifier.state.copyWith(error: 'previous failure');
 
         await notifier.checkForUpdate(silent: false);
 
@@ -2048,6 +2071,26 @@ void main() {
       // The prerelease flag from GitHub should be preserved
       expect(notifier.state.availableVersions![2].isPreRelease, true);
       expect(notifier.state.availableVersions![0].isPreRelease, false);
+    });
+
+    test('checkForUpdate sorts numeric prerelease identifiers by SemVer order',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.17-beta.2', true, 'Beta 2', '2024-08-02T10:00:00Z'),
+        ('v0.2.17-beta.10', true, 'Beta 10', '2024-08-03T10:00:00Z'),
+        ('v0.2.17-beta.alpha', true, 'Beta alpha', '2024-08-04T10:00:00Z'),
+      ]);
+      final notifier = UpdateNotifier(dio: _createMockDioForList(releases));
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      expect(
+        notifier.state.availableVersions!.map((update) => update.version),
+        ['0.2.17-beta.alpha', '0.2.17-beta.10', '0.2.17-beta.2'],
+      );
+      expect(notifier.state.latestVersion, '0.2.17-beta.alpha');
     });
 
     test('no update when no versions are newer than current', () async {

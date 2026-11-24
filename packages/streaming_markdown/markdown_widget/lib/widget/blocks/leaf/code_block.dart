@@ -29,9 +29,8 @@ class CodeBlockNode extends ElementNode {
       language = null;
       debugPrint('get language error:$e');
     }
-    final splitContents = content
-        .trim()
-        .split(visitor.splitRegExp ?? WidgetVisitor.defaultSplitRegExp);
+    final splitContents =
+        content.split(visitor.splitRegExp ?? WidgetVisitor.defaultSplitRegExp);
     if (splitContents.last.isEmpty) splitContents.removeLast();
     final codeBuilder = preConfig.builder;
     if (codeBuilder != null) {
@@ -85,7 +84,7 @@ List<InlineSpan> highLightSpans(
 }) {
   return convertHiNodes(
       hi.highlight
-          .parse(input.trimRight(),
+          .parse(input,
               language: autoDetectionLanguage ? null : language,
               autoDetection: autoDetectionLanguage)
           .nodes!,
@@ -148,6 +147,10 @@ class PreConfig implements LeafConfig {
   final Map<String, TextStyle> theme;
   final String language;
 
+  /// Stable identity for generated streaming builders whose closures capture
+  /// changing stream input.
+  final Object? incrementalConfigKey;
+
   const PreConfig({
     this.padding = const EdgeInsets.all(16.0),
     this.decoration = const BoxDecoration(
@@ -161,6 +164,7 @@ class PreConfig implements LeafConfig {
     this.language = 'dart',
     this.wrapper,
     this.builder,
+    this.incrementalConfigKey,
   }) : assert(builder == null || wrapper == null);
 
   static PreConfig get darkConfig => const PreConfig(
@@ -179,18 +183,27 @@ class PreConfig implements LeafConfig {
     TextStyle? textStyle,
     TextStyle? styleNotMatched,
     CodeWrapper? wrapper,
+    CodeBuilder? builder,
     Map<String, TextStyle>? theme,
     String? language,
+    Object? incrementalConfigKey,
   }) {
+    // Supplying one rendering callback switches modes and clears the other.
+    final copiedBuilder = builder ?? (wrapper == null ? this.builder : null);
+    final copiedWrapper = wrapper ?? (builder == null ? this.wrapper : null);
     return PreConfig(
       padding: padding ?? this.padding,
       decoration: decoration ?? this.decoration,
       margin: margin ?? this.margin,
       textStyle: textStyle ?? this.textStyle,
       styleNotMatched: styleNotMatched ?? this.styleNotMatched,
-      wrapper: wrapper ?? this.wrapper,
+      wrapper: copiedWrapper,
+      builder: copiedBuilder,
       theme: theme ?? this.theme,
       language: language ?? this.language,
+      incrementalConfigKey: builder != null
+          ? incrementalConfigKey
+          : incrementalConfigKey ?? this.incrementalConfigKey,
     );
   }
 

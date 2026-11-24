@@ -13,10 +13,14 @@ class AudioPreviewDialog extends StatefulWidget {
   final String filePath;
   final String fileName;
 
+  /// Overrides player creation in widget tests.
+  final AudioPlayer Function()? playerFactory;
+
   const AudioPreviewDialog({
     super.key,
     required this.filePath,
     required this.fileName,
+    this.playerFactory,
   });
 
   @override
@@ -27,6 +31,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
   AudioPlayer? _player;
   bool _isPlaying = false;
   bool _isInitialized = false;
+  bool _hasInitializationError = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   final List<StreamSubscription> _subscriptions = [];
@@ -41,7 +46,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
 
   Future<void> _initPlayer() async {
     try {
-      final player = AudioPlayer();
+      final player = widget.playerFactory?.call() ?? AudioPlayer();
       _player = player;
       await player.setFilePath(widget.filePath);
       if (!mounted) return;
@@ -79,12 +84,21 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
       final player = _player;
       _player = null;
       if (player != null) {
-        await _releasePlayerAndDeletePreview(player);
-      } else if (mounted) {
-        await _releasePlayerAndDeletePreview(null);
+        try {
+          await player.dispose();
+        } catch (disposeError) {
+          debugPrint(
+            '[AudioPreview] failed player disposal failed: $disposeError',
+          );
+        }
       }
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _hasInitializationError = true);
     }
+  }
+
+  Future<void> _retryInitialization() async {
+    setState(() => _hasInitializationError = false);
+    await _initPlayer();
   }
 
   void _togglePlay() {
@@ -191,7 +205,27 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
                   ],
                 ),
               ),
-            ] else
+            ] else if (_hasInitializationError)
+              Column(
+                children: [
+                  Icon(Icons.error_outline, color: cs.error, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppLocalizations.of(context)!.chatPreviewLoadFailed,
+                    style: TextStyle(color: cs.error),
+                    textAlign: TextAlign.center,
+                  ),
+                  TextButton(
+                    onPressed: _retryInitialization,
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.actionRetry,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            else
               const SizedBox(
                 width: 24,
                 height: 24,

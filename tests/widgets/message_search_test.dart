@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/message_search_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -93,10 +95,11 @@ Widget createMessageSearchTestApp({List<Conversation>? conversations}) {
       }),
     ],
     child: MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: const MessageSearchPage()),
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const MessageSearchPage(),
+    ),
   );
 }
 
@@ -266,6 +269,50 @@ void main() {
       expect(find.text('Flutter讨论'), findsOneWidget);
     });
 
+    testWidgets(
+      'maps Unicode-expanded search offsets to the highlighted text',
+      (tester) async {
+        final conversation = Conversation(
+          id: 'unicode-search',
+          title: 'Unicode search',
+          messages: [
+            ChatMessage(
+              id: 'unicode-message',
+              role: 'user',
+              content: '\u0130x foo',
+              createdAt: DateTime(2025, 1, 1),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          createMessageSearchTestApp(conversations: [conversation]),
+        );
+        await tester.enterText(find.byType(TextField), 'x');
+        await tester.pumpAndSettle();
+
+        final results = MessageSearchPage.searchMessageContents([
+          conversation,
+        ], 'x');
+        final match = results.single.matches.single;
+        expect((match.matchStart, match.matchEnd), (1, 2));
+        expect(
+          match.message.content.substring(match.matchStart, match.matchEnd),
+          'x',
+        );
+
+        final snippet = tester
+            .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+            .singleWhere((text) => text.data == '\u0130x foo');
+        expect(snippet.data, '\u0130x foo');
+        final spans = snippet.highlightedText!.children!;
+        final highlighted = spans.where(
+          (span) => span.style?.backgroundColor == Colors.yellow,
+        );
+        expect(highlighted, hasLength(1));
+        expect(highlighted.single.toPlainText(), 'x');
+      },
+    );
+
     testWidgets('shows no results state when no matches', (tester) async {
       await tester.pumpWidget(createMessageSearchTestApp());
       await tester.pump();
@@ -415,4 +462,34 @@ void main() {
       expect(snippet, 'I love Flutter');
     });
   });
+
+  group('In-conversation search offset tests', () {
+    test('case-insensitive offsets map expanded lowercase to source text', () {
+      final text = '\u0130x foo';
+      String lowercaseWithExpansion(String value) =>
+          value.replaceAll('\u0130', 'i\u0307').toLowerCase();
+
+      final foldedText = lowercaseWithExpansion(text);
+      final oldStart = foldedText.indexOf('x');
+      expect(text.substring(oldStart, oldStart + 1), ' ');
+
+      final matches = caseInsensitiveMatchOffsetsForTesting(
+        text,
+        'x',
+        lowercase: lowercaseWithExpansion,
+      );
+      expect(matches, [(1, 2)]);
+      expect(text.substring(matches.single.$1, matches.single.$2), 'x');
+
+      final ordinaryMatches = caseInsensitiveMatchOffsets('Hi hi', 'HI');
+      expect(ordinaryMatches, [(0, 2), (3, 5)]);
+
+      final repeatedText = List.filled(2000, '\u0130x').join();
+      final repeatedMatches = caseInsensitiveMatchOffsets(repeatedText, 'x');
+      expect(repeatedMatches, hasLength(2000));
+      expect(repeatedMatches.first, (1, 2));
+      expect(repeatedMatches.last, (3999, 4000));
+    });
+  });
 }
+// ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
