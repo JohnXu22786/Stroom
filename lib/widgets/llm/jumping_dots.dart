@@ -16,12 +16,12 @@ class JumpingDot extends AnimatedWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: _animation.value + fontSize,
-    child: Text(
-      '.',
-      style: TextStyle(color: color, fontSize: fontSize, height: 1),
-    ),
-  );
+        height: _animation.value + fontSize,
+        child: Text(
+          '.',
+          style: TextStyle(color: color, fontSize: fontSize, height: 1),
+        ),
+      );
 }
 
 @immutable
@@ -47,8 +47,7 @@ class JumpingDotsProgressIndicator extends StatefulWidget {
 }
 
 class _JumpingDotsProgressIndicatorState
-    extends State<JumpingDotsProgressIndicator>
-    with TickerProviderStateMixin {
+    extends State<JumpingDotsProgressIndicator> with TickerProviderStateMixin {
   final _controllers = <AnimationController>[];
   final _animations = <Animation<double>>[];
   static const double _beginTweenValue = 0;
@@ -142,22 +141,22 @@ class _JumpingDotsProgressIndicatorState
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: widget.fontSize + (widget.fontSize * 0.5),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List<Widget>.generate(
-        _controllers.length,
-        (dot) => Padding(
-          padding: EdgeInsets.only(right: widget.dotSpacing),
-          child: JumpingDot(
-            animation: _animations[dot],
-            fontSize: widget.fontSize,
-            color: widget.color,
+        height: widget.fontSize + (widget.fontSize * 0.5),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List<Widget>.generate(
+            _controllers.length,
+            (dot) => Padding(
+              padding: EdgeInsets.only(right: widget.dotSpacing),
+              child: JumpingDot(
+                animation: _animations[dot],
+                fontSize: widget.fontSize,
+                color: widget.color,
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 
   @override
   void dispose() {

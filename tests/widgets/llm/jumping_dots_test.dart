@@ -9,20 +9,21 @@ Widget _indicator({
   double dotSpacing = 0,
   Color color = Colors.black,
   int milliseconds = 250,
-}) => MaterialApp(
-  home: Scaffold(
-    body: Center(
-      child: JumpingDotsProgressIndicator(
-        key: key,
-        numberOfDots: numberOfDots,
-        fontSize: fontSize,
-        dotSpacing: dotSpacing,
-        color: color,
-        milliseconds: milliseconds,
+}) =>
+    MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: JumpingDotsProgressIndicator(
+            key: key,
+            numberOfDots: numberOfDots,
+            fontSize: fontSize,
+            dotSpacing: dotSpacing,
+            color: color,
+            milliseconds: milliseconds,
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
 
 void main() {
   testWidgets('reconciles controller count when the widget updates', (
