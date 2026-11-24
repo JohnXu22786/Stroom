@@ -108,6 +108,12 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
             WatchdogReceiver.enqueue(this);
         } else {
             config.setManuallyStopped(true);
+            if (lockStatic != null) {
+                if (lockStatic.isHeld()) {
+                    lockStatic.release();
+                }
+                lockStatic = null;
+            }
         }
         stopForeground(true);
         isRunning.set(false);
