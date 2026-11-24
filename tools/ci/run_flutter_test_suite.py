@@ -215,6 +215,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     ),
     "text-math": (
         "markdown_unicode_scalars_test.dart",
+        "markdown_alert_boundary_test.dart",
         "math_3d*_test.dart",
         "models/math*_test.dart",
         "utils/mhchem_syntax_test.dart",
