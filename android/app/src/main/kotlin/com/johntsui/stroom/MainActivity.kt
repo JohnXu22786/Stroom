@@ -1138,6 +1138,7 @@ class MainActivity : FlutterActivity() {
         bytes: ByteArray,
         result: MethodChannel.Result
     ) {
+        var stagedFile: DocumentFile? = null
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -1154,25 +1155,70 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 删除已存在的同名文件，然后创建新文件
-            val existingFile = backupDir.findFile(fileName)
-            if (existingFile != null) {
-                existingFile.delete()
-            }
+            synchronized(backupSafWriteLock) {
+                val existingFile = backupDir.findFile(fileName)
+                val stagedName = if (existingFile == null) {
+                    fileName
+                } else {
+                    "$fileName.tmp_${java.util.UUID.randomUUID()}"
+                }
+                val rollbackName = "$fileName.rollback_${java.util.UUID.randomUUID()}"
+                val newFile = backupDir.createFile("application/zip", stagedName)
+                if (newFile == null) {
+                    result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
+                    return
+                }
+                stagedFile = newFile
 
-            val newFile = backupDir.createFile("application/zip", fileName)
-            if (newFile != null) {
                 val outputStream = contentResolver.openOutputStream(newFile.uri)
-                outputStream?.use { stream ->
+                if (outputStream == null) {
+                    // Keep the existing backup intact; preserve the established null-stream result.
+                    if (newFile.delete()) stagedFile = null
+                    result.success(null)
+                    return
+                }
+
+                outputStream.use { stream ->
                     stream.write(bytes)
                     stream.flush()
                 }
+
+                if (existingFile == null) {
+                    stagedFile = null
+                    result.success(null)
+                    return
+                }
+
+                val committed = SafDocumentReplacement.commit(
+                    originalName = fileName,
+                    stagedName = stagedName,
+                    rollbackName = rollbackName,
+                    renameDocument = { fromName, toName ->
+                        backupDir.findFile(fromName)?.renameTo(toName) == true
+                    },
+                    deleteDocument = { name -> backupDir.findFile(name)?.delete() == true },
+                )
+                if (!committed) {
+                    backupDir.findFile(stagedName)?.delete()
+                    stagedFile = null
+                    result.error(
+                        "WRITE_FAILED",
+                        "无法安全替换备份文件，原有备份已保留",
+                        null,
+                    )
+                    return
+                }
+
+                stagedFile = null
                 result.success(null)
-            } else {
-                result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
             }
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 写入文件失败", e)
+            try {
+                stagedFile?.delete()
+            } catch (cleanupException: Exception) {
+                Log.w(TAG, "SAF: 清理临时备份文件失败", cleanupException)
+            }
             result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
         }
     }
