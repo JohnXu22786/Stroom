@@ -221,6 +221,29 @@ void main() {
       },
     );
   });
+
+  group('GitHub Web color swatches', () {
+    test('accepts single-digit RGBA alpha and preserves decimal alpha', () {
+      final singleDigitAlpha = _findElement(
+        m.Document(extensionSet: m.ExtensionSet.gitHubWeb)
+            .parse('`rgba(0,0,0,1)`'),
+        'code',
+      );
+      expect(singleDigitAlpha, isNotNull);
+      expect(singleDigitAlpha!.attributes['class'], 'gfm-color_chip');
+      expect(singleDigitAlpha.children?.first.textContent, 'rgba(0,0,0,1)');
+
+      final decimalAlpha = _findElement(
+        m.Document(extensionSet: m.ExtensionSet.gitHubWeb)
+            .parse('`rgba(0,255,0,0.3)`'),
+        'code',
+      );
+      expect(decimalAlpha, isNotNull);
+      expect(decimalAlpha!.attributes['class'], 'gfm-color_chip');
+      expect(decimalAlpha.children?.first.textContent, 'rgba(0,255,0,0.3)');
+    });
+  });
+
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
