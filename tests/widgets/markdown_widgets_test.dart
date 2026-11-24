@@ -90,6 +90,18 @@ TextSpan? _leafSpanWithText(InlineSpan span, String text) {
   return null;
 }
 
+List<String> _renderedCodeLines(String markdown) {
+  final codeBlock = _widgetsFromInlineSpans(
+    MarkdownGenerator().buildWidgets(markdown),
+  ).single as Container;
+  final scrollView = codeBlock.child as SingleChildScrollView;
+  final lines = (scrollView.child as Column).children;
+  return lines
+      .cast<ProxyRichText>()
+      .map((line) => line.textSpan.toPlainText())
+      .toList();
+}
+
 /// Collects every [m.Text] leaf's plain text in [nodes], in document order.
 List<String> _collectPlainText(List<m.Node> nodes) {
   final texts = <String>[];
@@ -882,6 +894,22 @@ $$
           reason: 'the line containing a 1.3x block formula must be tall '
               'enough to fit it (1.3x the inline math height) plus the '
               'container padding/margin');
+    });
+  });
+
+  group('Fenced code whitespace', () {
+    test('preserves leading indentation and trailing line spaces', () {
+      expect(
+        _renderedCodeLines('```text\n    first  \n      second\n```'),
+        ['    first  ', '      second'],
+      );
+    });
+
+    test('preserves blank lines at the start and end of the code body', () {
+      expect(
+        _renderedCodeLines('```text\n\nfirst\n\n```'),
+        ['', 'first', ''],
+      );
     });
   });
 
