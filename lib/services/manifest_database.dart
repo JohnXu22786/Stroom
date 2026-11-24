@@ -953,7 +953,14 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-          list.add(record);
+          final index =
+              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          if (index == -1) {
+            list.add(record);
+          } else {
+            list.removeWhere((r) => (r as Map)['id'] == record['id']);
+            list.insert(index, record);
+          }
           await _saveWebData();
         });
         return;
@@ -1081,7 +1088,14 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-          list.add(record);
+          final index =
+              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          if (index == -1) {
+            list.add(record);
+          } else {
+            list.removeWhere((r) => (r as Map)['id'] == record['id']);
+            list.insert(index, record);
+          }
           await _saveWebData();
         });
         return;
@@ -1245,7 +1259,14 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-          list.add(record);
+          final index =
+              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          if (index == -1) {
+            list.add(record);
+          } else {
+            list.removeWhere((r) => (r as Map)['id'] == record['id']);
+            list.insert(index, record);
+          }
           await _saveWebData();
         });
         return;
@@ -1372,12 +1393,26 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
           beforeCommit?.call();
-          list.add(record);
+          final index =
+              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          final previousList = index == -1 ? null : List<dynamic>.from(list);
+          if (index == -1) {
+            list.add(record);
+          } else {
+            list.removeWhere((r) => (r as Map)['id'] == record['id']);
+            list.insert(index, record);
+          }
           await _saveWebData();
           try {
             beforeCommit?.call();
           } catch (_) {
-            list.remove(record);
+            if (index == -1) {
+              list.removeWhere((r) => (r as Map)['id'] == record['id']);
+            } else {
+              list
+                ..clear()
+                ..addAll(previousList!);
+            }
             await _saveWebData();
             rethrow;
           }
