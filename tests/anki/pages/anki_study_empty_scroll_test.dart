@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/anki/database/note_dao.dart';
 import 'package:stroom/anki/models/card.dart' as model;
 import 'package:stroom/anki/models/deck.dart';
+import 'package:stroom/anki/models/note.dart';
 import 'package:stroom/anki/providers/anki_actions.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -19,6 +23,44 @@ class _StubAnkiActions extends AnkiActions {
 
   @override
   Future<void> answerCard(int cardId, int rating, {int duration = 0}) async {}
+}
+
+class _DelayedAnswerAnkiActions extends AnkiActions {
+  _DelayedAnswerAnkiActions(super.ref, this.cards);
+
+  final List<model.Card?> cards;
+  int failNextCardLoads = 0;
+  final answerCompleted = Completer<void>();
+  final ratings = <int>[];
+  int getNextCardCalls = 0;
+
+  @override
+  Future<model.Card?> getNextCard(int did) async {
+    getNextCardCalls++;
+    if (failNextCardLoads > 0) {
+      failNextCardLoads--;
+      throw StateError('next card unavailable');
+    }
+    return cards.removeAt(0);
+  }
+
+  @override
+  Future<void> answerCard(int cardId, int rating, {int duration = 0}) {
+    ratings.add(rating);
+    return answerCompleted.future;
+  }
+}
+
+class _StubNoteDao implements NoteDao {
+  _StubNoteDao(this.notes);
+
+  final Map<int, Note> notes;
+
+  @override
+  Future<Note?> get(int id) async => notes[id];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -96,6 +138,82 @@ void main() {
     await tester.tap(find.text('Mostrar respuesta'));
     await tester.pumpAndSettle();
     expect(find.text('De nuevo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('only one rating is saved while an answer is pending', (
+    tester,
+  ) async {
+    final firstCard = model.Card(id: 10, note_id: 1, deck_id: 1);
+    final nextCard = model.Card(id: 11, note_id: 2, deck_id: 1);
+    final finalCard = model.Card(id: 12, note_id: 3, deck_id: 1);
+    late _DelayedAnswerAnkiActions actions;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiDeckByIdProvider.overrideWith(
+            (ref, deckId) async => Deck(id: deckId, name: 'Español'),
+          ),
+          ankiActionsProvider.overrideWith((ref) {
+            actions = _DelayedAnswerAnkiActions(ref, [
+              firstCard,
+              nextCard,
+              finalCard,
+            ]);
+            return actions;
+          }),
+          ankiNoteDaoProvider.overrideWith(
+            (ref) async => _StubNoteDao({
+              1: Note(id: 1, notetype_id: 1, fields: ['Primera', 'Uno']),
+              2: Note(id: 2, notetype_id: 1, fields: ['Siguiente', 'Dos']),
+              3: Note(id: 3, notetype_id: 1, fields: ['Última', 'Tres']),
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('es'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiStudyPage(deckId: 1),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mostrar respuesta'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('De nuevo'));
+    await tester.pump();
+    await tester.tap(find.text('Duro'), warnIfMissed: false);
+    await tester.pump();
+
+    expect(actions.ratings, [1]);
+    expect(actions.getNextCardCalls, 1);
+
+    actions.answerCompleted.complete();
+    await tester.pumpAndSettle();
+
+    expect(actions.ratings, [1]);
+    expect(actions.getNextCardCalls, 2);
+    expect(find.text('Siguiente'), findsOneWidget);
+    expect(find.text('Mostrar respuesta'), findsOneWidget);
+
+    actions.failNextCardLoads = 1;
+    await tester.tap(find.text('Mostrar respuesta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bien'));
+    await tester.pumpAndSettle();
+    expect(find.text('Siguiente'), findsOneWidget);
+    expect(actions.ratings, [1, 3]);
+    final retryLabel = AppLocalizations.of(
+      tester.element(find.byType(Scaffold)),
+    )!.actionRetry;
+    await tester.tap(find.text(retryLabel));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Última'), findsOneWidget);
+    expect(actions.getNextCardCalls, 4);
     expect(tester.takeException(), isNull);
   });
 }

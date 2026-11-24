@@ -675,6 +675,8 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   Note? _note;
   bool _showAnswer = false;
   bool _studying = true;
+  bool _answering = false;
+  bool _currentAnswered = false;
   bool _whiteboardOn = false;
   final List<_DrawingStroke> _strokes = [];
   Color _penColor = Colors.orange;
@@ -701,15 +703,57 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
         _note = note;
         _showAnswer = false;
         _studying = card != null;
+        _currentAnswered = false;
       });
   }
 
   Future<void> _answer(int rating) async {
-    if (_current == null) return;
-    await ref
-        .read(ankiActionsProvider)
-        .answerCard(_current!.id, rating, duration: 3);
-    await _load();
+    if (_current == null || _answering || _currentAnswered) return;
+    setState(() => _answering = true);
+    try {
+      await ref
+          .read(ankiActionsProvider)
+          .answerCard(_current!.id, rating, duration: 3);
+      if (!mounted) return;
+      setState(() => _currentAnswered = true);
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          action: _currentAnswered
+              ? SnackBarAction(
+                  label: AppLocalizations.of(context)!.actionRetry,
+                  onPressed: () => _retryLoad(),
+                )
+              : null,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _answering = false);
+    }
+  }
+
+  Future<void> _retryLoad() async {
+    if (_answering) return;
+    setState(() => _answering = true);
+    try {
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          action: SnackBarAction(
+            label: AppLocalizations.of(context)!.actionRetry,
+            onPressed: () => _retryLoad(),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _answering = false);
+    }
   }
 
   String _frontText(String noCardContent) {
@@ -867,6 +911,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                     AppLocalizations.of(context)!.ankiRatingAgain,
                     Colors.red,
                     () => _answer(1),
+                    enabled: !_answering && !_currentAnswered,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -875,6 +920,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                     AppLocalizations.of(context)!.ankiRatingHard,
                     Colors.orange,
                     () => _answer(2),
+                    enabled: !_answering && !_currentAnswered,
                   ),
                 ),
               ],
@@ -887,6 +933,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                     AppLocalizations.of(context)!.ankiRatingGood,
                     Colors.green,
                     () => _answer(3),
+                    enabled: !_answering && !_currentAnswered,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -895,6 +942,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                     AppLocalizations.of(context)!.ankiRatingEasy,
                     Colors.blue,
                     () => _answer(4),
+                    enabled: !_answering && !_currentAnswered,
                   ),
                 ),
               ],
@@ -1015,7 +1063,8 @@ class _RatingBtn extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
-  const _RatingBtn(this.label, this.color, this.onTap);
+  final bool enabled;
+  const _RatingBtn(this.label, this.color, this.onTap, {this.enabled = true});
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1029,7 +1078,7 @@ class _RatingBtn extends StatelessWidget {
             side: BorderSide(color: color.withValues(alpha: 0.3)),
           ),
         ),
-        onPressed: onTap,
+        onPressed: enabled ? onTap : null,
         child: ConstrainedText(
           label,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
