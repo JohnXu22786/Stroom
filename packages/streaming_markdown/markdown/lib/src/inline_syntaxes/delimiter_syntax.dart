@@ -99,7 +99,7 @@ class DelimiterSyntax extends InlineSyntax {
 }
 
 class DelimiterTag {
-  DelimiterTag(this.tag, this.indicatorLength);
+  const DelimiterTag(this.tag, this.indicatorLength);
 
   // Tag name of the HTML element.
   final String tag;
@@ -319,14 +319,16 @@ class DelimiterRun implements Delimiter {
             followedByWhitespace ||
             followedByPunctuation);
 
-    // Make sure the shorter delimiter takes precedence.
-    tags.sort((a, b) => a.indicatorLength.compareTo(b.indicatorLength));
+    // Make sure the shorter delimiter takes precedence without mutating the
+    // caller-supplied list.
+    final sortedTags = List<DelimiterTag>.of(tags)
+      ..sort((a, b) => a.indicatorLength.compareTo(b.indicatorLength));
 
     return DelimiterRun._(
       node: node,
       char: parser.charAt(runStart),
       syntax: syntax,
-      tags: tags,
+      tags: sortedTags,
       isLeftFlanking: isLeftFlanking,
       isRightFlanking: isRightFlanking,
       isPrecededByPunctuation: precededByPunctuation,
