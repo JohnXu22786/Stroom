@@ -298,7 +298,8 @@ final customTrimPresetsProvider =
 class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
   CustomTrimPresetsNotifier() : super([]);
 
-  final List<List<TrimPreset> Function(List<TrimPreset>)> _pendingMutations = [];
+  final List<List<TrimPreset> Function(List<TrimPreset>)> _pendingMutations =
+      [];
   Future<void>? _loadFuture;
   bool _collectingPendingMutations = false;
 

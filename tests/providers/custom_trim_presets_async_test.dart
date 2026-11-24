@@ -12,7 +12,7 @@ import 'package:stroom/providers/tts_config.dart';
 
 class _DelayedInitializationStore extends InMemorySharedPreferencesStore {
   _DelayedInitializationStore.withData(Map<String, Object> data)
-    : super.withData(data);
+      : super.withData(data);
 
   final Completer<void> _initialization = Completer<void>();
 
