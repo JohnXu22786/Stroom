@@ -10,6 +10,7 @@ import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
@@ -283,6 +284,67 @@ void main() {
     ));
     expect(secondActiveBuilderCalls, greaterThan(0));
     expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+  });
+
+  group('Markdown link recognizer lifecycle', () {
+    testWidgets('releases links replaced or disposed during a pointer press',
+        (WidgetTester tester) async {
+      VisibilityDetectorController.instance.updateInterval = Duration.zero;
+      addTearDown(() {
+        VisibilityDetectorController.instance.updateInterval =
+            const Duration(milliseconds: 500);
+      });
+      final tappedUrls = <String>[];
+      final config = MarkdownConfig(configs: [
+        LinkConfig(onTap: tappedUrls.add),
+      ]);
+
+      Widget markdown(String data) => MaterialApp(
+            home: Scaffold(
+              body: MarkdownWidget(
+                key: const ValueKey('markdown'),
+                data: data,
+                selectable: false,
+                shrinkWrap: true,
+                config: config,
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(markdown('[old](https://old.example)'));
+      Finder link(String value) => find.textContaining(
+            value,
+            findRichText: true,
+          );
+
+      final oldLink = link('old');
+      expect(oldLink, findsOneWidget);
+      final oldLinkRect = tester.getRect(oldLink);
+      final linkStart = Offset(oldLinkRect.left + 1, oldLinkRect.center.dy);
+      final replacementGesture = await tester.startGesture(linkStart);
+      await tester.pump();
+
+      await tester.pumpWidget(markdown('[new](https://new.example)'));
+      await replacementGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, isEmpty,
+          reason: 'a replaced link must not retain its active pointer route');
+      final newLinkRect = tester.getRect(link('new'));
+      await tester.tapAt(Offset(newLinkRect.left + 1, newLinkRect.center.dy));
+      expect(tappedUrls, ['https://new.example']);
+
+      final disposalGesture = await tester.startGesture(
+        Offset(newLinkRect.left + 1, newLinkRect.center.dy),
+      );
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await disposalGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, ['https://new.example'],
+          reason: 'a disposed link must not invoke its stale callback');
+    });
   });
 
   group('Markdown image URL schemes', () {

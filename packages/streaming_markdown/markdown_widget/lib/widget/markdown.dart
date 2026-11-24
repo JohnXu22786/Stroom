@@ -7,6 +7,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'link_recognizer_lifecycle.dart';
 import 'markdown_stream_session.dart';
 
 class MarkdownWidget extends StatefulWidget {
@@ -155,14 +156,17 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
 
   void _applyStreamUpdate(MarkdownStreamUpdate update) {
     if (update.resetAll) {
+      _disposeWidgetRecognizers(_widgets);
       _widgets
         ..clear()
         ..addAll(update.sealedWidgets)
         ..addAll(update.activeWidgets);
     } else {
       if (_activeWidgetCount > 0) {
+        final firstActiveIndex = _widgets.length - _activeWidgetCount;
+        _disposeWidgetRecognizers(_widgets.skip(firstActiveIndex));
         _widgets.removeRange(
-          _widgets.length - _activeWidgetCount,
+          firstActiveIndex,
           _widgets.length,
         );
       }
@@ -192,11 +196,20 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
   ///this method will be called when [updateState] or [dispose]
   void clearState() {
     indexTreeSet.clear();
+    _disposeWidgetRecognizers(_widgets);
     _widgets.clear();
     _streamSession?.dispose();
     _streamSession = null;
     _activeWidgetCount = 0;
     _lastIncrementalSequence = null;
+  }
+
+  void _disposeWidgetRecognizers(Iterable<Widget> widgets) {
+    for (final widget in widgets) {
+      if (widget is Padding && widget.child is LinkRecognizerLifecycle) {
+        (widget.child as LinkRecognizerLifecycle).disposeRecognizers();
+      }
+    }
   }
 
   @override
