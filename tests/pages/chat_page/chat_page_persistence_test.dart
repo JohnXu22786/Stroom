@@ -132,6 +132,7 @@ void main() {
       await notifier.ready;
       await notifier.waitForPersistenceQueueForTesting();
 
+      expect(await notifier.persistNowForTesting(), isFalse);
       expect(prefs.getString('conversations'), recoveredJson);
     });
 

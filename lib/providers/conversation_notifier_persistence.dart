@@ -1768,7 +1768,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         if (_corruptConversationDataAwaitingBackup == corruptJsonAtRequest) {
           _corruptConversationDataAwaitingBackup = null;
         }
-        if (_corruptConversationRecoveryGuard == recoveryGuardAtRequest) {
+        if (persisted &&
+            _corruptConversationRecoveryGuard == recoveryGuardAtRequest) {
           _corruptConversationRecoveryGuard = null;
           _corruptConversationRecoveryPersistedFrom = null;
           _corruptConversationRecoveryPersistedJson = null;
