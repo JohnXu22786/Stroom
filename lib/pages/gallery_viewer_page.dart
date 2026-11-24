@@ -8,6 +8,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:photo_view/photo_view.dart';
 
 import '../utils/byte_lru_cache.dart';
+import '../utils/content_hash_save_lock.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/image_manifest.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/storage_file_publication.dart';
@@ -15,6 +17,240 @@ import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 
 import '../widgets/constrained_text.dart';
+
+final ContentHashSaveLock _galleryVisibleNameLocks = ContentHashSaveLock();
+
+/// Serializes Gallery name allocation for export-equivalent folders.
+Future<T> withGalleryVisibleNameLock<T>(
+  String folder,
+  Future<T> Function() action,
+) =>
+    withGalleryVisibleNameLocks([folder], action);
+
+/// Holds the folder publication lock before callers acquire content-hash locks.
+Future<T> withGalleryVisibleNameAndFolderReadLock<T>(
+  String folder,
+  Future<T> Function() action,
+) =>
+    withGalleryVisibleNameLock(
+      folder,
+      () => ImageManifest.withFolderReadLock(folder, action),
+    );
+
+Iterable<String> _galleryVisibleNameLockKeys(String folder) sync* {
+  final normalized = userVisibleExportPathComparisonKey(folder);
+  yield 'gallery-visible-name:';
+  var current = '';
+  for (final part in normalized.split('/').where((part) => part.isNotEmpty)) {
+    current = current.isEmpty ? part : '$current/$part';
+    yield 'gallery-visible-name:$current';
+  }
+}
+
+/// Serializes Gallery path mutations across every folder they can affect.
+Future<T> withGalleryVisibleNameLocks<T>(
+  Iterable<String> folders,
+  Future<T> Function() action,
+) =>
+    _galleryVisibleNameLocks.withLocks(
+      folders.expand(_galleryVisibleNameLockKeys),
+      action,
+    );
+
+String galleryRecordVisiblePath(ImageRecord record) => record.folder.isEmpty
+    ? '${record.name}.${record.format}'
+    : '${record.folder}/${record.name}.${record.format}';
+
+/// Whether [path] overlaps an existing visible file or folder path.
+bool galleryVisiblePathHasConflict({
+  required String path,
+  required bool isFolder,
+  required Iterable<ImageRecord> records,
+  required Iterable<String> folders,
+  bool allowExistingFolderDescendants = false,
+  Set<String> excludedRecordIds = const {},
+  Set<String> excludedFolderPaths = const {},
+}) {
+  final pathKey = userVisibleExportPathComparisonKey(path);
+
+  for (final record in records) {
+    if (excludedRecordIds.contains(record.id)) continue;
+    final recordKey = userVisibleExportPathComparisonKey(
+      galleryRecordVisiblePath(record),
+    );
+    if (isFolder
+        ? recordKey == pathKey || pathKey.startsWith('$recordKey/')
+        : recordKey == pathKey || recordKey.startsWith('$pathKey/')) {
+      return true;
+    }
+  }
+  for (final folder in folders) {
+    if (excludedFolderPaths.contains(folder)) continue;
+    final folderKey = userVisibleExportPathComparisonKey(folder);
+    if (isFolder
+        ? folderKey == pathKey ||
+            (!allowExistingFolderDescendants &&
+                folderKey.startsWith('$pathKey/'))
+        : folderKey == pathKey || folderKey.startsWith('$pathKey/')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Finds a free Gallery filename, preserving [baseName] when available.
+String uniqueGalleryVisibleName({
+  required Iterable<ImageRecord> records,
+  required String folder,
+  required String baseName,
+  required String format,
+  Iterable<String> existingFolders = const [],
+  Iterable<String> reservedFileNames = const [],
+}) {
+  String visiblePath(String folderPath, String fileName) =>
+      folderPath.isEmpty ? fileName : '$folderPath/$fileName';
+
+  final folderKey = userVisibleExportPathComparisonKey(folder);
+  final existingPaths = records
+      .where(
+        (record) =>
+            userVisibleExportPathComparisonKey(record.folder) == folderKey,
+      )
+      .map(
+        (record) => userVisibleExportPathComparisonKey(
+          visiblePath(folder, '${record.name}.${record.format}'),
+        ),
+      )
+      .toSet();
+  final reservedPaths = reservedFileNames
+      .map(
+        (fileName) =>
+            userVisibleExportPathComparisonKey(visiblePath(folder, fileName)),
+      )
+      .toSet();
+
+  var suffix = 1;
+  while (true) {
+    final name = suffix == 1 ? baseName : '$baseName ($suffix)';
+    final pathKey = userVisibleExportPathComparisonKey(
+      visiblePath(folder, '$name.$format'),
+    );
+    final conflictsWithFolder = existingFolders.any((existingFolder) {
+      final folderPathKey = userVisibleExportPathComparisonKey(existingFolder);
+      return folderPathKey == pathKey || folderPathKey.startsWith('$pathKey/');
+    });
+    if (!existingPaths.contains(pathKey) &&
+        !reservedPaths.contains(pathKey) &&
+        !conflictsWithFolder) {
+      return name;
+    }
+    suffix++;
+  }
+}
+
+/// Finds a free Save As name while preserving the historical first-copy name.
+String uniqueGallerySaveAsName({
+  required Iterable<ImageRecord> records,
+  required String folder,
+  required String sourceName,
+  required String format,
+  Iterable<String> existingFolders = const [],
+}) =>
+    uniqueGalleryVisibleName(
+      records: records,
+      folder: folder,
+      baseName: '${sourceName}_edited',
+      format: format,
+      existingFolders: existingFolders,
+    );
+
+/// Saves the edited bytes and publishes the resulting Gallery record.
+Future<ImageRecord> saveEditedGalleryImageRecord(
+  ImageRecord file,
+  Uint8List editedBytes, {
+  required bool isSaveAs,
+}) async {
+  final newHash = computeImageHash(editedBytes);
+  final newFileName = '$newHash.${file.format}';
+  late ImageRecord newRecord;
+  Future<void> save() => ImageManifest.withSaveLocks(
+        [newHash, file.hash],
+        () => publishStorageFiles<void, ImageRecord>(
+          publish: (writeFile) async {
+            await writeFile(newFileName, editedBytes);
+            if (isSaveAs) {
+              final existingRecords = await ImageManifest.loadRecordsStrict();
+              final existingFolders = await ImageManifest.getAllFolders();
+              newRecord = ImageRecord(
+                name: uniqueGallerySaveAsName(
+                  records: existingRecords,
+                  folder: file.folder,
+                  sourceName: file.name,
+                  format: file.format,
+                  existingFolders: existingFolders,
+                ),
+                hash: newHash,
+                format: file.format,
+                createdAt: DateTime.now(),
+                size: editedBytes.length,
+                folder: file.folder,
+              );
+              await ImageManifest.addRecord(newRecord);
+            } else {
+              newRecord = ImageRecord(
+                name: file.name,
+                hash: newHash,
+                format: file.format,
+                createdAt: file.createdAt,
+                size: editedBytes.length,
+                folder: file.folder,
+              );
+              await ImageManifest.addRecord(newRecord);
+              await ImageManifest.deleteRecord(file.id);
+            }
+          },
+          loadRecords: ImageManifest.loadRecordsStrict,
+          isReferenced: (record, name) =>
+              record.hash == newHash &&
+              (name == record.storageFileName ||
+                  name == imageThumbFileName(record.hash)),
+          writeFile: ImageManifest.writeFile,
+          readFile: ImageManifest.readFile,
+          fileExists: ImageManifest.fileExists,
+          deleteFile: ImageManifest.deleteFile,
+        ),
+      );
+  await withGalleryVisibleNameAndFolderReadLock(file.folder, save);
+  return newRecord;
+}
+
+/// Adds a Gallery folder only when its export path is free of file collisions.
+///
+/// Folder creation shares the parent folder's visible-name lock with imports
+/// and Save As so a root file and a same-named folder cannot be published from
+/// stale snapshots.
+Future<bool> createGalleryFolderIfNameAvailable(
+  String folderPath,
+  Future<void> Function() createFolder,
+) async {
+  final parentFolder = ImageManifest.getParentFolderPath(folderPath);
+  return withGalleryVisibleNameLock(parentFolder, () async {
+    final records = await ImageManifest.loadRecordsStrict();
+    final existingFolders = await ImageManifest.getAllFolders();
+    if (galleryVisiblePathHasConflict(
+      path: folderPath,
+      isFolder: true,
+      records: records,
+      folders: existingFolders,
+      allowExistingFolderDescendants: true,
+    )) {
+      return false;
+    }
+
+    await createFolder();
+    return true;
+  });
+}
 
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
@@ -251,71 +487,24 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     required bool isSaveAs,
   }) async {
     try {
-      final newHash = computeImageHash(editedBytes);
-      final newFileName = '$newHash.${file.format}';
-      late ImageRecord newRecord;
-      await ImageManifest.withFolderReadLock(
-        file.folder,
-        () => ImageManifest.withSaveLocks([newHash, file.hash], () async {
-          await publishStorageFiles<void, ImageRecord>(
-            publish: (writeFile) async {
-              await writeFile(newFileName, editedBytes);
-              if (isSaveAs) {
-                newRecord = ImageRecord(
-                  name: '${file.name}_edited',
-                  hash: newHash,
-                  format: file.format,
-                  createdAt: DateTime.now(),
-                  size: editedBytes.length,
-                  folder: file.folder,
-                );
-                await ImageManifest.addRecord(newRecord);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!
-                            .imageViewerImageSavedAsCopy,
-                      ),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              } else {
-                newRecord = ImageRecord(
-                  name: file.name,
-                  hash: newHash,
-                  format: file.format,
-                  createdAt: file.createdAt,
-                  size: editedBytes.length,
-                  folder: file.folder,
-                );
-                await ImageManifest.addRecord(newRecord);
-                await ImageManifest.deleteRecord(file.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!.imageViewerImageUpdated,
-                      ),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              }
-            },
-            loadRecords: ImageManifest.loadRecordsStrict,
-            isReferenced: (record, name) =>
-                record.hash == newHash &&
-                (name == record.storageFileName ||
-                    name == imageThumbFileName(record.hash)),
-            writeFile: ImageManifest.writeFile,
-            readFile: ImageManifest.readFile,
-            fileExists: ImageManifest.fileExists,
-            deleteFile: ImageManifest.deleteFile,
-          );
-        }),
+      final newRecord = await saveEditedGalleryImageRecord(
+        file,
+        editedBytes,
+        isSaveAs: isSaveAs,
       );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isSaveAs
+                  ? AppLocalizations.of(context)!.imageViewerImageSavedAsCopy
+                  : AppLocalizations.of(context)!.imageViewerImageUpdated,
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.
