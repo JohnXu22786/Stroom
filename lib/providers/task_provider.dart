@@ -459,6 +459,11 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
   /// 将所有运行中的任务标记为失败（应用退出/断开连接时调用）
   void failAllRunningTasks({required String error}) {
+    for (final task in state) {
+      if (task.status == TaskStatus.running) {
+        _cancelTokens.remove(task.id)?.cancel();
+      }
+    }
     state = state.map((t) {
       if (t.status != TaskStatus.running) return t;
       return t.copyWith(
