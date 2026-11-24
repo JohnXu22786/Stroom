@@ -16,6 +16,32 @@ void main() {
     );
   });
 
+  test('long numeric references outside Unicode are replaced safely', () {
+    final decimal = '9' * 1000;
+    final hexadecimal = 'f' * 1000;
+    expect(
+      markdown.markdownToHtml('&#$decimal; &#x$hexadecimal;'),
+      '<p>� �</p>\n',
+    );
+  });
+
+  test('a space followed by a tab dedents to the next tab stop', () {
+    expect(
+      markdown.markdownToHtml(' \tcode'),
+      '<pre><code>code\n</code></pre>\n',
+    );
+  });
+
+  test('GFM tagfilter escapes disallowed tags with attributes', () {
+    expect(
+      markdown.markdownToHtml(
+        '<SCRIPT src=x>safe text</script >',
+        enableTagfilter: true,
+      ),
+      '&lt;SCRIPT src=x>safe text&lt;/script >\n',
+    );
+  });
+
   test('a reference label ending in an escape stays literal', () {
     expect(markdown.markdownToHtml(r'[foo\'), '<p>[foo\\</p>\n');
   });
@@ -51,6 +77,21 @@ void main() {
       );
     },
   );
+
+  test('bare destinations require balanced opening parentheses', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target('),
+      '<p>[text][foo]</p>\n<p>[foo]: target(</p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][balanced]\n\n[balanced]: target(foo)'),
+      '<p><a href="target(foo)">text</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][escaped]\n\n[escaped]: target\\(foo\\)'),
+      '<p><a href="target(foo)">text</a></p>\n',
+    );
+  });
 
   test('a reference title ending in an escape stays literal', () {
     expect(
