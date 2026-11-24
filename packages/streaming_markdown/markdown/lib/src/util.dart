@@ -104,31 +104,32 @@ String decodeHtmlCharacterFromMatch(Match match) {
   // Decimal numeric character references, see
   // https://spec.commonmark.org/0.30/#decimal-numeric-character-references.
   else if (decimalNumber != null) {
-    final decimalValue = int.parse(decimalNumber);
-    int hexValue;
-    if (decimalValue > 0 &&
-        decimalValue <= 0x10ffff &&
-        (decimalValue < 0xd800 || decimalValue > 0xdfff)) {
-      hexValue = int.parse(decimalValue.toRadixString(16), radix: 16);
-    } else {
-      hexValue = 0xFFFd;
-    }
-
-    return String.fromCharCode(hexValue);
+    return _decodeNumericCharacterReference(decimalNumber, radix: 10);
   }
   // Hexadecimal numeric character references, see
   // https://spec.commonmark.org/0.30/#hexadecimal-numeric-character-references.
   else if (hexadecimalNumber != null) {
-    var hexValue = int.parse(hexadecimalNumber, radix: 16);
-    if (hexValue > 0x10ffff ||
-        hexValue == 0 ||
-        (hexValue >= 0xd800 && hexValue <= 0xdfff)) {
-      hexValue = 0xFFFd;
-    }
-    return String.fromCharCode(hexValue);
+    return _decodeNumericCharacterReference(hexadecimalNumber, radix: 16);
   }
 
   return text;
+}
+
+String _decodeNumericCharacterReference(String digits, {required int radix}) {
+  var value = 0;
+  for (final digit in digits.codeUnits) {
+    final digitValue =
+        digit <= 0x39 ? digit - 0x30 : (digit | 0x20) - 0x61 + 10;
+    if (value > (0x10ffff - digitValue) ~/ radix) {
+      return '\uFFFD';
+    }
+    value = value * radix + digitValue;
+  }
+
+  if (value == 0 || (value >= 0xd800 && value <= 0xdfff)) {
+    return '\uFFFD';
+  }
+  return String.fromCharCode(value);
 }
 
 extension MatchExtensions on Match {
@@ -182,8 +183,8 @@ extension StringExtensions on String {
       for (; start < whitespaces.length; start++) {
         final isTab = whitespaces[start] == '\t';
         if (isTab) {
-          indentLength += tabSize;
-          tabRemaining = 4;
+          indentLength += tabSize - (indentLength % tabSize);
+          tabRemaining = indentLength;
         } else {
           indentLength += 1;
         }
