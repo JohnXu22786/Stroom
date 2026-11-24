@@ -1171,16 +1171,23 @@ class MainActivity : FlutterActivity() {
                 stagedFile = newFile
 
                 val outputStream = contentResolver.openOutputStream(newFile.uri)
-                if (outputStream == null) {
-                    // Keep the existing backup intact; preserve the established null-stream result.
-                    if (newFile.delete()) stagedFile = null
-                    result.success(null)
+                val streamOpened =
+                    SafOutputStream.writeIfAvailable(
+                        outputStream = outputStream,
+                        onUnavailable = {
+                            if (!newFile.delete()) {
+                                throw java.io.IOException("无法清理未写入的备份文件")
+                            }
+                            stagedFile = null
+                        },
+                        write = { stream ->
+                            stream.write(bytes)
+                            stream.flush()
+                        },
+                    )
+                if (!streamOpened) {
+                    result.error("WRITE_FAILED", "无法打开备份文件进行写入", null)
                     return
-                }
-
-                outputStream.use { stream ->
-                    stream.write(bytes)
-                    stream.flush()
                 }
 
                 if (existingFile == null) {
