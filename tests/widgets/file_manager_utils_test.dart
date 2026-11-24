@@ -1,7 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/file_manager_utils.dart';
 
 void main() {
+  group('formatDate', () {
+    test('labels a file from the previous calendar date as yesterday', () {
+      final now = DateTime.utc(2025, 3, 10, 12);
+      final date = DateTime.utc(2025, 3, 9, 13);
+
+      expect(now.difference(date), const Duration(hours: 23));
+      expect(
+        formatDate(
+          date,
+          lookupAppLocalizations(const Locale('en', 'US')),
+          now: now,
+        ),
+        'Yesterday 13:00',
+      );
+    });
+  });
+
   group('sanitizeFileName', () {
     test('replaces path separators and illegal chars with underscore', () {
       expect(sanitizeFileName('a/b\\c:d*e?f"g<h>i|j.txt'),
