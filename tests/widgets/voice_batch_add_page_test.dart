@@ -4,11 +4,11 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/voice_batch_add_page.dart';
 
 Widget _buildTestApp() => MaterialApp(
-  locale: const Locale('en'),
-  supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  home: const VoiceBatchAddPage(existingVoices: []),
-);
+      locale: const Locale('en'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: const VoiceBatchAddPage(existingVoices: []),
+    );
 
 Future<void> _selectCustomSeparator(WidgetTester tester) async {
   await tester.tap(find.text('Tab'));
