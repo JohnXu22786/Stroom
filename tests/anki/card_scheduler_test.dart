@@ -317,5 +317,14 @@ void main() {
       expect(r.css, 'body { color: red; }');
       expect(r.tags, ['tag1', 'tag2']);
     });
+
+    test('preserves latex renderer through JSON and defaults when absent', () {
+      final m = Notetype.createBasic()..latex = 'latex';
+      final restored = Notetype.fromJson(m.toJson());
+      expect(restored.latex, 'latex');
+
+      final legacyJson = m.toJson()..remove('latex');
+      expect(Notetype.fromJson(legacyJson).latex, 'dvipng');
+    });
   });
 }
