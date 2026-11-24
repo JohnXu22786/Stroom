@@ -567,6 +567,28 @@ void main() {
     });
   });
 
+  group('GitHub footnote definitions', () {
+    test('two blank lines end a definition before an indented code block', () {
+      final nodes =
+          m.Document(extensionSet: m.ExtensionSet.gitHubFlavored).parse(
+        'Reference[^note]\n\n'
+        '[^note]: first paragraph\n\n'
+        '    second paragraph\n\n\n'
+        '    code block',
+      );
+
+      final footnote = _findElement(nodes, 'li');
+      expect(footnote, isNotNull);
+      expect(footnote!.textContent, contains('first paragraph'));
+      expect(footnote.textContent, contains('second paragraph'));
+      expect(footnote.textContent, isNot(contains('code block')));
+
+      final codeBlock = _findElement(nodes, 'pre');
+      expect(codeBlock, isNotNull);
+      expect(codeBlock!.textContent, 'code block\n');
+    });
+  });
+
   group('Inline link titles', () {
     test('tabs and vertical tabs separate a title from a bare destination', () {
       for (final separator in ['\t', '\v']) {
