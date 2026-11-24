@@ -130,9 +130,10 @@ bool shouldAbortFileOpenForMissingFile({
 Future<Uint8List?> readFileBytesForOpen(
   String filePath, {
   required bool isWeb,
-}) => isWeb
-    ? TextManifest.readFile(_textManifestFileName(filePath))
-    : File(filePath).readAsBytes();
+}) =>
+    isWeb
+        ? TextManifest.readFile(_textManifestFileName(filePath))
+        : File(filePath).readAsBytes();
 
 String _textManifestFileName(String filePath) {
   const webTextPrefix = 'texts/';
