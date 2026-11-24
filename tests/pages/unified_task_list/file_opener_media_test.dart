@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:stroom/pages/unified_task_list/file_opener.dart';
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   test('file existence preflight skips unsupported web IO only', () {
@@ -23,6 +28,16 @@ void main() {
       isTrue,
     );
     expect(existsChecks, 1);
+  });
+
+  test('reads web text outputs from the browser file store', () async {
+    ManifestDatabase.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    const fileName = 'completed.txt';
+    final bytes = Uint8List.fromList(utf8.encode('task output'));
+    await FileManifest.writeFile(fileName, bytes);
+
+    expect(await readFileBytesForOpen(fileName, isWeb: true), bytes);
   });
 
   test('routes .ts as video while .tsx remains text', () async {

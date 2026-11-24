@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catcatch/models/media_kind.dart';
+import '../../utils/file_manifest.dart';
 import '../../utils/text_manifest.dart';
 import '../audio_player_page.dart';
 import '../text_preview_edit_page.dart';
@@ -127,6 +128,11 @@ bool shouldAbortFileOpenForMissingFile({
   return !existsSync();
 }
 
+Future<Uint8List?> readFileBytesForOpen(
+  String filePath, {
+  required bool isWeb,
+}) => isWeb ? FileManifest.readFile(filePath) : File(filePath).readAsBytes();
+
 /// Some containers can contain either audio or video. Probe their saved bytes
 /// instead of treating their extensions as a media kind.
 Future<FileOpenKind> fileOpenKind(String filePath, {bool? isWeb}) async {
@@ -182,9 +188,9 @@ Future<void> openFile(String filePath, BuildContext context) async {
 
 Future<void> _openTextFile(String filePath, BuildContext context) async {
   try {
-    final file = File(filePath);
     // Async read — a multi-MB transcript must not block the UI thread.
-    final bytes = await file.readAsBytes();
+    final bytes = await readFileBytesForOpen(filePath, isWeb: kIsWeb);
+    if (bytes == null) throw FileSystemException('File not found', filePath);
     if (!context.mounted) return;
     final content = utf8.decode(bytes);
     final name = p.basenameWithoutExtension(filePath);
@@ -193,7 +199,7 @@ Future<void> _openTextFile(String filePath, BuildContext context) async {
       name: name,
       hash: hash,
       format: p.extension(filePath).replaceAll('.', ''),
-      createdAt: file.statSync().changed,
+      createdAt: kIsWeb ? DateTime.now() : File(filePath).statSync().changed,
       size: bytes.length,
       textLength: content.length,
     );
@@ -209,7 +215,7 @@ Future<void> _openTextFile(String filePath, BuildContext context) async {
     );
   } catch (e) {
     debugPrint('Failed to open text file: $e');
-    _openWithOsDefault(filePath);
+    if (!kIsWeb) _openWithOsDefault(filePath);
   }
 }
 
