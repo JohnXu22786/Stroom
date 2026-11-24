@@ -63,6 +63,16 @@ class AnthropicProtocol implements ChatProtocol {
           parts.add({'type': 'text', 'text': messageContent});
         }
         for (final att in msg.attachments) {
+          // Anthropic image blocks are valid only in user messages. Keep useful
+          // history for assistant-generated images as text without sending an
+          // invalid input image block.
+          if (msg.role == 'assistant' && att.fileType == 'image') {
+            parts.add({
+              'type': 'text',
+              'text': '[此前生成的图片已省略: ${att.fileName}]',
+            });
+            continue;
+          }
           // 'file' 是旧数据的遗留分类（composer 现只产出
           // image/audio/video/document）：按 document 处理保持兼容。
           if (att.fileType == 'image' ||
