@@ -72,8 +72,8 @@ void conversationGroup6() {
         expect(prefs.getString('conversations'), corruptJson);
         expect(
           prefs.getKeys().where(
-            (key) => key.startsWith('conversations.corrupt.'),
-          ),
+                (key) => key.startsWith('conversations.corrupt.'),
+              ),
           isEmpty,
         );
       },

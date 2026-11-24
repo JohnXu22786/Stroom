@@ -109,10 +109,10 @@ Future<bool> persistConversationFallbackIfRecovered(
   final existingJson = prefs.getString('conversations');
   if (existingJson != null) {
     final hasMatchingBackup = prefs.getKeys().any(
-      (key) =>
-          key.startsWith('conversations.corrupt.') &&
-          prefs.getString(key) == existingJson,
-    );
+          (key) =>
+              key.startsWith('conversations.corrupt.') &&
+              prefs.getString(key) == existingJson,
+        );
     if (!hasMatchingBackup) return false;
   }
 

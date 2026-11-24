@@ -585,8 +585,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     SharedPreferences prefs,
     String key,
     String value,
-  )?
-  corruptConversationBackupWriter;
+  )? corruptConversationBackupWriter;
   List<dynamic> _unparsedConversationRecords = [];
   String? _corruptConversationDataAwaitingBackup;
 
