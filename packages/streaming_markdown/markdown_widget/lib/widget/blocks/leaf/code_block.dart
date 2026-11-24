@@ -29,9 +29,8 @@ class CodeBlockNode extends ElementNode {
       language = null;
       debugPrint('get language error:$e');
     }
-    final splitContents = content
-        .trim()
-        .split(visitor.splitRegExp ?? WidgetVisitor.defaultSplitRegExp);
+    final splitContents =
+        content.split(visitor.splitRegExp ?? WidgetVisitor.defaultSplitRegExp);
     if (splitContents.last.isEmpty) splitContents.removeLast();
     final codeBuilder = preConfig.builder;
     if (codeBuilder != null) {
@@ -85,7 +84,7 @@ List<InlineSpan> highLightSpans(
 }) {
   return convertHiNodes(
       hi.highlight
-          .parse(input.trimRight(),
+          .parse(input,
               language: autoDetectionLanguage ? null : language,
               autoDetection: autoDetectionLanguage)
           .nodes!,
