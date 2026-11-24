@@ -208,7 +208,8 @@ void main() {
     expect(actions.ratings, [1, 3]);
     final retryLabel = AppLocalizations.of(
       tester.element(find.byType(Scaffold)),
-    )!.actionRetry;
+    )!
+        .actionRetry;
     await tester.tap(find.text(retryLabel));
     await tester.pumpAndSettle();
 
