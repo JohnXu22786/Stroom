@@ -165,6 +165,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/background_task_provider_test.dart",
         "providers/ocr*_test.dart",
         "providers/tts_config_persistence_test.dart",
+        "providers/custom_trim_presets_async_test.dart",
         "providers/tts_save_cancellation_test.dart",
         "providers/tts_state_shared_test.dart",
         "providers/tts_stream_playback_test.dart",
