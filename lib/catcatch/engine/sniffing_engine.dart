@@ -89,12 +89,20 @@ class SniffingEngine {
         ];
       } else if (ext == 'mpd') {
         onProgress?.call('正在解析 MPD 播放列表', 50);
-        final segments = await MPDParser.parseManifest(content, url);
+        final segments = await MPDParser.parseManifest(
+          content,
+          url,
+          maxSegments: MPDParser.defaultMaxSegments,
+        );
         final segmentedMedia = await _parseSegmentsToMedia(segments, url, ext);
         onProgress?.call('MPD 解析完成', 80);
 
         // 获取总时长信息
-        final mpdSegments = await MPDParser.parseSegments(content, url);
+        final mpdSegments = await MPDParser.parseSegments(
+          content,
+          url,
+          maxSegments: MPDParser.defaultMaxSegments,
+        );
         final mpdTotalDuration =
             mpdSegments.fold<double>(0, (sum, s) => sum + s.duration);
 

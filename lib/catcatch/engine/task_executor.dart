@@ -758,7 +758,11 @@ class TaskExecutor {
           hasInitializationMap: parsed.hasInitializationMap,
         ));
       } else if (pl.isMPD) {
-        segments = await MPDParser.parseManifest(content, pl.url);
+        segments = await MPDParser.parseManifest(
+          content,
+          pl.url,
+          maxSegments: MPDParser.defaultMaxSegments,
+        );
         playlistResources = segments
             .map((url) => (url: url, rangeStart: null, rangeLength: null))
             .toList();
