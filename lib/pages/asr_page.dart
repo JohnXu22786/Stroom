@@ -1445,6 +1445,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         await audio.validateFormatAndReleaseLoadedBytes(
           loadForValidation: file.readAsBytes,
         );
+        if (!mounted) return;
         newAudios.add(audio);
       }
 

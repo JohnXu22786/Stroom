@@ -22,11 +22,17 @@ import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 class _AudioSelectionPicker extends FilePickerPlatform {
-  _AudioSelectionPicker(this.bytes, {this.reportedSize, this.readStream});
+  _AudioSelectionPicker(
+    this.bytes, {
+    this.reportedSize,
+    this.readStream,
+    this.readBytes,
+  });
 
   final Uint8List bytes;
   final int? reportedSize;
   final Stream<List<int>>? readStream;
+  final Future<Uint8List> Function()? readBytes;
 
   @override
   Future<List<PlatformFile>> pickFiles({
@@ -47,6 +53,7 @@ class _AudioSelectionPicker extends FilePickerPlatform {
         bytes,
         reportedSize: reportedSize,
         readStream: readStream,
+        readBytes: readBytes,
       ),
     ];
   }
@@ -57,12 +64,14 @@ final class _AudioSelectionFile extends PlatformFile {
     this.bytes, {
     this.reportedSize,
     this.readStream,
+    this.readBytes,
   })  : name = 'mislabelled.wav',
         uri = Uri.dataFromBytes(bytes);
 
   final Uint8List bytes;
   final int? reportedSize;
   final Stream<List<int>>? readStream;
+  final Future<Uint8List> Function()? readBytes;
 
   @override
   final String name;
@@ -80,7 +89,8 @@ final class _AudioSelectionFile extends PlatformFile {
   Future<int?> length() async => lengthSync();
 
   @override
-  Future<Uint8List> readAsBytes() async => bytes;
+  Future<Uint8List> readAsBytes() async =>
+      readBytes == null ? bytes : readBytes!();
 
   @override
   Stream<Uint8List> readAsByteStream() async* {
@@ -519,6 +529,42 @@ void main() {
     if (background.state.isNotEmpty) {
       background.cancelTask(background.state.single.id);
     }
+  });
+
+  testWidgets('does not update state when validation finishes after leaving', (
+    tester,
+  ) async {
+    final validationStarted = Completer<void>();
+    final finishValidation = Completer<Uint8List>();
+    final originalPicker = FilePickerPlatform.instance;
+    FilePickerPlatform.instance = _AudioSelectionPicker(
+      Uint8List.fromList([0x49, 0x44, 0x33, 0x00]),
+      readBytes: () {
+        if (!validationStarted.isCompleted) validationStarted.complete();
+        return finishValidation.future;
+      },
+    );
+    addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+    await tester.pumpWidget(app(keepPageOpen: true));
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清空'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('音频文件'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('系统音频文件'));
+    await tester.pump();
+    await validationStarted.future;
+
+    Navigator.of(tester.element(find.byType(AsrPage))).pop();
+    await tester.pumpAndSettle();
+    finishValidation.complete(Uint8List.fromList([0x49, 0x44, 0x33, 0x00]));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(AsrPage), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
