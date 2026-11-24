@@ -1728,14 +1728,22 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         _attachmentPathsInSnapshot(snapshot);
     _queuedDraftAttachmentCachesByPersistRequest[requestGeneration] =
         _attachmentCacheReferencesInSnapshot(snapshot);
+    // Preserve the recovery marker on every snapshot queued while a backup is
+    // pending, even if an earlier queued save completes recovery first.
+    final corruptJsonAtRequest = _corruptConversationDataAwaitingBackup;
     final write = _persistQueue.then((_) async {
       // Keep backup retry and the canonical write in the same serialized
       // section. Otherwise an overlapping retry can remove a newer save.
-      final corruptJson = _corruptConversationDataAwaitingBackup;
+      final corruptJson = corruptJsonAtRequest;
       if (corruptJson != null) {
         try {
           final prefs = await SharedPreferences.getInstance();
-          if (!await _backupCorruptConversationsFile(prefs, corruptJson)) {
+          final currentJson = prefs.getString('conversations');
+          if (currentJson != null && currentJson != corruptJson) {
+            return false;
+          }
+          if (currentJson == corruptJson &&
+              !await _backupCorruptConversationsFile(prefs, corruptJson)) {
             return false;
           }
         } catch (e) {

@@ -68,6 +68,7 @@ void main() {
       await notifier.ready;
       final retry = notifier.persistNowForTesting();
       await backupStored.future;
+      final queuedSave = notifier.persistNowForTesting();
 
       final prefs = await SharedPreferences.getInstance();
       final fallbackSaved = await persistConversationFallbackIfRecovered(
@@ -78,6 +79,7 @@ void main() {
 
       completeBackup.complete(true);
       expect(await retry, isFalse);
+      expect(await queuedSave, isFalse);
 
       expect(prefs.getString('conversations'), recoveredJson);
       expect(backupAttempts, 2);
