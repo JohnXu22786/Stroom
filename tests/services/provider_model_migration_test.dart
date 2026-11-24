@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/provider_model_migration.dart';
 
 void main() {
@@ -21,14 +20,10 @@ void main() {
           {'name': 'Example model', 'modelId': 'example-model'},
         ],
       };
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': jsonEncode([legacyProvider]),
-      });
-
-      await ProviderModelMigration.migrateSettings();
-
-      final preferences = await SharedPreferences.getInstance();
-      final migratedJson = preferences.getString('provider_entries')!;
+      final legacyJson = jsonEncode([legacyProvider]);
+      final migratedJson = await ProviderModelMigration.migrateSettingsContent(
+        legacyJson,
+      );
       final entries = (jsonDecode(migratedJson) as List).cast<Map>();
       final entry = entries.single;
       expect(entry.containsKey('providerName'), isFalse);
@@ -44,12 +39,10 @@ void main() {
       expect(models.single['modelId'], 'example-model');
       expect((models.single['id'] as String), startsWith('model_'));
 
-      await ProviderModelMigration.migrateSettings();
-
       expect(
-        preferences.getString('provider_entries'),
+        await ProviderModelMigration.migrateSettingsContent(migratedJson),
         migratedJson,
-        reason: 'persisted config and model identities stay stable on reload',
+        reason: 'config and model identities stay stable on reload',
       );
     },
   );
