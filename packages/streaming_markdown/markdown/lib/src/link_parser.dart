@@ -232,6 +232,10 @@ class LinkParser extends TextParser {
       }
     }
 
+    if (parenCount != 0) {
+      return false;
+    }
+
     _destination = substring(start, pos);
     return true;
   }
