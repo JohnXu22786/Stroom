@@ -1288,18 +1288,34 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   });
                 }
 
+                final textTheme = Theme.of(context).textTheme;
+                final textScaler = MediaQuery.textScalerOf(context);
+                final batchModeLabelStyle = TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                );
                 final batchModeLabel = Text(
                   AppLocalizations.of(context)!.ocrBatchMode,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: batchModeLabelStyle,
                 );
                 final jointLabel =
                     AppLocalizations.of(context)!.ocrMergeRecognition;
                 final perImageLabel =
                     AppLocalizations.of(context)!.ocrRecognizeEachImage;
+                final concurrencyLabel = AppLocalizations.of(context)!
+                    .ocrConcurrencyStatus(_perImageConcurrency);
+
+                double measureText(String text, TextStyle? style) {
+                  final painter = TextPainter(
+                    text: TextSpan(text: text, style: style),
+                    textDirection: Directionality.of(context),
+                    textScaler: textScaler,
+                    maxLines: 1,
+                  )..layout();
+                  return painter.width;
+                }
+
                 final modeSelector = SegmentedButton<OcrBatchMode>(
                   key: const Key('ocr_batch_mode'),
                   showSelectedIcon: false,
@@ -1322,47 +1338,71 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                               selectBatchMode(selection.first);
                             },
                 );
-                final concurrencySelector =
-                    _batchMode == OcrBatchMode.perImage
-                        ? PopupMenuButton<int>(
-                            key: const Key('ocr_per_image_concurrency'),
-                            enabled: !_ocrStarting && !_isProcessing,
-                            tooltip: AppLocalizations.of(context)!
-                                .ocrMaxConcurrency,
-                            onSelected: (concurrency) => setState(
-                              () => _perImageConcurrency = concurrency,
+                final concurrencySelector = _batchMode == OcrBatchMode.perImage
+                    ? PopupMenuButton<int>(
+                        key: const Key('ocr_per_image_concurrency'),
+                        enabled: !_ocrStarting && !_isProcessing,
+                        tooltip:
+                            AppLocalizations.of(context)!.ocrMaxConcurrency,
+                        onSelected: (concurrency) => setState(
+                          () => _perImageConcurrency = concurrency,
+                        ),
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 1,
+                            child: ConstrainedText(
+                              AppLocalizations.of(context)!
+                                  .ocrConcurrencyOption(1),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: 1,
-                                child: ConstrainedText(
-                                  AppLocalizations.of(context)!
-                                      .ocrConcurrencyOption(1),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 2,
-                                child: ConstrainedText(
-                                  AppLocalizations.of(context)!
-                                      .ocrConcurrencyOption(2),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: Text(
-                                AppLocalizations.of(context)!
-                                    .ocrConcurrencyStatus(_perImageConcurrency),
-                              ),
+                          ),
+                          PopupMenuItem(
+                            value: 2,
+                            child: ConstrainedText(
+                              AppLocalizations.of(context)!
+                                  .ocrConcurrencyOption(2),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          )
-                        : null;
-                final compact = constraints.maxWidth <
-                    480 * MediaQuery.textScalerOf(context).scale(1);
+                          ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(concurrencyLabel),
+                        ),
+                      )
+                    : null;
+                double segmentWidth(String label) {
+                  final textScale =
+                      textScaler.scale(textTheme.labelLarge?.fontSize ?? 14) /
+                          14;
+                  final horizontalPadding =
+                      24 - (8 * (textScale - 1).clamp(0, 2));
+                  final contentWidth =
+                      measureText(label, textTheme.labelLarge) +
+                          horizontalPadding;
+                  return contentWidth < 64 ? 64 : contentWidth;
+                }
+
+                final jointSegmentWidth = segmentWidth(jointLabel);
+                final perImageSegmentWidth = segmentWidth(perImageLabel);
+                final segmentRowWidth = 2 *
+                        (jointSegmentWidth > perImageSegmentWidth
+                            ? jointSegmentWidth
+                            : perImageSegmentWidth) +
+                    2;
+                final concurrencyWidth = _batchMode == OcrBatchMode.perImage
+                    ? measureText(concurrencyLabel, textTheme.bodyMedium) + 16
+                    : 0.0;
+                final requiredRowWidth = measureText(
+                      AppLocalizations.of(context)!.ocrBatchMode,
+                      batchModeLabelStyle,
+                    ) +
+                    10 +
+                    segmentRowWidth +
+                    concurrencyWidth;
+                final compact = constraints.maxWidth < requiredRowWidth;
 
                 if (compact) {
                   return Column(
@@ -1417,7 +1457,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     batchModeLabel,
                     const SizedBox(width: 10),
                     Expanded(child: modeSelector),
-                    ?concurrencySelector,
+                    if (concurrencySelector != null) concurrencySelector,
                   ],
                 );
               },

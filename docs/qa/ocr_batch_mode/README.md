@@ -7,7 +7,7 @@ These screenshots render the production `OcrPage` with two in-memory PNG fixture
 - [Capture entrypoint](../../../tool/qa/ocr_batch_mode_capture.dart)
 - [Capture script](../../../tool/qa/capture_ocr_batch_mode.py)
 
-The browser reported no page errors. Focused widget coverage checks the narrow layout, German strings at 2× text scale, the per-image concurrency control, and preserved row alignment when the content fits:
+The browser reported no page errors. Focused widget coverage checks German at 320 × 640 / 1×, German at 600 × 1000 / 2×, the per-image concurrency control at 600 × 1000 / 1×, Chinese at 700 × 1000 / 1× and 367 × 1000 / 1× plus 580 × 1000 and 568 × 1000 / 2× where the inline controls fit, and English at 1250 × 1000 / 2× where the longer segment label requires the compact layout:
 
 ```sh
 flutter test --no-pub --reporter expanded --plain-name 'reflows batch options at narrow width and large localized text' tests/pages/content/ocr_page_test.dart
