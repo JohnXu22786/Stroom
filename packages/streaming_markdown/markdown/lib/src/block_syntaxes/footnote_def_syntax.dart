@@ -41,8 +41,7 @@ class FootnoteDefSyntax extends BlockSyntax {
   @override
   List<Line> parseChildLines(BlockParser parser) {
     final children = <String>[];
-    // As one empty line should not split footnote definition, use this flag.
-    var shouldBeBlock = false;
+    var consecutiveBlankLines = 0;
     late final syntaxList = parser.blockSyntaxes.where(
       (s) => !_excludingPattern.contains(s.pattern),
     );
@@ -53,13 +52,15 @@ class FootnoteDefSyntax extends BlockSyntax {
       if (line.trim().isEmpty) {
         children.add(line);
         parser.advance();
-        shouldBeBlock = true;
+        consecutiveBlankLines++;
         continue;
+      } else if (consecutiveBlankLines >= 2) {
+        break;
       } else if (line.startsWith('    ')) {
         children.add(line.substring(4));
         parser.advance();
-        shouldBeBlock = false;
-      } else if (shouldBeBlock || _isBlock(syntaxList, line)) {
+        consecutiveBlankLines = 0;
+      } else if (consecutiveBlankLines > 0 || _isBlock(syntaxList, line)) {
         break;
       } else {
         children.add(line);
