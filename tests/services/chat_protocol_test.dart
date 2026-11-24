@@ -44,6 +44,39 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 
 void main() {
   group('OpenAIProtocol.buildRequest', () {
+    test('omits assistant history images while retaining a text placeholder',
+        () async {
+      final attachment = Attachment(
+        fileName: 'generated.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'assistant-image',
+        storagePath: '/nonexistent',
+        fileSize: 100,
+      )..base64Data = 'cGhvdG8=';
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'assistant',
+            content: 'Here is the image.',
+            attachments: [attachment],
+          ),
+        ],
+      );
+
+      final content = req.messages.single['content'] as List;
+      expect(
+        content.where((part) => (part as Map)['type'] == 'image_url'),
+        isEmpty,
+      );
+      expect(
+        content.cast<Map>().any((part) =>
+            part['type'] == 'text' &&
+            (part['text'] as String).contains('generated.png')),
+        isTrue,
+      );
+    });
+
     test('only emits image data URIs for supported image MIME types', () async {
       const supportedMimeTypes = {
         'image/png',

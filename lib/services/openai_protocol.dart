@@ -58,6 +58,13 @@ class OpenAIProtocol implements ChatProtocol {
           parts.add({'type': 'text', 'text': messageContent});
         }
         for (final att in msg.attachments) {
+          if (msg.role == 'assistant' && att.fileType == 'image') {
+            parts.add({
+              'type': 'text',
+              'text': '[此前生成的图片已省略: ${att.fileName}]',
+            });
+            continue;
+          }
           if (att.fileType == 'image') {
             final outcome = await readAttachmentBase64(att);
             switch (outcome.status) {
