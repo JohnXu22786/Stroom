@@ -194,6 +194,48 @@ void main() {
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
     });
 
+    testWidgets('ignores malformed width and preserves a valid height',
+        (WidgetTester tester) async {
+      final config = MarkdownConfig.defaultConfig;
+      final node = ImageNode(
+        {'src': 'missing.png', 'width': 'wide', 'height': '24'},
+        config,
+        WidgetVisitor(config: config),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.width, isNull);
+      expect(image.height, 24);
+    });
+
+    testWidgets('ignores malformed height before selecting a custom builder',
+        (WidgetTester tester) async {
+      Map<String, String>? callbackAttributes;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(builder: (url, attributes) {
+          callbackAttributes = attributes;
+          return const Text('custom image');
+        }),
+      ]);
+      final node = ImageNode(
+        {'src': 'image.png', 'width': '32', 'height': 'tall'},
+        config,
+        WidgetVisitor(config: config),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      expect(find.text('custom image'), findsOneWidget);
+      expect(callbackAttributes, containsPair('width', '32'));
+      expect(callbackAttributes, containsPair('height', 'tall'));
+    });
+
     testWidgets('keeps the default rendering when a direct error is null',
         (WidgetTester tester) async {
       var callbackCalled = false;
