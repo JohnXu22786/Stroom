@@ -193,7 +193,9 @@ class _TocWidgetState extends State<TocWidget> {
         if (itemBuilder != null) {
           final result = itemBuilder.call(TocItemBuilderData(
               index, currentToc, currentIndex, refreshIndex));
-          if (result != null) return result;
+          if (result != null) {
+            return wrapByAutoScroll(index, result, controller);
+          }
         }
         final node = currentToc.node.copy(
             headingConfig: _TocHeadingConfig(

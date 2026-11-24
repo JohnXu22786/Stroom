@@ -78,13 +78,84 @@ void main() {
     firstController.dispose();
   });
 
+  testWidgets('custom TOC rows scroll with the active Markdown heading', (
+    tester,
+  ) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    addTearDown(() {
+      VisibilityDetectorController.instance.updateInterval = const Duration(
+        milliseconds: 500,
+      );
+    });
+    final tocController = TocController();
+    final headings = List.generate(
+      12,
+      (index) => '${'#' * (index == 0 ? 1 : 2)} Heading $index',
+    ).join('\n\n');
+    var currentIndexAfterMarkdownScroll = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              SizedBox(
+                height: 100,
+                child: TocWidget(
+                  controller: tocController,
+                  itemBuilder: (data) {
+                    currentIndexAfterMarkdownScroll = data.currentIndex;
+                    return SizedBox(
+                      height: 40,
+                      child: Text('custom:${data.index}:${data.currentIndex}'),
+                    );
+                  },
+                ),
+              ),
+              SizedBox(
+                height: 180,
+                child: MarkdownWidget(
+                  data: headings,
+                  tocController: tocController,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tocController.tocList, hasLength(12));
+
+    final markdownState = tester.state<MarkdownWidgetState>(
+      find.byType(MarkdownWidget),
+    );
+    markdownState.controller.jumpTo(
+      markdownState.controller.position.maxScrollExtent,
+    );
+    await tester.pumpAndSettle();
+    expect(currentIndexAfterMarkdownScroll, greaterThan(0));
+    tocController.onIndexChanged(tocController.tocList.last.widgetIndex);
+    await tester.pumpAndSettle();
+
+    expect(find.text('custom:11:11'), findsOneWidget);
+    final tocViewport = tester.getRect(find.byType(TocWidget));
+    final activeRow = tester.getRect(find.text('custom:11:11'));
+    expect(activeRow.overlaps(tocViewport), isTrue);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    tocController.dispose();
+  });
+
   testWidgets('MarkdownWidget reconnects when its TOC controller changes', (
     tester,
   ) async {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
     addTearDown(() {
-      VisibilityDetectorController.instance.updateInterval =
-          const Duration(milliseconds: 500);
+      VisibilityDetectorController.instance.updateInterval = const Duration(
+        milliseconds: 500,
+      );
     });
     final firstController = TocController();
     final nextController = TocController();
