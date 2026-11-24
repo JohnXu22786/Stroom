@@ -285,4 +285,32 @@ void main() {
     expect(find.text('Name'), findsOneWidget);
     expect(find.text('Identifier'), findsOneWidget);
   });
+
+  testWidgets(
+    'custom separator is preserved when input has another delimiter',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: VoiceBatchAddPage(existingVoices: []),
+        ),
+      );
+
+      final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)))!;
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.voiceCustomSeparator).last);
+      await tester.pumpAndSettle();
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.first, '::');
+      await tester.enterText(fields.last, 'voice::id,tag');
+      await tester.pumpAndSettle();
+
+      expect(find.text('voice'), findsOneWidget);
+      expect(find.text('id,tag'), findsOneWidget);
+    },
+  );
 }
