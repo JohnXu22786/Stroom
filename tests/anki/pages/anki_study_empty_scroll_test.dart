@@ -32,6 +32,7 @@ class _DelayedAnswerAnkiActions extends AnkiActions {
   int failNextCardLoads = 0;
   final answerCompletions = <Completer<void>>[];
   final ratings = <int>[];
+  final submittedAnswers = <(int cardId, int rating)>[];
   final savedRatings = <(int cardId, int rating)>[];
   int getNextCardCalls = 0;
 
@@ -48,14 +49,20 @@ class _DelayedAnswerAnkiActions extends AnkiActions {
   @override
   Future<void> answerCard(int cardId, int rating, {int duration = 0}) {
     ratings.add(rating);
+    submittedAnswers.add((cardId, rating));
     final completion = Completer<void>();
     answerCompletions.add(completion);
     return completion.future;
   }
 
   void persistFirstAnswerThenFail() {
-    savedRatings.add((10, ratings.first));
+    savedRatings.add(submittedAnswers.first);
     answerCompletions.first.completeError(StateError('answer response lost'));
+  }
+
+  void failLastAnswerWithoutSaving(model.Card currentCard) {
+    cards.insert(0, currentCard);
+    answerCompletions.last.completeError(StateError('answer was not saved'));
   }
 }
 
@@ -231,6 +238,28 @@ void main() {
 
     expect(find.text('Última'), findsOneWidget);
     expect(actions.getNextCardCalls, 4);
+
+    await tester.tap(find.text('Mostrar respuesta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fácil'));
+    actions.failLastAnswerWithoutSaving(finalCard);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(actions.submittedAnswers.where((answer) => answer.$1 == 12), [
+      (12, 4),
+    ]);
+    expect(find.text('Última'), findsOneWidget);
+    final ratingButtons = tester.widgetList<ElevatedButton>(
+      find.byType(ElevatedButton),
+    );
+    expect(ratingButtons.every((button) => button.onPressed == null), isTrue);
+    expect(
+        find.text(AppLocalizations.of(
+          tester.element(find.byType(Scaffold)),
+        )!
+            .ankiBack),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

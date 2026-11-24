@@ -739,8 +739,8 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
             content: Text(error.toString()),
             action: _current?.id == answeredCardId
                 ? SnackBarAction(
-                    label: AppLocalizations.of(context)!.actionRetry,
-                    onPressed: () => _retryLoad(),
+                    label: AppLocalizations.of(context)!.ankiBack,
+                    onPressed: () => Navigator.of(context).maybePop(),
                   )
                 : null,
           ),
