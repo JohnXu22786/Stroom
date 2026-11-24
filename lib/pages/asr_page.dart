@@ -761,7 +761,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final labelPainter = TextPainter(
-              text: TextSpan(text: modelLabel, style: modelLabelStyle),
+              text: TextSpan(
+                text: modelLabel,
+                style:
+                    DefaultTextStyle.of(context).style.merge(modelLabelStyle),
+              ),
               textDirection: Directionality.of(context),
               textScaler: MediaQuery.textScalerOf(context),
             )..layout();

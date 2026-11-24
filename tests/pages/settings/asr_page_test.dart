@@ -51,9 +51,20 @@ Widget _buildModelSelectorLayoutTestApp({
   required Locale locale,
   required double textScale,
   ThemeMode themeMode = ThemeMode.light,
+  double? inheritedLetterSpacing,
 }) {
   final notifier = ProviderEntriesNotifier()
     ..state = ProviderEntriesState(entries: entries);
+  final lightTheme = ThemeData.light(useMaterial3: true);
+  final configuredLightTheme = inheritedLetterSpacing == null
+      ? lightTheme
+      : lightTheme.copyWith(
+          textTheme: lightTheme.textTheme.copyWith(
+            bodyMedium: lightTheme.textTheme.bodyMedium?.copyWith(
+              letterSpacing: inheritedLetterSpacing,
+            ),
+          ),
+        );
   return RepaintBoundary(
     key: _modelSelectorCaptureKey,
     child: ProviderScope(
@@ -62,7 +73,7 @@ Widget _buildModelSelectorLayoutTestApp({
         providerEntriesProvider.overrideWith((ref) => notifier),
       ],
       child: MaterialApp(
-        theme: ThemeData.light(useMaterial3: true),
+        theme: configuredLightTheme,
         darkTheme: ThemeData.dark(useMaterial3: true),
         themeMode: themeMode,
         locale: locale,
@@ -245,6 +256,34 @@ void main() {
           '../../../docs/ui-constrained-text-qa/asr-page-model-selector/asr-model-selector-pt-BR-640x800-scale1-light.png',
         ),
       );
+    });
+
+    testWidgets('reserves dropdown space for inherited label letter spacing', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(385, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildModelSelectorLayoutTestApp(
+          entries: [_createAsrEntry()],
+          locale: const Locale('pt', 'BR'),
+          textScale: 1,
+          inheritedLetterSpacing: 3,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final label = find.text('Modelo de reconhecimento');
+      final dropdown = find.byType(DropdownButton<int>);
+      expect(
+        tester.getRect(dropdown).top,
+        greaterThan(tester.getRect(label).bottom),
+      );
+      expect(tester.getRect(dropdown).width, greaterThanOrEqualTo(104));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('shows model selector when ASR provider has models', (
