@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/message_search_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -254,6 +255,50 @@ void main() {
         isTrue,
       );
     });
+
+    testWidgets(
+      'maps Unicode-expanded search offsets to the highlighted text',
+      (tester) async {
+        final conversation = Conversation(
+          id: 'unicode-search',
+          title: 'Unicode search',
+          messages: [
+            ChatMessage(
+              id: 'unicode-message',
+              role: 'user',
+              content: '\u0130x foo',
+              createdAt: DateTime(2025, 1, 1),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          createMessageSearchTestApp(conversations: [conversation]),
+        );
+        await tester.enterText(find.byType(TextField), 'x');
+        await tester.pumpAndSettle();
+
+        final results = MessageSearchPage.searchMessageContents([
+          conversation,
+        ], 'x');
+        final match = results.single.matches.single;
+        expect((match.matchStart, match.matchEnd), (1, 2));
+        expect(
+          match.message.content.substring(match.matchStart, match.matchEnd),
+          'x',
+        );
+
+        final snippet = tester
+            .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+            .singleWhere((text) => text.data == '\u0130x foo');
+        expect(snippet.data, '\u0130x foo');
+        final spans = snippet.highlightedText!.children!;
+        final highlighted = spans.where(
+          (span) => span.style?.backgroundColor == Colors.yellow,
+        );
+        expect(highlighted, hasLength(1));
+        expect(highlighted.single.toPlainText(), 'x');
+      },
+    );
 
     testWidgets('shows no results state when no matches', (tester) async {
       await tester.pumpWidget(createMessageSearchTestApp());
