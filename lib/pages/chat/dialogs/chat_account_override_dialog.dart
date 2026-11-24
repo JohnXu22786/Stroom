@@ -56,9 +56,8 @@ Future<String?> showChatAccountOverrideDialog({
                 ),
                 title: Text(account.displayName),
                 subtitle: Text(account.connectorType),
-                selectedTileColor: Theme.of(dialogContext)
-                    .colorScheme
-                    .secondaryContainer,
+                selectedTileColor:
+                    Theme.of(dialogContext).colorScheme.secondaryContainer,
                 iconColor: account.id == selectedAccountId
                     ? Theme.of(dialogContext).colorScheme.primary
                     : Theme.of(dialogContext).colorScheme.onSurfaceVariant,

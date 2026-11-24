@@ -120,9 +120,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (entry.type == 'mcp') {
       final config = entry.configs[configIndex];
-      final typeConfig = config.models.isNotEmpty
-          ? config.models[0].typeConfig
-          : null;
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) {
         await _editHttpToolConfig(configIndex);
         return;
@@ -274,9 +273,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       config.typeConfig = Map<String, dynamic>.from(config.typeConfig)
         ..['connectivityTest'] = content;
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -485,9 +482,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final index = configs.indexWhere((item) => item.id == config.id);
     if (index < 0) return;
     configs[index].enabled = value;
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -690,9 +685,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     for (var i = 0; i < groupIndices.length; i++) {
       configs[groupIndices[i]] = groupConfigs[i];
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -714,9 +707,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final providerName = config.providerName.isNotEmpty
         ? config.providerName
         : AppLocalizations.of(context)!.providerUnnamed;
-    final typeConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
@@ -797,8 +789,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
-          final groupId =
-              config.groupId ??
+          final groupId = config.groupId ??
               defaultMcpGroupIdForProvider(config.providerName);
           return groupId == group.id;
         }).toList(),
@@ -866,16 +857,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
-                  itemCount:
-                      (configsByGroup[group.id]?.length ?? 0) +
+                  itemCount: (configsByGroup[group.id]?.length ?? 0) +
                       (group.id == builtinSearchMcpGroupId ? 1 : 0),
                   onEnabledChanged: (value) =>
                       _setMcpGroupEnabled(group, value),
                   onAdd: () => _addConfig(groupId: group.id),
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
-                  onDelete: group.isBuiltin
-                      ? null
-                      : () => _deleteMcpGroup(group),
+                  onDelete:
+                      group.isBuiltin ? null : () => _deleteMcpGroup(group),
                   isExpanded: _expandedMcpGroups[group.id] ?? true,
                   onExpandedChanged: (expanded) =>
                       setState(() => _expandedMcpGroups[group.id] = expanded),
@@ -913,11 +902,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
                       _reorderMcpGroupConfigs(
-                        entry,
-                        group.id,
-                        oldIndex,
-                        newIndex,
-                      ),
+                    entry,
+                    group.id,
+                    oldIndex,
+                    newIndex,
+                  ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
                     borderRadius: BorderRadius.circular(16),
@@ -1006,67 +995,61 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         !entry.configs.any((config) => config.id == account.id)) {
       return;
     }
-    final configs = entry.configs
-        .map((config) {
-          if (config.id != account.id) return config;
-          final raw = config.toMap()
-            ..['providerName'] = account.displayName
-            ..['connectorType'] = account.connectorType
-            ..['authType'] = account.authType
-            ..['apiProtocol'] =
-                config.apiProtocol ??
-                apiProtocolFromLegacyEndpointType(config.endpointType)
-            ..['endpointType'] = legacyEndpointTypeForApiProtocol(
-              config.apiProtocol ??
-                  apiProtocolFromLegacyEndpointType(config.endpointType),
+    final configs = entry.configs.map((config) {
+      if (config.id != account.id) return config;
+      final raw = config.toMap()
+        ..['providerName'] = account.displayName
+        ..['connectorType'] = account.connectorType
+        ..['authType'] = account.authType
+        ..['apiProtocol'] = config.apiProtocol ??
+            apiProtocolFromLegacyEndpointType(config.endpointType)
+        ..['endpointType'] = legacyEndpointTypeForApiProtocol(
+          config.apiProtocol ??
+              apiProtocolFromLegacyEndpointType(config.endpointType),
+        )
+        ..['models'] = account.models.map((model) {
+          final modelConfig = Map<String, dynamic>.from(model.config)
+            ..['id'] = model.id
+            ..['name'] = model.displayName
+            ..['modelId'] = model.upstreamModelId
+            ..['capabilities'] = Map<String, dynamic>.from(
+              model.capabilities,
             )
-            ..['models'] = account.models.map((model) {
-              final modelConfig = Map<String, dynamic>.from(model.config)
-                ..['id'] = model.id
-                ..['name'] = model.displayName
-                ..['modelId'] = model.upstreamModelId
-                ..['capabilities'] = Map<String, dynamic>.from(
-                  model.capabilities,
-                )
-                // Legacy imports default these two capabilities to true.
-                // Mark account-edited rows so an omitted value stays unknown.
-                ..['accountCapabilitiesEdited'] = true;
-              final streaming = model.capabilities['streaming'];
-              if (streaming is bool) {
-                modelConfig['supportStream'] = streaming;
-              } else {
-                modelConfig.remove('supportStream');
-              }
-              final instruction = model.capabilities['instruction'];
-              if (instruction is bool) {
-                modelConfig['supportInstruction'] = instruction;
-              } else {
-                modelConfig.remove('supportInstruction');
-              }
-              return modelConfig;
-            }).toList();
-          final endpoint =
-              account.endpointConfig['baseUrl'] ??
-              account.endpointConfig['host'] ??
-              account.endpointConfig['apiBase'];
-          raw['host'] = endpoint is String ? endpoint : '';
-          for (final key in const ['baseUrl', 'apiBase']) {
-            final value = account.endpointConfig[key];
-            if (value is String && value.isNotEmpty) {
-              raw[key] = value;
-            } else {
-              raw.remove(key);
-            }
+            // Legacy imports default these two capabilities to true.
+            // Mark account-edited rows so an omitted value stays unknown.
+            ..['accountCapabilitiesEdited'] = true;
+          final streaming = model.capabilities['streaming'];
+          if (streaming is bool) {
+            modelConfig['supportStream'] = streaming;
+          } else {
+            modelConfig.remove('supportStream');
           }
-          return syncLegacyLlmAccountCredentialReference(
-            ProviderConfigItem.fromMap(raw),
-            account,
-          );
-        })
-        .toList(growable: false);
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+          final instruction = model.capabilities['instruction'];
+          if (instruction is bool) {
+            modelConfig['supportInstruction'] = instruction;
+          } else {
+            modelConfig.remove('supportInstruction');
+          }
+          return modelConfig;
+        }).toList();
+      final endpoint = account.endpointConfig['baseUrl'] ??
+          account.endpointConfig['host'] ??
+          account.endpointConfig['apiBase'];
+      raw['host'] = endpoint is String ? endpoint : '';
+      for (final key in const ['baseUrl', 'apiBase']) {
+        final value = account.endpointConfig[key];
+        if (value is String && value.isNotEmpty) {
+          raw[key] = value;
+        } else {
+          raw.remove(key);
+        }
+      }
+      return syncLegacyLlmAccountCredentialReference(
+        ProviderConfigItem.fromMap(raw),
+        account,
+      );
+    }).toList(growable: false);
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -1089,9 +1072,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (identical(next, state)) return;
     final notifier = ref.read(providerEntriesProvider.notifier);
     for (final updated in next.entries) {
-      final previous = state.entries
-          .where((entry) => entry.id == updated.id)
-          .firstOrNull;
+      final previous =
+          state.entries.where((entry) => entry.id == updated.id).firstOrNull;
       if (previous != null && !identical(previous, updated)) {
         await notifier.update(updated.id, updated);
       }
@@ -1156,7 +1138,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         isBuiltinWebSearch
                             ? AppLocalizations.of(context)!.providerBuiltinTools
                             : AppLocalizations.of(context)!
-                                  .providerConfigurationHeading,
+                                .providerConfigurationHeading,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -1188,7 +1170,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   child: Text(
                     isBuiltinWebSearch
                         ? AppLocalizations.of(context)!
-                              .providerBuiltinWebSearchEmpty
+                            .providerBuiltinWebSearchEmpty
                         : AppLocalizations.of(context)!.providerNoConfigsAdd,
                     style: const TextStyle(color: Colors.grey),
                     textAlign: TextAlign.center,
@@ -1255,13 +1237,17 @@ class _McpPageIntro extends StatelessWidget {
       children: [
         Text(
           AppLocalizations.of(context)!.providerServicesAndTools,
-          style: Theme.of(context).textTheme.titleLarge
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
               ?.copyWith(color: colorScheme.onSurface),
         ),
         const SizedBox(height: 4),
         Text(
           AppLocalizations.of(context)!.providerManageServicesDescription,
-          style: Theme.of(context).textTheme.bodySmall
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
               ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
@@ -1298,9 +1284,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1316,9 +1302,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                 ],
@@ -1326,7 +1312,9 @@ class _McpSectionHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 description,
-                style: Theme.of(context).textTheme.bodySmall
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
                     ?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
@@ -1360,14 +1348,18 @@ class _McpEmptyState extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             AppLocalizations.of(context)!.providerNoServices,
-            style: Theme.of(context).textTheme.titleSmall
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
                 ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
             AppLocalizations.of(context)!.providerAddServiceDescription,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
                 ?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
@@ -1441,9 +1433,8 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Keep provider rows neutral and consistent with the rest of settings.
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
     final l10n = AppLocalizations.of(context)!;
     final inheritedTextStyle = DefaultTextStyle.of(context).style;
     double measureLabel(String value, TextStyle style) {
@@ -1456,8 +1447,7 @@ class _McpConfigCard extends StatelessWidget {
       return painter.width;
     }
 
-    final titleGroupWidth =
-        measureLabel(
+    final titleGroupWidth = measureLabel(
           providerName,
           inheritedTextStyle.copyWith(
             fontWeight: FontWeight.w600,
@@ -1466,21 +1456,20 @@ class _McpConfigCard extends StatelessWidget {
         ) +
         (isVendor
             ? 6 +
-                  measureLabel(
-                    l10n.providerBuiltinBadge,
-                    inheritedTextStyle.copyWith(fontSize: 11),
-                  )
+                measureLabel(
+                  l10n.providerBuiltinBadge,
+                  inheritedTextStyle.copyWith(fontSize: 11),
+                )
             : 0) +
         (integrationType.isNotEmpty
             ? 6 +
-                  measureLabel(
-                    integrationType,
-                    inheritedTextStyle.copyWith(fontSize: 11),
-                  )
+                measureLabel(
+                  integrationType,
+                  inheritedTextStyle.copyWith(fontSize: 11),
+                )
             : 0);
     final iconButtonExtent = kMinInteractiveDimension;
-    final inlineActionsWidth =
-        (onSettings == null ? 0 : iconButtonExtent) +
+    final inlineActionsWidth = (onSettings == null ? 0 : iconButtonExtent) +
         (enabled == null || onEnabledChanged == null ? 0 : 60) +
         (onTest == null ? 0 : iconButtonExtent) +
         (onMove == null ? 0 : 8 + iconButtonExtent) +
@@ -1559,8 +1548,7 @@ class _McpConfigCard extends StatelessWidget {
                       constraints.maxWidth - leadingWidth - inlineActionsWidth;
                   // Only move controls after the measured label group is
                   // constrained and the remaining title slot is unreadable.
-                  final compact =
-                      titleGroupWidth > availableInlineTextWidth &&
+                  final compact = titleGroupWidth > availableInlineTextWidth &&
                       availableInlineTextWidth < minimumReadableTitleWidth;
                   final contentRow = Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1832,9 +1820,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
@@ -1872,7 +1859,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                               child: Text(
                                 AppLocalizations.of(context)!
                                     .providerMcpMasterLabel,
-                                style: Theme.of(context).textTheme.titleSmall
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
                                     ?.copyWith(
                                       color: cs.onSurface,
                                       fontWeight: FontWeight.w700,
@@ -1887,7 +1876,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                         Text(
                           AppLocalizations.of(context)!
                               .providerMcpMasterDescription,
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
@@ -1917,7 +1908,9 @@ class _McpStatusLabel extends StatelessWidget {
       enabled
           ? AppLocalizations.of(context)!.providerEnabled
           : AppLocalizations.of(context)!.providerDisabled,
-      style: Theme.of(context).textTheme.labelSmall
+      style: Theme.of(context)
+          .textTheme
+          .labelSmall
           ?.copyWith(color: cs.onSurfaceVariant),
     );
   }

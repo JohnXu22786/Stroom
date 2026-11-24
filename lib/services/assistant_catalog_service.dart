@@ -34,19 +34,19 @@ class DownloadedRemoteAssistant {
 /// only HTTPS and keeps catalog entries on the catalog's origin.
 class AssistantCatalogService {
   AssistantCatalogService()
-    : _addressLookup = null,
-      _client = createAssistantCatalogClient(
-        lookup: lookupAssistantCatalogAddresses,
-        isBlockedAddress: _isLocalHost,
-      );
+      : _addressLookup = null,
+        _client = createAssistantCatalogClient(
+          lookup: lookupAssistantCatalogAddresses,
+          isBlockedAddress: _isLocalHost,
+        );
 
   /// Creates a service with test transports; production callers should use the
   /// guarded default constructor.
   AssistantCatalogService.testing({
     required http.Client client,
     required AssistantCatalogAddressLookup addressLookup,
-  }) : _client = client,
-       _addressLookup = addressLookup;
+  })  : _client = client,
+        _addressLookup = addressLookup;
 
   final http.Client _client;
   final AssistantCatalogAddressLookup? _addressLookup;
@@ -114,7 +114,7 @@ class AssistantCatalogService {
 
   Future<List<int>> _getBytes(Uri uri, {Uri? expectedOrigin}) async {
     var requestUri = uri;
-    for (var redirectCount = 0; ; redirectCount++) {
+    for (var redirectCount = 0;; redirectCount++) {
       final lookup = _addressLookup;
       if (lookup != null) {
         final addresses = await lookup(requestUri.host);
@@ -237,8 +237,7 @@ class AssistantCatalogService {
     if (bytes.length != 16) return true;
 
     // IPv4-mapped IPv6 addresses use the same private-range policy as IPv4.
-    final isIpv4Mapped =
-        bytes.take(10).every((byte) => byte == 0) &&
+    final isIpv4Mapped = bytes.take(10).every((byte) => byte == 0) &&
         bytes[10] == 0xff &&
         bytes[11] == 0xff;
     if (isIpv4Mapped) return _isPrivateIpv4(bytes.sublist(12));
@@ -246,8 +245,7 @@ class AssistantCatalogService {
     final isIpv4Compatible = bytes.take(12).every((byte) => byte == 0);
     if (isIpv4Compatible) return true;
 
-    final isNat64LocalUse =
-        bytes[0] == 0x00 &&
+    final isNat64LocalUse = bytes[0] == 0x00 &&
         bytes[1] == 0x64 &&
         bytes[2] == 0xff &&
         bytes[3] == 0x9b &&
@@ -255,8 +253,7 @@ class AssistantCatalogService {
         bytes[5] == 0x01;
     if (isNat64LocalUse) return true;
 
-    final isNat64WellKnown =
-        bytes[0] == 0x00 &&
+    final isNat64WellKnown = bytes[0] == 0x00 &&
         bytes[1] == 0x64 &&
         bytes[2] == 0xff &&
         bytes[3] == 0x9b &&
@@ -272,8 +269,8 @@ class AssistantCatalogService {
     // ISATAP interface identifiers carry IPv4 in their final 32 bits.
     final isIsatap =
         (bytes[8] == 0 && bytes[9] == 0 || bytes[8] == 0x02 && bytes[9] == 0) &&
-        bytes[10] == 0x5e &&
-        bytes[11] == 0xfe;
+            bytes[10] == 0x5e &&
+            bytes[11] == 0xfe;
     if (isIsatap && _isPrivateIpv4(bytes.sublist(12))) return true;
 
     final isUnspecified = bytes.every((byte) => byte == 0);
@@ -284,14 +281,12 @@ class AssistantCatalogService {
     final isSiteLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0;
     final isMulticast = bytes[0] == 0xff;
     final isNonGlobalUnicast = (bytes[0] & 0xe0) != 0x20;
-    final isDiscardOnly =
-        bytes[0] == 0x01 &&
+    final isDiscardOnly = bytes[0] == 0x01 &&
         bytes[1] == 0x00 &&
         bytes.skip(2).take(6).every((byte) => byte == 0);
     final isIetfProtocolAssignment =
         bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] & 0xfe == 0;
-    final isDocumentation =
-        bytes[0] == 0x20 &&
+    final isDocumentation = bytes[0] == 0x20 &&
         bytes[1] == 0x01 &&
         bytes[2] == 0x0d &&
         bytes[3] == 0xb8;
@@ -336,12 +331,10 @@ class AssistantCatalogService {
         host.indexOf('::', compressionIndex + 2) >= 0) {
       return null;
     }
-    final leftText = compressionIndex < 0
-        ? host
-        : host.substring(0, compressionIndex);
-    final rightText = compressionIndex < 0
-        ? ''
-        : host.substring(compressionIndex + 2);
+    final leftText =
+        compressionIndex < 0 ? host : host.substring(0, compressionIndex);
+    final rightText =
+        compressionIndex < 0 ? '' : host.substring(compressionIndex + 2);
     final left = _parseIpv6Groups(leftText);
     final right = _parseIpv6Groups(rightText);
     if (left == null || right == null) return null;

@@ -231,7 +231,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
   final Map<String, StreamingFenceInfoCache> _streamingFenceInfoCaches = {};
   final Map<String, _StreamingSearchOccurrenceCount>
-  _streamingSearchOccurrenceCache = {};
+      _streamingSearchOccurrenceCache = {};
   final Map<String, _LiveMarkdownSearchPreview> _liveMarkdownSearchPreviews =
       {};
   final Map<String, int> _liveMarkdownAppendCounts = {};
@@ -567,9 +567,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingMsgId = activeId != null
-        ? ref.watch(streamingMsgIdProvider(activeId))
-        : null;
+    final streamingMsgId =
+        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
@@ -638,8 +637,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               flex: shortKeyboardViewport && _editingMessageId != null
                   ? 0
                   : shortKeyboardViewport
-                  ? 2
-                  : 1,
+                      ? 2
+                      : 1,
               fit: shortKeyboardViewport && _editingMessageId != null
                   ? FlexFit.loose
                   : FlexFit.tight,
@@ -652,8 +651,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       : null,
                   child: controller == null
                       ? TickerMode(
-                          enabled:
-                              TickerMode.of(context) &&
+                          enabled: TickerMode.of(context) &&
                               ChatTabVisibility.of(context),
                           child: const ChatConversationStateView(
                             state: ChatConversationState.loading,
@@ -718,8 +716,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 _pendingInitialScrollAdjustment)
                               Positioned.fill(
                                 child: TickerMode(
-                                  enabled:
-                                      TickerMode.of(context) &&
+                                  enabled: TickerMode.of(context) &&
                                       ChatTabVisibility.of(context),
                                   child: const ChatConversationStateView(
                                     state: ChatConversationState.loading,

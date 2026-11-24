@@ -39,9 +39,8 @@ const kMcpSearchToolNames = <String>{
 
 bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
   if (!entriesState.isLoaded) return false;
-  final mcpEntry = entriesState.entries
-      .where((entry) => entry.type == 'mcp')
-      .firstOrNull;
+  final mcpEntry =
+      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
   return mcpEntry?.enabled ?? true;
 }
 
@@ -115,8 +114,8 @@ class ChatAdapter {
   ChatAdapter({
     Future<AiGatewayFacade>? routingRuntime,
     Locale? Function()? localeOverride,
-  }) : _routingRuntime = routingRuntime,
-       _localeOverride = localeOverride;
+  })  : _routingRuntime = routingRuntime,
+        _localeOverride = localeOverride;
 
   /// Per-conversation ChatService instances, keyed by conversation ID.
   /// Each conversation gets its own independent HTTP connection, enabling
@@ -257,15 +256,14 @@ class ChatAdapter {
       final modelRef = hasBoundModelId
           ? assistant.modelId
           : assistant.defaultModelId?.isNotEmpty == true
-          ? assistant.defaultModelId
-          : null;
+              ? assistant.defaultModelId
+              : null;
       final resolved = _resolveAssistantModel(
         modelRef,
         entriesState,
         providerName: useDefaultRef ? assistant.defaultProviderName : null,
-        modelDisplayName: hasBoundModelId
-            ? assistant.modelId
-            : assistant.defaultModelName,
+        modelDisplayName:
+            hasBoundModelId ? assistant.modelId : assistant.defaultModelName,
       );
       if (resolved == null) return null;
       final (config, model) = resolved;
@@ -303,8 +301,7 @@ class ChatAdapter {
     if (group == null) return const [];
     final accounts = await gateway.accountManagement.listAccounts();
     final accountsById = {for (final account in accounts) account.id: account};
-    final modelOverride =
-        model.apiProtocolOverride ??
+    final modelOverride = model.apiProtocolOverride ??
         (model.endpointType == null
             ? null
             : apiProtocolFromLegacyEndpointType(model.endpointType));
@@ -366,9 +363,8 @@ class ChatAdapter {
     final modelEffort = findEffortParam(config.reasoningParams);
     var merged = mergeReasoningParams(providerParams, config.reasoningParams);
     if (modelEffort != null) {
-      merged = merged
-          .where((p) => !p.isEffortParam || p == modelEffort)
-          .toList();
+      merged =
+          merged.where((p) => !p.isEffortParam || p == modelEffort).toList();
     }
     final providerNames = providerParams
         .map((p) => p.paramName.trim())
@@ -380,8 +376,7 @@ class ChatAdapter {
         .toSet();
     return merged.map((p) {
       final name = p.paramName.trim();
-      final isProviderOrigin =
-          name.isNotEmpty &&
+      final isProviderOrigin = name.isNotEmpty &&
           providerNames.contains(name) &&
           !modelNames.contains(name);
       return isProviderOrigin ? p.copy() : p;
@@ -469,15 +464,14 @@ class ChatAdapter {
       final modelRef = hasBoundModelId
           ? assistant.modelId
           : assistant.defaultModelId?.isNotEmpty == true
-          ? assistant.defaultModelId
-          : null;
+              ? assistant.defaultModelId
+              : null;
       final resolved = _resolveAssistantModel(
         modelRef,
         entriesState,
         providerName: useDefaultRef ? assistant.defaultProviderName : null,
-        modelDisplayName: hasBoundModelId
-            ? assistant.modelId
-            : assistant.defaultModelName,
+        modelDisplayName:
+            hasBoundModelId ? assistant.modelId : assistant.defaultModelName,
       );
       if (resolved != null) {
         final (config, modelConfig) = resolved;
@@ -516,8 +510,7 @@ class ChatAdapter {
     if (existing != null) return existing;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _activeServices.putIfAbsent(convId, () {
-      final provider =
-          _cachedProviderConfig == null ||
+      final provider = _cachedProviderConfig == null ||
               !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
           ? _cachedProvider!
           : _providerForModel(
@@ -555,21 +548,17 @@ class ChatAdapter {
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // this conversation's adapter-set assistant template).
-    final conversationConfig = convId == null
-        ? null
-        : _assistantConfigsByConversation[convId];
-    final prompt =
-        assistant?.prompt ??
+    final conversationConfig =
+        convId == null ? null : _assistantConfigsByConversation[convId];
+    final prompt = assistant?.prompt ??
         (conversationConfig?.hasPrompt == true
             ? conversationConfig!.prompt
             : null);
-    final settings =
-        assistant?.settings ??
+    final settings = assistant?.settings ??
         (conversationConfig?.hasSettings == true
             ? conversationConfig!.settings
             : null);
-    final customParams =
-        assistant?.settings.customParameters ??
+    final customParams = assistant?.settings.customParameters ??
         (conversationConfig?.hasCustomParams == true
             ? conversationConfig!.customParams
             : null);
@@ -629,9 +618,8 @@ class ChatAdapter {
     String? providerName,
     String? modelDisplayName,
   }) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null) return null;
 
     final candidates = flattenProviderModels(
@@ -657,24 +645,24 @@ class ChatAdapter {
       final hasProvider = providerName != null && providerName.isNotEmpty;
       final providerMatches = hasProvider
           ? idMatches
-                .where((pair) => pair.$1.providerName == providerName)
-                .toList(growable: false)
+              .where((pair) => pair.$1.providerName == providerName)
+              .toList(growable: false)
           : const <(ProviderConfigItem, ModelConfig)>[];
       final groupReference = llmModelGroupMemberReferenceForModelId(id);
       final stableGroupMatches = groupReference == null
           ? const <(ProviderConfigItem, ModelConfig)>[]
           : idMatches
-                .where(
-                  (pair) =>
-                      llmModelGroupIdForConfig(pair.$1) ==
-                          groupReference.groupId &&
-                      pair.$2.id == groupReference.localModelId,
-                )
-                .toList(growable: false);
+              .where(
+                (pair) =>
+                    llmModelGroupIdForConfig(pair.$1) ==
+                        groupReference.groupId &&
+                    pair.$2.id == groupReference.localModelId,
+              )
+              .toList(growable: false);
       final preferred = hasProvider
           ? providerMatches.isNotEmpty
-                ? providerMatches
-                : stableGroupMatches
+              ? providerMatches
+              : stableGroupMatches
           : idMatches;
       if (preferred.length == 1) return preferred.single;
       if (preferred.length > 1) {
@@ -716,8 +704,7 @@ class ChatAdapter {
   }) {
     final targetConversationId = conversationId ?? convId;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
-    final provider =
-        _cachedProviderConfig == null ||
+    final provider = _cachedProviderConfig == null ||
             !isLlmModelGroupProviderConfig(_cachedProviderConfig!)
         ? _cachedProvider!
         : _providerForModel(
@@ -819,9 +806,8 @@ class ChatAdapter {
       providerConfig: providerConfig,
       endpointType: endpointType,
     );
-    final conversationConfig = convId == null
-        ? null
-        : _assistantConfigsByConversation[convId];
+    final conversationConfig =
+        convId == null ? null : _assistantConfigsByConversation[convId];
     final prompt = conversationConfig?.hasPrompt == true
         ? conversationConfig!.prompt
         : null;
@@ -878,7 +864,7 @@ class ChatAdapter {
   }
 
   final Map<String, _ConversationAssistantConfig>
-  _assistantConfigsByConversation = {};
+      _assistantConfigsByConversation = {};
 
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
@@ -889,9 +875,8 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     final firstModel = availableLlmModels(entriesState).firstOrNull;
     if (llmEntry == null || firstModel == null) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
@@ -932,9 +917,8 @@ class ChatAdapter {
     int configIndex,
     int modelIndex,
   ) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
@@ -1009,14 +993,12 @@ class ChatAdapter {
     if (routingRuntime != null && isLlmModelGroupProviderConfig(config)) {
       return LlmRoutedChatProvider(
         runtime: routingRuntime,
-        groupId:
-            llmModelGroupIdForConfig(config) ??
+        groupId: llmModelGroupIdForConfig(config) ??
             stableLlmModelGroupId(config.id, model.id),
         localModelId: model.id,
         endpointType: endpointType,
         apiProtocol: endpointType,
-        apiProtocolOverride:
-            model.apiProtocolOverride ??
+        apiProtocolOverride: model.apiProtocolOverride ??
             (model.endpointType == null
                 ? null
                 : apiProtocolFromLegacyEndpointType(model.endpointType)),
@@ -1132,9 +1114,8 @@ class ChatAdapter {
     Map<String, String>? customParamValues,
     String convId = '',
   }) {
-    final svc = convId.isNotEmpty
-        ? getOrCreateService(convId)
-        : currentChatService;
+    final svc =
+        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
     if (svc == null) {
       return Stream.error(
         appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
@@ -1185,7 +1166,7 @@ class ChatAdapter {
         _hasConfiguredAssistantModelReference(assistant)
             ? '助手配置的模型不可用，请检查助手模型选择。'
             : appLocalizationsForLocale(_localeOverride?.call())
-                  .chatMissingProvider,
+                .chatMissingProvider,
       );
     }
     return svc.sendStreamWithTools(
@@ -1285,9 +1266,8 @@ String? perConversationModelToRestore({
 /// Legacy configs need host/key; in-memory model-group configs intentionally
 /// omit both because the routed provider reads endpoint credentials at runtime.
 List<AvailableModel> availableLlmModels(ProviderEntriesState entriesState) {
-  final llmEntry = entriesState.entries
-      .where((e) => e.type == 'llm')
-      .firstOrNull;
+  final llmEntry =
+      entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
   if (llmEntry == null) return const [];
 
   final result = <AvailableModel>[];

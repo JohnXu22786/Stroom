@@ -53,11 +53,9 @@ extension _ChatPageSearchExt on _ChatPageState {
         }
       }
       final matches = <SearchMatch>[];
-      for (
-        var messageIndex = 0;
-        messageIndex < searchMessages.length;
-        messageIndex++
-      ) {
+      for (var messageIndex = 0;
+          messageIndex < searchMessages.length;
+          messageIndex++) {
         final message = searchMessages[messageIndex];
         final text = message.role == 'user'
             ? message.content
@@ -316,8 +314,7 @@ extension _ChatPageSearchExt on _ChatPageState {
   void _previousMatch() {
     if (_searchMatches.isEmpty) return;
     setState(() {
-      _currentMatchIndex =
-          (_currentMatchIndex - 1 + _searchMatches.length) %
+      _currentMatchIndex = (_currentMatchIndex - 1 + _searchMatches.length) %
           _searchMatches.length;
     });
     _scrollToCurrentMatch();
@@ -384,71 +381,69 @@ extension _ChatPageSearchExt on _ChatPageState {
   void _openGlobalSearch() {
     Navigator.of(context, rootNavigator: true)
         .push<Map<String, dynamic>>(
-          MaterialPageRoute(builder: (_) => const MessageSearchPage()),
-        )
+      MaterialPageRoute(builder: (_) => const MessageSearchPage()),
+    )
         .then((result) async {
-          if (!mounted || result == null) return;
-          final conversationId = result['conversationId'] as String?;
-          final query = result['query'] as String?;
-          final messageId = result['messageId'] as String?;
-          if (conversationId == null || query == null || query.isEmpty) return;
+      if (!mounted || result == null) return;
+      final conversationId = result['conversationId'] as String?;
+      final query = result['query'] as String?;
+      final messageId = result['messageId'] as String?;
+      if (conversationId == null || query == null || query.isEmpty) return;
 
-          // Step 1: Save current conversation's messages first (before switching)
-          await _saveMessages();
-          if (!mounted) return;
+      // Step 1: Save current conversation's messages first (before switching)
+      await _saveMessages();
+      if (!mounted) return;
 
-          // Step 2: If switching to a different conversation, select it.
-          // The activeConversationIdProvider listener schedules
-          // _loadConversationMessages in a post-frame callback, which clears
-          // search state. Schedule search activation in a subsequent
-          // post-frame callback so it runs AFTER that load completes.
-          final activeId = ref.read(activeConversationIdProvider);
-          if (conversationId != activeId) {
-            ref
-                .read(conversationsProvider.notifier)
-                .selectConversation(conversationId);
-          }
-          // Step 2b: Sync the session assistant selection to the opened
-          // conversation's bound assistant. Global search can open ANY
-          // conversation (not only the session assistant's), so the session
-          // selection would otherwise drift from what the chat actually uses —
-          // the topic page (which filters by the session selection) would then
-          // hide this conversation when navigating back. The conversation's
-          // binding is the source of truth; the session selection follows it.
-          // Guard: only sync when the binding still resolves to an existing
-          // assistant. A conversation whose assistant was deleted must NOT
-          // clobber the user's current selection with a dead id (the send path
-          // already falls back gracefully for such bindings).
-          final openedConv = ref
-              .read(conversationsProvider)
-              .where((c) => c.id == conversationId)
-              .firstOrNull;
-          final openedAssistantId = openedConv?.assistantId;
-          if (openedAssistantId != null &&
-              openedAssistantId.isNotEmpty &&
-              ref
-                  .read(assistantProvider)
-                  .any((a) => a.id == openedAssistantId)) {
-            ref.read(selectedAssistantIdProvider.notifier).state =
-                openedAssistantId;
-          }
+      // Step 2: If switching to a different conversation, select it.
+      // The activeConversationIdProvider listener schedules
+      // _loadConversationMessages in a post-frame callback, which clears
+      // search state. Schedule search activation in a subsequent
+      // post-frame callback so it runs AFTER that load completes.
+      final activeId = ref.read(activeConversationIdProvider);
+      if (conversationId != activeId) {
+        ref
+            .read(conversationsProvider.notifier)
+            .selectConversation(conversationId);
+      }
+      // Step 2b: Sync the session assistant selection to the opened
+      // conversation's bound assistant. Global search can open ANY
+      // conversation (not only the session assistant's), so the session
+      // selection would otherwise drift from what the chat actually uses —
+      // the topic page (which filters by the session selection) would then
+      // hide this conversation when navigating back. The conversation's
+      // binding is the source of truth; the session selection follows it.
+      // Guard: only sync when the binding still resolves to an existing
+      // assistant. A conversation whose assistant was deleted must NOT
+      // clobber the user's current selection with a dead id (the send path
+      // already falls back gracefully for such bindings).
+      final openedConv = ref
+          .read(conversationsProvider)
+          .where((c) => c.id == conversationId)
+          .firstOrNull;
+      final openedAssistantId = openedConv?.assistantId;
+      if (openedAssistantId != null &&
+          openedAssistantId.isNotEmpty &&
+          ref.read(assistantProvider).any((a) => a.id == openedAssistantId)) {
+        ref.read(selectedAssistantIdProvider.notifier).state =
+            openedAssistantId;
+      }
 
-          // Step 3: Schedule search activation for the next frame, after
-          // _loadConversationMessages has completed its synchronous part.
-          // Note: Setting _searchTextController.text triggers onChanged →
-          // _performSearch internally via the controller listener, so the
-          // explicit _performSearch call below is redundant but kept for
-          // safety in case the listener doesn't fire as expected.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            setState(() {
-              _searchTextController.text = query;
-              _isSearching = true;
-              _searchMode = SearchMode.current;
-            });
-            _performSearch(query, targetMessageId: messageId);
-          });
+      // Step 3: Schedule search activation for the next frame, after
+      // _loadConversationMessages has completed its synchronous part.
+      // Note: Setting _searchTextController.text triggers onChanged →
+      // _performSearch internally via the controller listener, so the
+      // explicit _performSearch call below is redundant but kept for
+      // safety in case the listener doesn't fire as expected.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _searchTextController.text = query;
+          _isSearching = true;
+          _searchMode = SearchMode.current;
         });
+        _performSearch(query, targetMessageId: messageId);
+      });
+    });
   }
 
   Widget _buildHighlightedText(
@@ -462,9 +457,8 @@ extension _ChatPageSearchExt on _ChatPageState {
         style: textColor != null ? TextStyle(color: textColor) : null,
       );
     }
-    final matches = _searchMatches
-        .where((m) => m.messageId == messageId)
-        .toList();
+    final matches =
+        _searchMatches.where((m) => m.messageId == messageId).toList();
     if (matches.isEmpty) {
       return SelectableText(
         text,
@@ -651,8 +645,8 @@ extension _ChatPageSearchExt on _ChatPageState {
               children: [
                 Flexible(
                   child: _buildModeChip(
-                    label: AppLocalizations.of(context)!
-                        .searchCurrentConversation,
+                    label:
+                        AppLocalizations.of(context)!.searchCurrentConversation,
                     selected: _searchMode == SearchMode.current,
                     onTap: () {
                       if (_searchMode != SearchMode.current) {

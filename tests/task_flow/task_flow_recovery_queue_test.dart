@@ -108,7 +108,7 @@ void main() {
   late StreamController<int> dispatchEvents;
   late Completer<FlowPayload> first;
   Future<FlowPayload> Function(TaskFlowBlock, FlowPayload, String, FlowSubTask)?
-  runner;
+      runner;
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('flow_queue_');
@@ -156,16 +156,14 @@ void main() {
 
   Future<void> waitForDispatchCount(int count) async {
     if (dispatches.length >= count) return;
-    await dispatchEvents.stream
-        .firstWhere((seen) => seen >= count)
-        .timeout(
-          _workerTimeout,
-          onTimeout: () {
-            throw TestFailure(
-              'Timed out waiting for $count dispatches; saw $dispatches',
-            );
-          },
+    await dispatchEvents.stream.firstWhere((seen) => seen >= count).timeout(
+      _workerTimeout,
+      onTimeout: () {
+        throw TestFailure(
+          'Timed out waiting for $count dispatches; saw $dispatches',
         );
+      },
+    );
   }
 
   tearDown(() async {
@@ -204,7 +202,9 @@ void main() {
     );
   });
 
-  test('pause preserves active step and resume advances only after checkpoint save', () async {
+  test(
+      'pause preserves active step and resume advances only after checkpoint save',
+      () async {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'one'),
@@ -259,7 +259,9 @@ void main() {
       reason: 'a rejected launch must not enter later durable snapshots',
     );
   });
-  test('snapshot retry preserves launch parameters after original is edited; latest retry is explicit', () async {
+  test(
+      'snapshot retry preserves launch parameters after original is edited; latest retry is explicit',
+      () async {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'one'),
@@ -469,7 +471,9 @@ void main() {
     },
   );
 
-  test('model snapshot freezes tuning but resolves credentials from the current provider identity', () {
+  test(
+      'model snapshot freezes tuning but resolves credentials from the current provider identity',
+      () {
     final model = ModelConfig(
       id: 'model',
       name: 'Original',
@@ -531,7 +535,9 @@ void main() {
     expect(snapshot.flow.blocks.single.params['modelRef'], isNotNull);
   });
 
-  test('startup history migration is idempotent and distinguishes unrun legacy steps', () async {
+  test(
+      'startup history migration is idempotent and distinguishes unrun legacy steps',
+      () async {
     final file = File('${dir.path}/task_flows/executions.json');
     await file.parent.create(recursive: true);
     await file.writeAsString(
@@ -578,7 +584,9 @@ void main() {
     );
   });
 
-  test('pause and cancel report save failure while retaining effective local control', () async {
+  test(
+      'pause and cancel report save failure while retaining effective local control',
+      () async {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'one'),
@@ -610,9 +618,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(dispatches, hasLength(1));
     expect(
-      container
-          .read(taskFlowExecutionsProvider)
-          .every(
+      container.read(taskFlowExecutionsProvider).every(
             (e) => e.status == FlowExecutionStatus.cancelled && e.error != null,
           ),
       isTrue,
@@ -848,31 +854,32 @@ void main() {
 
   test('X-API-Key custom parameter is never persisted in a snapshot', () {
     ProviderEntriesState providers(String secret) => ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'entry',
-          type: 'tts',
-          name: 'P',
-          configs: [
-            ProviderConfigItem(
-              id: 'config',
-              host: 'https://example.com',
-              key: 'provider-key',
-              models: [
-                ModelConfig(
-                  id: 'model',
-                  name: 'M',
-                  modelId: 'api',
-                  customParams: [
-                    CustomParam(paramName: 'X-API-Key', defaultValue: secret),
+          entries: [
+            ProviderEntry(
+              id: 'entry',
+              type: 'tts',
+              name: 'P',
+              configs: [
+                ProviderConfigItem(
+                  id: 'config',
+                  host: 'https://example.com',
+                  key: 'provider-key',
+                  models: [
+                    ModelConfig(
+                      id: 'model',
+                      name: 'M',
+                      modelId: 'api',
+                      customParams: [
+                        CustomParam(
+                            paramName: 'X-API-Key', defaultValue: secret),
+                      ],
+                    ),
                   ],
                 ),
               ],
             ),
           ],
-        ),
-      ],
-    );
+        );
     final flow = TaskFlowDefinition(
       blocks: [
         TaskFlowBlock(
@@ -1016,8 +1023,8 @@ void main() {
     final notifier = container.read(taskFlowExecutionsProvider.notifier);
     expect(await notifier.addExecutions([saved]), isTrue);
     assistants.loadFromJson(jsonEncode([activeAssistant.toMap()]));
-    runner = (block, input, id, step) async =>
-        const FlowPayload.text('finished');
+    runner =
+        (block, input, id, step) async => const FlowPayload.text('finished');
 
     await container
         .read(taskFlowExecutionServiceProvider)
@@ -1072,8 +1079,8 @@ void main() {
       );
 
       await FlowExecutionMigration.migrate();
-      final migrated = (jsonDecode(await file.readAsString()) as List)
-          .cast<Map>();
+      final migrated =
+          (jsonDecode(await file.readAsString()) as List).cast<Map>();
       expect(migrated.first, malformed);
       expect(migrated.last['batchIndex'], 0);
       final steps = (migrated.last['subTasks'] as List).cast<Map>();
@@ -1154,17 +1161,14 @@ void main() {
   );
 
   test('deleting a completed batch record cancels pending siblings', () async {
-    final flow = container
-        .read(taskFlowListProvider)
-        .single
-        .copyWith(
-          blocks: [
-            TaskFlowBlock(
-              typeKey: BlockType.chat,
-              params: {'assistantId': 'assistant', 'marker': 'original'},
-            ),
-          ],
-        );
+    final flow = container.read(taskFlowListProvider).single.copyWith(
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': 'assistant', 'marker': 'original'},
+        ),
+      ],
+    );
     container.read(taskFlowListProvider.notifier).state = [flow];
     final thirdEntered = Completer<void>();
     final releaseThird = Completer<FlowPayload>();
@@ -1274,7 +1278,9 @@ void main() {
       );
     },
   );
-  test('restored batch waits for its paused first input before dispatching the next', () async {
+  test(
+      'restored batch waits for its paused first input before dispatching the next',
+      () async {
     final notifier = container.read(taskFlowExecutionsProvider.notifier);
     final flow = container.read(taskFlowListProvider).single;
     final snapshot = FlowLaunchSnapshot.capture(
@@ -1283,21 +1289,21 @@ void main() {
       [Assistant(id: 'assistant', name: 'A', prompt: 'P')],
     );
     List<FlowSubTask> steps(TaskStatus firstStatus) => [
-      FlowSubTask(
-        blockTypeKey: 'chat',
-        blockLabel: 'Chat',
-        subTaskId: 'pending_chat_0',
-        subTaskType: 'background',
-        status: firstStatus,
-      ),
-      FlowSubTask(
-        blockTypeKey: 'chat',
-        blockLabel: 'Chat',
-        subTaskId: 'pending_chat_1',
-        subTaskType: 'background',
-        status: TaskStatus.waiting,
-      ),
-    ];
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Chat',
+            subTaskId: 'pending_chat_0',
+            subTaskType: 'background',
+            status: firstStatus,
+          ),
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Chat',
+            subTaskId: 'pending_chat_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ];
     await notifier.addExecutions([
       TaskFlowExecution(
         id: 'paused-first',

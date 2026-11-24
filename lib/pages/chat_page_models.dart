@@ -40,31 +40,30 @@ extension _ChatPageModelsExt on _ChatPageState {
 
   void _navigateToProviderConfig() {
     final entriesState = ref.read(providerEntriesProvider);
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry != null) {
       Navigator.of(context, rootNavigator: true)
           .push(
-            MaterialPageRoute(
-              builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
-            ),
-          )
+        MaterialPageRoute(
+          builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
+        ),
+      )
           .then((_) async {
-            if (!mounted) return;
-            // 供应商页面的模型列表可能与这里共享拖动排序（model_order），
-            // 返回时必须先重新加载保存的顺序，再按新顺序重算选中索引。
-            try {
-              final prefs = await SharedPreferences.getInstance();
-              if (!mounted) return;
-              setState(
-                () => _savedModelOrder = prefs.getStringList('model_order'),
-              );
-            } catch (e) {
-              debugPrint('_navigateToProviderConfig reload order failed: $e');
-            }
-            if (mounted) _configureAdapter();
-          });
+        if (!mounted) return;
+        // 供应商页面的模型列表可能与这里共享拖动排序（model_order），
+        // 返回时必须先重新加载保存的顺序，再按新顺序重算选中索引。
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          if (!mounted) return;
+          setState(
+            () => _savedModelOrder = prefs.getStringList('model_order'),
+          );
+        } catch (e) {
+          debugPrint('_navigateToProviderConfig reload order failed: $e');
+        }
+        if (mounted) _configureAdapter();
+      });
     }
   }
 
@@ -132,9 +131,7 @@ extension _ChatPageModelsExt on _ChatPageState {
     // （模型ID + 供应商名）：显示名重命名后该记录仍能解析回同一模型。
     final convId = ref.read(activeConversationIdProvider);
     if (convId != null) {
-      ref
-          .read(conversationsProvider.notifier)
-          .updateLastUsedModel(
+      ref.read(conversationsProvider.notifier).updateLastUsedModel(
             convId,
             selectedName,
             modelId: model.modelId,
@@ -199,12 +196,10 @@ extension _ChatPageModelsExt on _ChatPageState {
     setState(() {
       _nextRequestAccountId = selectedAccount?.id;
       _nextRequestAccountName = selectedAccount?.displayName;
-      _nextRequestAccountConversationId = selectedAccount == null
-          ? null
-          : conversationId;
-      _nextRequestAccountModelIdentity = selectedAccount == null
-          ? null
-          : selectedModelIdentity;
+      _nextRequestAccountConversationId =
+          selectedAccount == null ? null : conversationId;
+      _nextRequestAccountModelIdentity =
+          selectedAccount == null ? null : selectedModelIdentity;
     });
   }
 
@@ -212,9 +207,9 @@ extension _ChatPageModelsExt on _ChatPageState {
     final conversation = conversationId == null
         ? null
         : ref
-              .read(conversationsProvider)
-              .where((item) => item.id == conversationId)
-              .firstOrNull;
+            .read(conversationsProvider)
+            .where((item) => item.id == conversationId)
+            .firstOrNull;
     return resolveAssistantForSend(
       conversationAssistantId: conversation?.assistantId,
       sessionAssistant: ref.read(selectedAssistantProvider),
@@ -357,9 +352,9 @@ extension _ChatPageModelsExt on _ChatPageState {
     final convId = ref.read(activeConversationIdProvider);
     final conv = convId != null
         ? ref
-              .read(conversationsProvider)
-              .where((c) => c.id == convId)
-              .firstOrNull
+            .read(conversationsProvider)
+            .where((c) => c.id == convId)
+            .firstOrNull
         : null;
 
     // 1. Per-conversation model record (user choice or seeded assistant
@@ -417,11 +412,12 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final allSettings = _loadPerModelSettingsMap(prefs);
     final modelSettings = allSettings[modelName];
-    if (modelSettings case {
-      'reasoningEnabled': bool re,
-      'reasoningEffort': String refEff,
-      'reasoningParamValues': Map<String, dynamic> rpv,
-    }) {
+    if (modelSettings
+        case {
+          'reasoningEnabled': bool re,
+          'reasoningEffort': String refEff,
+          'reasoningParamValues': Map<String, dynamic> rpv,
+        }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
       // Restore reasoning effort enabled state (with default false)
       final bool ree =
@@ -459,19 +455,16 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEnabledProvider.notifier).state =
           reasoningToggle?.enabled ?? reasoningValues.isNotEmpty;
       ref.read(reasoningEffortEnabledProvider.notifier).state = effortEnabled;
-      ref.read(reasoningEffortProvider.notifier).state =
-          effortParam != null &&
+      ref.read(reasoningEffortProvider.notifier).state = effortParam != null &&
               (reasoningValues[effortParam.paramName]?.isNotEmpty ?? false)
           ? reasoningValues[effortParam.paramName]!
           : 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = reasoningValues;
     }
-    final savedCustomValues = modelSettings is Map
-        ? modelSettings['customParamValues']
-        : null;
-    ref
-        .read(customParamValuesProvider.notifier)
-        .state = savedCustomValues is Map
+    final savedCustomValues =
+        modelSettings is Map ? modelSettings['customParamValues'] : null;
+    ref.read(customParamValuesProvider.notifier).state = savedCustomValues
+            is Map
         ? savedCustomValues.map(
             (key, value) => MapEntry(key.toString(), value.toString()),
           )
@@ -484,13 +477,13 @@ extension _ChatPageModelsExt on _ChatPageState {
             final value = param.type == 'json'
                 ? param.defaultValue
                 : param.options.isNotEmpty
-                ? param.options.first
-                : param.optionOrder.isEmpty &&
-                      param.defaultValue.trim().isNotEmpty
-                ? param.defaultValue
-                : param.type == 'boolean'
-                ? 'true'
-                : '';
+                    ? param.options.first
+                    : param.optionOrder.isEmpty &&
+                            param.defaultValue.trim().isNotEmpty
+                        ? param.defaultValue
+                        : param.type == 'boolean'
+                            ? 'true'
+                            : '';
             if (value.isNotEmpty) values[name] = value;
             return values;
           });
