@@ -361,6 +361,8 @@ class LinkSyntax extends DelimiterSyntax {
           break;
 
         case $space:
+        case $tab:
+        case $vt:
         case $lf:
         case $cr:
         case $ff:
