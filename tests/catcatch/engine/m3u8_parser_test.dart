@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/m3u8_parser.dart';
 
@@ -103,5 +105,61 @@ shared.ts
         rangeLength: 3,
       ),
     ]);
+  });
+
+  test('resolves protocol-relative segments against the playlist scheme',
+      () async {
+    const playlist = '''
+#EXTM3U
+#EXTINF:4.0,
+//cdn.example:8443/video/chapter%2Fone.ts
+#EXT-X-ENDLIST
+''';
+
+    final parsed = await M3U8Parser.parsePlaylistWithDetails(
+      playlist,
+      'https://source.example/hls/playlist.m3u8',
+    );
+
+    expect(parsed.resources, [
+      'https://cdn.example:8443/video/chapter%2Fone.ts',
+    ]);
+  });
+
+  test('fetches a protocol-relative variant from its own host', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final requests = <String>[];
+    final serverSubscription = server.listen((request) async {
+      requests.add(request.uri.path);
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.text
+        ..write('''
+#EXTM3U
+#EXTINF:4.0,
+segment%2Fone.ts
+#EXT-X-ENDLIST
+''');
+      await request.response.close();
+    });
+
+    try {
+      final parsed = await M3U8Parser.parsePlaylistWithDetails(
+        '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+//127.0.0.1:${server.port}/child/playlist.m3u8
+''',
+        'http://source.example/master.m3u8',
+      );
+
+      expect(requests, ['/child/playlist.m3u8']);
+      expect(parsed.resources, [
+        'http://127.0.0.1:${server.port}/child/segment%2Fone.ts',
+      ]);
+    } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
   });
 }

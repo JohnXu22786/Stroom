@@ -315,22 +315,9 @@ class M3U8Parser {
 
   /// 相对路径 → 绝对 URL
   static String _resolveUrl(String url, String baseUrl) {
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
     final uri = Uri.tryParse(baseUrl);
     if (uri == null) return url;
-
-    if (url.startsWith('/')) {
-      return '${uri.scheme}://${uri.host}${_portPart(uri)}$url';
-    }
-    final base = uri.toString();
-    final lastSlash = base.lastIndexOf('/');
-    final dir = lastSlash >= 0 ? base.substring(0, lastSlash + 1) : '$base/';
-    return '$dir$url';
-  }
-
-  static String _portPart(Uri uri) {
-    if (uri.port == 80 || uri.port == 443 || uri.port <= 0) return '';
-    return ':${uri.port}';
+    return uri.resolve(url).toString();
   }
 
   /// 通过 HTTP 获取 URL 内容（用于递归解析子播放列表）
