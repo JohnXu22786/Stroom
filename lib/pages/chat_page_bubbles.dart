@@ -1036,6 +1036,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                             '$messageId:${s.chunkIndex}'] ??
                         0,
                     fullTextOnInvalidation: materializeMarkdownChunk,
+                    activeConfigBuilderKey: (isDark, isStreaming),
                     activeConfigBuilder: (activeText) =>
                         buildMessageMarkdownConfig(
                       isDark: isDark,
@@ -1248,6 +1249,9 @@ extension _ChatPageBubblesExt on _ChatPageState {
                                   : 0,
                           fullTextOnInvalidation: isActiveStreamingMarkdown
                               ? materializeActiveMarkdownChunk
+                              : null,
+                          activeConfigBuilderKey: isActiveStreamingMarkdown
+                              ? (isDark, isStreaming)
                               : null,
                           activeConfigBuilder: isActiveStreamingMarkdown
                               ? (activeText) => buildMessageMarkdownConfig(

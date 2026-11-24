@@ -176,16 +176,29 @@ class MarkdownConfig {
   ///the key of [_tag2Config] is tag, the value is [WidgetConfig]
   final Map<String, WidgetConfig> _tag2Config = {};
 
-  MarkdownConfig({List<WidgetConfig> configs = const []}) {
+  /// Stable identity for custom config values that affect rendering but are
+  /// not represented by the built-in config fields.
+  final Object? incrementalConfigKey;
+
+  MarkdownConfig({
+    List<WidgetConfig> configs = const [],
+    this.incrementalConfigKey,
+  }) {
     for (final config in configs) {
       _tag2Config[config.tag] = config;
     }
   }
 
-  MarkdownConfig copy({List<WidgetConfig> configs = const []}) {
+  MarkdownConfig copy({
+    List<WidgetConfig> configs = const [],
+    Object? incrementalConfigKey,
+  }) {
     for (final config in configs) {
       _tag2Config[config.tag] = config;
     }
-    return MarkdownConfig(configs: _tag2Config.values.toList());
+    return MarkdownConfig(
+      configs: _tag2Config.values.toList(),
+      incrementalConfigKey: incrementalConfigKey ?? this.incrementalConfigKey,
+    );
   }
 }

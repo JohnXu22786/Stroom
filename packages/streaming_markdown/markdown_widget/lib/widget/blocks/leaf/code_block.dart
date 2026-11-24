@@ -147,6 +147,10 @@ class PreConfig implements LeafConfig {
   final Map<String, TextStyle> theme;
   final String language;
 
+  /// Stable identity for generated streaming builders whose closures capture
+  /// changing stream input.
+  final Object? incrementalConfigKey;
+
   const PreConfig({
     this.padding = const EdgeInsets.all(16.0),
     this.decoration = const BoxDecoration(
@@ -160,6 +164,7 @@ class PreConfig implements LeafConfig {
     this.language = 'dart',
     this.wrapper,
     this.builder,
+    this.incrementalConfigKey,
   }) : assert(builder == null || wrapper == null);
 
   static PreConfig get darkConfig => const PreConfig(
@@ -181,6 +186,7 @@ class PreConfig implements LeafConfig {
     CodeBuilder? builder,
     Map<String, TextStyle>? theme,
     String? language,
+    Object? incrementalConfigKey,
   }) {
     // Supplying one rendering callback switches modes and clears the other.
     final copiedBuilder = builder ?? (wrapper == null ? this.builder : null);
@@ -195,6 +201,9 @@ class PreConfig implements LeafConfig {
       builder: copiedBuilder,
       theme: theme ?? this.theme,
       language: language ?? this.language,
+      incrementalConfigKey: builder != null
+          ? incrementalConfigKey
+          : incrementalConfigKey ?? this.incrementalConfigKey,
     );
   }
 
