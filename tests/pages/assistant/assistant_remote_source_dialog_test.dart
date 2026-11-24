@@ -35,7 +35,7 @@ void main() {
                 onPressed: () => showAssistantRemoteSourceDialog(
                   context,
                   ref,
-                  serviceFactory: () => AssistantCatalogService(
+                  serviceFactory: () => AssistantCatalogService.testing(
                     client: MockClient((request) {
                       if (request.url.host == 'first.example.com') {
                         if (!firstRequestStarted.isCompleted) {
@@ -55,6 +55,7 @@ void main() {
                         ),
                       );
                     }),
+                    addressLookup: _publicAddressLookup,
                   ),
                 ),
                 child: const Text('open remote source'),
@@ -126,7 +127,7 @@ void main() {
                 onPressed: () => showAssistantRemoteSourceDialog(
                   context,
                   ref,
-                  serviceFactory: () => AssistantCatalogService(
+                  serviceFactory: () => AssistantCatalogService.testing(
                     client: MockClient((request) async {
                       if (!downloadStarted.isCompleted) {
                         downloadStarted.complete();
@@ -138,6 +139,7 @@ void main() {
                         request: request,
                       );
                     }),
+                    addressLookup: _publicAddressLookup,
                   ),
                 ),
                 child: const Text('open remote source'),
@@ -208,7 +210,7 @@ void main() {
                 onPressed: () => showAssistantRemoteSourceDialog(
                   context,
                   ref,
-                  serviceFactory: () => AssistantCatalogService(
+                  serviceFactory: () => AssistantCatalogService.testing(
                     client: MockClient((request) async {
                       if (!downloadStarted.isCompleted) {
                         downloadStarted.complete();
@@ -220,6 +222,7 @@ void main() {
                         request: request,
                       );
                     }),
+                    addressLookup: _publicAddressLookup,
                   ),
                 ),
                 child: const Text('open remote source'),
@@ -326,3 +329,6 @@ void main() {
     );
   });
 }
+
+Future<List<String>> _publicAddressLookup(String _) async =>
+    const ['93.184.216.34'];

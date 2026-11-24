@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
+import 'assistant_catalog_transport.dart';
 import '../models/remote_assistant_catalog.dart';
 
 const String kDefaultAssistantCatalogUrl = String.fromEnvironment(
@@ -30,10 +31,23 @@ class DownloadedRemoteAssistant {
 /// Fetches Stroom catalogs and assistant definitions. It intentionally accepts
 /// only HTTPS and keeps catalog entries on the catalog's origin.
 class AssistantCatalogService {
-  AssistantCatalogService({http.Client? client})
-      : _client = client ?? http.Client();
+  AssistantCatalogService()
+      : _addressLookup = null,
+        _client = createAssistantCatalogClient(
+          lookup: lookupAssistantCatalogAddresses,
+          isBlockedAddress: _isLocalHost,
+        );
+
+  /// Creates a service with test transports; production callers should use the
+  /// guarded default constructor.
+  AssistantCatalogService.testing({
+    required http.Client client,
+    required AssistantCatalogAddressLookup addressLookup,
+  })  : _client = client,
+        _addressLookup = addressLookup;
 
   final http.Client _client;
+  final AssistantCatalogAddressLookup? _addressLookup;
 
   void close() => _client.close();
 
@@ -63,7 +77,8 @@ class AssistantCatalogService {
     final actualHash = sha256.convert(bytes).toString();
     if (actualHash != entry.sha256) {
       throw const FormatException(
-          'Assistant file SHA-256 does not match catalog.');
+        'Assistant file SHA-256 does not match catalog.',
+      );
     }
     final source = utf8.decode(bytes, allowMalformed: false);
     final definition = RemoteAssistantDefinition.parse(
@@ -96,29 +111,67 @@ class AssistantCatalogService {
   }
 
   Future<List<int>> _getBytes(Uri uri, {Uri? expectedOrigin}) async {
-    final response = await _client.get(
-      uri,
-      headers: const {
-        'Accept':
-            'application/json, application/yaml, text/markdown, text/plain'
-      },
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw FormatException(
-          'Download failed with HTTP ${response.statusCode}.');
+    var requestUri = uri;
+    for (var redirectCount = 0;; redirectCount++) {
+      final lookup = _addressLookup;
+      if (lookup != null) {
+        final addresses = await lookup(requestUri.host);
+        if (addresses.isEmpty || addresses.any(_isLocalHost)) {
+          throw const FormatException(
+            'Assistant host resolved to a blocked network address.',
+          );
+        }
+      }
+      final request = http.Request('GET', requestUri)
+        ..followRedirects = false
+        ..headers.addAll(const {
+          'Accept':
+              'application/json, application/yaml, text/markdown, text/plain',
+        });
+      final response = await http.Response.fromStream(
+        await _client.send(request),
+      );
+      if (_isRedirect(response.statusCode)) {
+        if (redirectCount >= 5) {
+          throw const FormatException('Too many assistant download redirects.');
+        }
+        final location = response.headers['location'];
+        if (location == null || location.trim().isEmpty) {
+          throw const FormatException(
+            'Assistant download redirect is missing its location.',
+          );
+        }
+        final redirectUri = requestUri.resolve(location);
+        _validateHttpsUri(redirectUri.toString());
+        if (expectedOrigin != null &&
+            !_sameOrigin(expectedOrigin, redirectUri)) {
+          throw const FormatException(
+            'HTTPS redirects must stay on the same origin.',
+          );
+        }
+        requestUri = redirectUri;
+        continue;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw FormatException(
+          'Download failed with HTTP ${response.statusCode}.',
+        );
+      }
+      if (response.bodyBytes.length > _maxCatalogBytes) {
+        throw const FormatException(
+          'Remote assistant files may not exceed 1 MiB.',
+        );
+      }
+      return response.bodyBytes;
     }
-    if (response.bodyBytes.length > _maxCatalogBytes) {
-      throw const FormatException(
-          'Remote assistant files may not exceed 1 MiB.');
-    }
-    final finalUri = response.request?.url ?? uri;
-    if (finalUri.scheme != 'https' ||
-        (expectedOrigin != null && !_sameOrigin(expectedOrigin, finalUri))) {
-      throw const FormatException(
-          'HTTPS redirects must stay on the same origin.');
-    }
-    return response.bodyBytes;
   }
+
+  static bool _isRedirect(int statusCode) =>
+      statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308;
 
   static Uri _validateHttpsUri(String value) {
     final uri = Uri.tryParse(value.trim());
@@ -128,7 +181,8 @@ class AssistantCatalogService {
         uri.userInfo.isNotEmpty ||
         _isLocalHost(uri.host)) {
       throw const FormatException(
-          'Assistant URLs must be absolute HTTPS URLs.');
+        'Assistant URLs must be absolute HTTPS URLs.',
+      );
     }
     return uri;
   }
@@ -164,6 +218,37 @@ class AssistantCatalogService {
         bytes[11] == 0xff;
     if (isIpv4Mapped) return _isPrivateIpv4(bytes.sublist(12));
 
+    final isIpv4Compatible = bytes.take(12).every((byte) => byte == 0);
+    if (isIpv4Compatible) return true;
+
+    final isNat64LocalUse = bytes[0] == 0x00 &&
+        bytes[1] == 0x64 &&
+        bytes[2] == 0xff &&
+        bytes[3] == 0x9b &&
+        bytes[4] == 0x00 &&
+        bytes[5] == 0x01;
+    if (isNat64LocalUse) return true;
+
+    final isNat64WellKnown = bytes[0] == 0x00 &&
+        bytes[1] == 0x64 &&
+        bytes[2] == 0xff &&
+        bytes[3] == 0x9b &&
+        bytes.skip(4).take(8).every((byte) => byte == 0);
+    if (isNat64WellKnown) return _isPrivateIpv4(bytes.sublist(12));
+
+    // Teredo and 6to4 route through transition relays.
+    final isTeredo =
+        bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0 && bytes[3] == 0;
+    final isSixToFour = bytes[0] == 0x20 && bytes[1] == 0x02;
+    if (isTeredo || isSixToFour) return true;
+
+    // ISATAP interface identifiers carry IPv4 in their final 32 bits.
+    final isIsatap =
+        (bytes[8] == 0 && bytes[9] == 0 || bytes[8] == 0x02 && bytes[9] == 0) &&
+            bytes[10] == 0x5e &&
+            bytes[11] == 0xfe;
+    if (isIsatap && _isPrivateIpv4(bytes.sublist(12))) return true;
+
     final isUnspecified = bytes.every((byte) => byte == 0);
     final isLoopback =
         bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
@@ -171,17 +256,31 @@ class AssistantCatalogService {
     final isLinkLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80;
     final isSiteLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0;
     final isMulticast = bytes[0] == 0xff;
+    final isNonGlobalUnicast = (bytes[0] & 0xe0) != 0x20;
+    final isDiscardOnly = bytes[0] == 0x01 &&
+        bytes[1] == 0x00 &&
+        bytes.skip(2).take(6).every((byte) => byte == 0);
+    final isIetfProtocolAssignment =
+        bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] & 0xfe == 0;
     final isDocumentation = bytes[0] == 0x20 &&
         bytes[1] == 0x01 &&
         bytes[2] == 0x0d &&
         bytes[3] == 0xb8;
-    return isUnspecified ||
+    final isDocumentation3fff =
+        bytes[0] == 0x3f && bytes[1] == 0xff && bytes[2] & 0xf0 == 0;
+    final isSegmentRouting = bytes[0] == 0x5f && bytes[1] == 0x00;
+    return isNonGlobalUnicast ||
+        isUnspecified ||
         isLoopback ||
         isUniqueLocal ||
         isLinkLocal ||
         isSiteLocal ||
         isMulticast ||
-        isDocumentation;
+        isDiscardOnly ||
+        isIetfProtocolAssignment ||
+        isDocumentation ||
+        isDocumentation3fff ||
+        isSegmentRouting;
   }
 
   static bool _isPrivateIpv4(List<int> octets) =>
@@ -285,7 +384,8 @@ class AssistantCatalogService {
       return kRemoteAssistantMarkdownFormat;
     }
     throw const FormatException(
-        'URL must point to a .json, .yaml, .yml, or .md file.');
+      'URL must point to a .json, .yaml, .yml, or .md file.',
+    );
   }
 
   static void _validateCatalogMatch(
@@ -298,7 +398,8 @@ class AssistantCatalogService {
         entry.description != definition.description ||
         entry.emoji != definition.emoji) {
       throw const FormatException(
-          'Catalog metadata does not match assistant file.');
+        'Catalog metadata does not match assistant file.',
+      );
     }
   }
 }
