@@ -75,6 +75,8 @@ class ChatStreamManager {
   final Map<String, _ConversationStreamState> _streams = {};
   final Map<String, Future<bool> Function(ChatMessage)>
       _pendingContinuationHandlers = {};
+  final Map<String, int> _titleGenerationByConversation = {};
+  final Map<String, int> _latestCommittedTitleGenerationByConversation = {};
 
   /// Pages currently displaying a specific stream. A completed stream only
   /// needs its provider buffers retained while at least one page is attached.

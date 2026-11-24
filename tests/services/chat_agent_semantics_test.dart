@@ -238,6 +238,64 @@ class _RecordingProvider extends BaseChatProvider {
       };
 }
 
+class _GatedTitleProvider extends _RecordingProvider {
+  final List<Completer<void>> titleGates;
+  final List<Completer<void>> titleRequestsStarted;
+  final List<Completer<void>> titleResponsesFinished;
+  final List<String> titleResults;
+  int _titleCallCount = 0;
+
+  _GatedTitleProvider(
+    super.rounds, {
+    required this.titleGates,
+    required this.titleRequestsStarted,
+    required this.titleResponsesFinished,
+    required this.titleResults,
+  });
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) async* {
+    final isTitleRequest = messages.any((message) =>
+        message['role'] == 'system' &&
+        (message['content'] as String).contains('标题生成器'));
+    if (!isTitleRequest) {
+      yield* super.chatStream(
+        messages,
+        model: model,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
+        tools: tools,
+        extraParams: extraParams,
+        cancelToken: cancelToken,
+        system: system,
+      );
+      return;
+    }
+
+    final index = _titleCallCount++;
+    titleRequestsStarted[index].complete();
+    await titleGates[index].future;
+    try {
+      yield AIStreamEvent(titleResults[index]);
+    } finally {
+      titleResponsesFinished[index].complete();
+    }
+  }
+}
+
 ModelConfig _createModelConfig({int context = 4096}) {
   return ModelConfig(
     name: 'Test Model',
