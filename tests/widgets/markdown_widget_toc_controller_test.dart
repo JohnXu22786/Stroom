@@ -20,25 +20,27 @@ void main() {
     Widget build(
       TocController tocController, {
       String data = '# First heading\n\n## Second heading',
-    }) => MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            SizedBox(
-              height: 160,
-              child: TocWidget(
-                controller: tocController,
-                itemBuilder: (data) =>
-                    Text('item:${data.index},current:${data.currentIndex}'),
-              ),
+    }) =>
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 160,
+                  child: TocWidget(
+                    controller: tocController,
+                    itemBuilder: (data) =>
+                        Text('item:${data.index},current:${data.currentIndex}'),
+                  ),
+                ),
+                Expanded(
+                  child:
+                      MarkdownWidget(data: data, tocController: tocController),
+                ),
+              ],
             ),
-            Expanded(
-              child: MarkdownWidget(data: data, tocController: tocController),
-            ),
-          ],
-        ),
-      ),
-    );
+          ),
+        );
 
     await tester.pumpWidget(build(firstController));
     expect(firstController.tocList, hasLength(2));
@@ -159,13 +161,13 @@ void main() {
     final nextController = TocController();
 
     Widget buildMarkdown(TocController tocController) => MaterialApp(
-      home: Scaffold(
-        body: MarkdownWidget(
-          data: '# First heading\n\n## Second heading',
-          tocController: tocController,
-        ),
-      ),
-    );
+          home: Scaffold(
+            body: MarkdownWidget(
+              data: '# First heading\n\n## Second heading',
+              tocController: tocController,
+            ),
+          ),
+        );
 
     await tester.pumpWidget(buildMarkdown(firstController));
     expect(firstController.tocList, hasLength(2));
