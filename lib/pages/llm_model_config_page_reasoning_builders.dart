@@ -526,6 +526,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   ) {
     final isDuplicate = _isReasoningParamNameDuplicate(param);
     final actualIndex = _reasoningParams.indexOf(param);
+    final isInherited = _isReasoningParamInherited(param);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -533,56 +534,88 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                // 卡片间拖拽把手（附加参数排序）
-                _buildDragHandle(index: displayIndex),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: param.paramName,
-                    decoration: InputDecoration(
-                      label: _reasoningFieldLabel(
-                        AppLocalizations.of(context)!
-                            .reasoningParameterNameSource(
-                          _paramSourceLabel(param),
-                        ),
-                      ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      hintText:
-                          AppLocalizations.of(context)!.reasoningNameExample,
-                      errorText: isDuplicate
-                          ? AppLocalizations.of(context)!
-                              .modelParamDuplicate(param.paramName.trim())
-                          : null,
-                      errorStyle: const TextStyle(fontSize: 11),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final controls = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTypeDropdown(param, cs),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 20),
+                      visualDensity: VisualDensity.compact,
+                      tooltip:
+                          AppLocalizations.of(context)!.reasoningResetParameter,
+                      onPressed: () => _resetReasoningParam(param),
                     ),
-                    onChanged: (v) {
-                      param.paramName = v;
-                      setState(() {});
-                    },
-                  ),
-                ),
-                const SizedBox(width: 4),
-                _buildTypeDropdown(param, cs),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  tooltip:
-                      AppLocalizations.of(context)!.reasoningResetParameter,
-                  onPressed: () => _resetReasoningParam(param),
-                ),
-                // 供应商传递下来的附加参数不允许删除（只可取消勾选/
-                // 排序）；模型自己添加的参数保留删除按钮。
-                if (!_isReasoningParamInherited(param))
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    onPressed: () => _removeReasoningParam(actualIndex),
-                    tooltip: AppLocalizations.of(context)!.modelParamDelete,
-                  ),
-              ],
+                    // Provider parameters can be reset and reordered, but not
+                    // deleted from the model configuration.
+                    if (!isInherited)
+                      IconButton(
+                        icon: const Icon(Icons.delete,
+                            color: Colors.red, size: 20),
+                        onPressed: () => _removeReasoningParam(actualIndex),
+                        tooltip: AppLocalizations.of(context)!.modelParamDelete,
+                      ),
+                  ],
+                );
+                // Keep the established single-row header when the editable
+                // name still has room. At phone widths, Wrap moves the control
+                // group below it while keeping the TextFormField in the same
+                // element subtree, preserving its focus, selection and caret.
+                const minNameWidth = 112.0;
+                const dragAndGapWidth = 28.0;
+                final controlsWidth = 100.0 + 4 + 40 + (isInherited ? 0 : 48);
+                final fitsInline = constraints.maxWidth >=
+                    dragAndGapWidth + minNameWidth + controlsWidth + 4;
+                final nameRowWidth = fitsInline
+                    ? constraints.maxWidth - controlsWidth - 4
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: nameRowWidth,
+                      child: Row(
+                        children: [
+                          _buildDragHandle(index: displayIndex),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: param.paramName,
+                              decoration: InputDecoration(
+                                label: _reasoningFieldLabel(
+                                  AppLocalizations.of(context)!
+                                      .reasoningParameterNameSource(
+                                    _paramSourceLabel(param),
+                                  ),
+                                ),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                hintText: AppLocalizations.of(context)!
+                                    .reasoningNameExample,
+                                errorText: isDuplicate
+                                    ? AppLocalizations.of(context)!
+                                        .modelParamDuplicate(
+                                            param.paramName.trim())
+                                    : null,
+                                errorStyle: const TextStyle(fontSize: 11),
+                              ),
+                              onChanged: (v) {
+                                param.paramName = v;
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    controls,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             // 参数值区按类型区分：string/number → 勾选块（与推理力度
