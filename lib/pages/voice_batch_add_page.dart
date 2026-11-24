@@ -112,6 +112,14 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
     final lines = text.split('\n');
     final separator = _separatorChar;
+    if (separator.isEmpty) {
+      setState(() {
+        _parsedLines = [];
+        _detectedColumns = 0;
+        _columnSamples = [];
+      });
+      return;
+    }
     final List<ParsedLine> parsed = [];
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
@@ -425,6 +433,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  errorText: _customSeparator.isEmpty
+                      ? l10n.voiceBatchCustomSeparatorHint
+                      : null,
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
