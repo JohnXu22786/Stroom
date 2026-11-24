@@ -1542,10 +1542,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         debugPrint('Failed to save corrupt conversations backup $backupKey');
         return false;
       }
-      // Also clear the original key so the next save starts fresh instead of
-      // repeatedly trying to decode the same corrupt blob.
-      await prefs.remove('conversations');
-      _corruptConversationDataAwaitingBackup = null;
+      // Remove only the payload we just backed up. Tier B may have written a
+      // recovered canonical value while the backup write was in flight.
+      if (prefs.getString('conversations') == corruptJson) {
+        await prefs.remove('conversations');
+      }
+      if (_corruptConversationDataAwaitingBackup == corruptJson) {
+        _corruptConversationDataAwaitingBackup = null;
+      }
       debugPrint(
         'ConversationsNotifier: backed up corrupt conversations to $backupKey',
       );
@@ -1739,7 +1743,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           return false;
         }
       }
-      return _persistSnapshot(snapshot, requestGeneration);
+      return _persistSnapshot(
+        snapshot,
+        requestGeneration,
+        preserveNewerConversationsJson: corruptJson,
+      );
     });
     final trackedWrite = write.whenComplete(() {
       _queuedDraftAttachmentPathsByPersistRequest.remove(requestGeneration);
@@ -1972,8 +1980,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   Future<bool> _persistSnapshot(
     List<Conversation> snapshot,
-    int requestGeneration,
-  ) async {
+    int requestGeneration, {
+    String? preserveNewerConversationsJson,
+  }) async {
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();
@@ -2025,6 +2034,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final referencedPaths = _attachmentPathsInSnapshot(snapshot);
       final cacheReferences = _attachmentCacheReferencesInSnapshot(snapshot);
       final json = jsonEncode(records);
+      if (_hasNewerConversationsJson(prefs, preserveNewerConversationsJson)) {
+        return false;
+      }
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
       }
@@ -2104,6 +2116,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final referencedPaths = _attachmentPathsInSnapshot(stripped);
       final cacheReferences = _attachmentCacheReferencesInSnapshot(stripped);
       final json = jsonEncode(records);
+      if (_hasNewerConversationsJson(prefs, preserveNewerConversationsJson)) {
+        return false;
+      }
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
       }
@@ -2136,5 +2151,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // (we never overwrote it). Log loudly so the user can find the cause.
     }
     return false;
+  }
+
+  bool _hasNewerConversationsJson(
+    SharedPreferences prefs,
+    String? preservedCorruptJson,
+  ) {
+    if (preservedCorruptJson == null) return false;
+    final currentJson = prefs.getString('conversations');
+    return currentJson != null && currentJson != preservedCorruptJson;
   }
 }

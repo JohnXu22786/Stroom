@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart'
-    show kTemporaryConversationDuration;
+    show
+        ConversationsNotifier,
+        conversationsProvider,
+        kTemporaryConversationDuration;
 
 void main() {
   group('chat fallback conversation preservation', () {
@@ -30,6 +35,52 @@ void main() {
 
       expect(savedWithBackup, isTrue);
       expect(prefs.getString('conversations'), '[]');
+    });
+
+    test('backup cleanup keeps a concurrent Tier B canonical save', () async {
+      const corruptJson = '{"broken":';
+      const recoveredJson = '[{"id":"recovered"}]';
+      SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+      final backupStored = Completer<void>();
+      final completeBackup = Completer<bool>();
+      var backupAttempts = 0;
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(
+              ref,
+              corruptConversationBackupWriter: (prefs, key, value) async {
+                backupAttempts++;
+                if (backupAttempts == 1) return false;
+                await prefs.setString(key, value);
+                backupStored.complete();
+                return completeBackup.future;
+              },
+            );
+            notifier.loadForTesting();
+            return notifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      final retry = notifier.persistNowForTesting();
+      await backupStored.future;
+
+      final prefs = await SharedPreferences.getInstance();
+      final fallbackSaved = await persistConversationFallbackIfRecovered(
+        prefs,
+        recoveredJson,
+      );
+      expect(fallbackSaved, isTrue);
+
+      completeBackup.complete(true);
+      expect(await retry, isFalse);
+
+      expect(prefs.getString('conversations'), recoveredJson);
+      expect(backupAttempts, 2);
     });
 
     test(
