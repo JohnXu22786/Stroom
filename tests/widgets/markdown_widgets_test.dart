@@ -117,6 +117,38 @@ List<String> _collectPlainText(List<m.Node> nodes) {
 }
 
 void main() {
+  group('Markdown image URL schemes', () {
+    testWidgets('routes uppercase HTTP and HTTPS URLs to network images',
+        (WidgetTester tester) async {
+      for (final imageUrl in [
+        'HTTP://example.com/image.png',
+        'HTTPS://example.com/image.png',
+      ]) {
+        final widgets = MarkdownGenerator().buildWidgets('![]($imageUrl)');
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: Column(children: widgets)),
+        ));
+
+        final image = tester.widget<Image>(find.byType(Image));
+        expect(image.image, isA<NetworkImage>(), reason: imageUrl);
+        expect((image.image as NetworkImage).url, imageUrl);
+      }
+    });
+
+    testWidgets('keeps non-HTTP URIs on the asset path',
+        (WidgetTester tester) async {
+      const imageUrl = 'ftp://example.com/image.png';
+      final widgets = MarkdownGenerator().buildWidgets('![]($imageUrl)');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.image, isA<AssetImage>());
+      expect((image.image as AssetImage).assetName, imageUrl);
+    });
+  });
+
   group('Markdown image error rendering', () {
     testWidgets('calls ImgConfig.errorBuilder for network image failures',
         (WidgetTester tester) async {
