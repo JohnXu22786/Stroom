@@ -1208,7 +1208,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         }
       }
       final json = prefs.getString('conversations');
-      if (json != null && json.isNotEmpty) {
+      if (json != null) {
         try {
           final decoded = jsonDecode(json);
           if (decoded is List) {
@@ -1310,6 +1310,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             );
           } else {
             // 磁盘数据无效：内存已有对话（用户刚创建）时保留内存
+            await _backupCorruptConversationsFile(prefs, json);
             if (mounted && state.isEmpty) state = [];
             // 磁盘不可用但内存有新对话：标记合并，finally 落盘
             // （否则启动窗口内创建的新对话在下次持久化前退出会丢失）
@@ -1447,11 +1448,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // even after the old migration had already "run".
       try {
         if (mounted) {
-          await assignNullAssistantConversations(
-            prefs,
-            state,
-            preservedRecords: _unparsedConversationRecords,
-          );
+          if (_corruptConversationDataAwaitingBackup == null) {
+            await assignNullAssistantConversations(
+              prefs,
+              state,
+              preservedRecords: _unparsedConversationRecords,
+            );
+          }
           // 修复函数可能原位修改了 state 列表：重新赋值以触发
           // 监听者刷新（await 期间 notifier 可能被 dispose，需重查）。
           if (mounted) {
@@ -1518,21 +1521,31 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   /// Move a corrupt conversations JSON blob to a timestamped backup key so
   /// the user can inspect it later and we don't overwrite it on the next save.
   ///
-  /// This is called when `jsonDecode` throws on the on-disk JSON. The previous
-  /// behavior was to silently throw away the data; this preserves the
-  /// undecodable payload in case the user wants to recover it manually.
+  /// This is called when the on-disk payload is malformed or has an invalid
+  /// top-level shape. The original is kept unless the backup write succeeds.
 
-  Future<void> _backupCorruptConversationsFile(
+  Future<bool> _backupCorruptConversationsFile(
     SharedPreferences prefs,
     String corruptJson,
   ) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final backupKey = 'conversations.corrupt.$timestamp';
-      await prefs.setString(backupKey, corruptJson);
+      final saved = await (corruptConversationBackupWriter?.call(
+            prefs,
+            backupKey,
+            corruptJson,
+          ) ??
+          prefs.setString(backupKey, corruptJson));
+      if (!saved) {
+        _corruptConversationDataAwaitingBackup = corruptJson;
+        debugPrint('Failed to save corrupt conversations backup $backupKey');
+        return false;
+      }
       // Also clear the original key so the next save starts fresh instead of
       // repeatedly trying to decode the same corrupt blob.
       await prefs.remove('conversations');
+      _corruptConversationDataAwaitingBackup = null;
       debugPrint(
         'ConversationsNotifier: backed up corrupt conversations to $backupKey',
       );
@@ -1554,8 +1567,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           'ConversationsNotifier: removed old corrupt backup $oldest (cap=$_maxCorruptBackups)',
         );
       }
+      return true;
     } catch (e) {
+      _corruptConversationDataAwaitingBackup = corruptJson;
       debugPrint('Failed to back up corrupt conversations: $e');
+      return false;
     }
   }
 
@@ -1681,6 +1697,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<bool> _persistCoreResult() async {
+    if (!_loadHasRun) return false;
+
     // Seal any coalescible checkpoint before taking an explicit snapshot.
     // Future stream checkpoints then enter the serial queue after this write.
     final streamCheckpoint = _coalescedStreamPersist;
@@ -1701,15 +1719,28 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // can do — the previous good save is still on disk.
       return false;
     }
-    if (!_loadHasRun) return false;
     final requestGeneration = ++_persistRequestGeneration;
     _queuedDraftAttachmentPathsByPersistRequest[requestGeneration] =
         _attachmentPathsInSnapshot(snapshot);
     _queuedDraftAttachmentCachesByPersistRequest[requestGeneration] =
         _attachmentCacheReferencesInSnapshot(snapshot);
-    final write = _persistQueue.then(
-      (_) => _persistSnapshot(snapshot, requestGeneration),
-    );
+    final write = _persistQueue.then((_) async {
+      // Keep backup retry and the canonical write in the same serialized
+      // section. Otherwise an overlapping retry can remove a newer save.
+      final corruptJson = _corruptConversationDataAwaitingBackup;
+      if (corruptJson != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          if (!await _backupCorruptConversationsFile(prefs, corruptJson)) {
+            return false;
+          }
+        } catch (e) {
+          debugPrint('Failed to retry corrupt conversations backup: $e');
+          return false;
+        }
+      }
+      return _persistSnapshot(snapshot, requestGeneration);
+    });
     final trackedWrite = write.whenComplete(() {
       _queuedDraftAttachmentPathsByPersistRequest.remove(requestGeneration);
       _queuedDraftAttachmentCachesByPersistRequest.remove(requestGeneration);

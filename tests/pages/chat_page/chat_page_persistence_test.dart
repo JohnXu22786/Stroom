@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart'
@@ -8,6 +9,29 @@ import 'package:stroom/providers/conversation_provider.dart'
 
 void main() {
   group('chat fallback conversation preservation', () {
+    test('Tier B replaces corrupt data only after a backup exists', () async {
+      const corruptJson = '{"broken":';
+      SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+      final prefs = await SharedPreferences.getInstance();
+
+      final savedWithoutBackup = await persistConversationFallbackIfRecovered(
+        prefs,
+        '[]',
+      );
+
+      expect(savedWithoutBackup, isFalse);
+      expect(prefs.getString('conversations'), corruptJson);
+
+      await prefs.setString('conversations.corrupt.1', corruptJson);
+      final savedWithBackup = await persistConversationFallbackIfRecovered(
+        prefs,
+        '[]',
+      );
+
+      expect(savedWithBackup, isTrue);
+      expect(prefs.getString('conversations'), '[]');
+    });
+
     test(
       'preserves legacy records and fields when replacing target messages',
       () {
