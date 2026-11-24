@@ -31,9 +31,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   ];
 
   String _selectedSeparator = 'Tab';
-  String _customSeparator = '';
   bool _nameFirst = true; // true → 第1个=名称, 第2个=ID
   final TextEditingController _inputController = TextEditingController();
+  final TextEditingController _customSeparatorController =
+      TextEditingController();
   List<ParsedLine> _parsedLines = [];
 
   /// 检测到的最大列数（多行取最大值）
@@ -48,6 +49,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   @override
   void dispose() {
     _inputController.dispose();
+    _customSeparatorController.dispose();
     super.dispose();
   }
 
@@ -66,7 +68,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       case '竖线 (|)':
         return '|';
       case '自定义...':
-        return _customSeparator;
+        return _customSeparatorController.text;
       default:
         return '\t';
     }
@@ -112,6 +114,14 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
     final lines = text.split('\n');
     final separator = _separatorChar;
+    if (separator.isEmpty) {
+      setState(() {
+        _parsedLines = [];
+        _detectedColumns = 0;
+        _columnSamples = [];
+      });
+      return;
+    }
     final List<ParsedLine> parsed = [];
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
@@ -419,12 +429,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             if (_selectedSeparator == '自定义...') ...[
               const SizedBox(height: 8),
               TextField(
+                controller: _customSeparatorController,
                 decoration: InputDecoration(
                   hint: ConstrainedText(
                     l10n.voiceBatchCustomSeparatorHint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  errorText: _customSeparatorController.text.isEmpty
+                      ? l10n.voiceBatchCustomSeparatorHint
+                      : null,
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
@@ -433,7 +447,6 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   ),
                 ),
                 onChanged: (val) {
-                  _customSeparator = val;
                   _parseInput();
                 },
               ),

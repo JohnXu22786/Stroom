@@ -187,6 +187,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/extended_image_editor_tool_bounds_test.dart",
         "pages/content/gallery_viewer_page_test.dart",
         "pages/gallery_shared_test.dart",
+        "widgets/voice_batch_add_page_test.dart",
         "pages/content/image_editor_page_test.dart",
         "pages/video_gallery_shared_test.dart",
         "pages/content/ocr*_test.dart",
