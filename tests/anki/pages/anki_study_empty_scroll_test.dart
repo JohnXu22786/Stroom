@@ -66,6 +66,19 @@ class _DelayedAnswerAnkiActions extends AnkiActions {
   }
 }
 
+class _InitialLoadAnkiActions extends AnkiActions {
+  _InitialLoadAnkiActions(super.ref, this.loads);
+
+  final List<Future<model.Card?> Function()> loads;
+  int getNextCardCalls = 0;
+
+  @override
+  Future<model.Card?> getNextCard(int did) {
+    getNextCardCalls++;
+    return loads.removeAt(0)();
+  }
+}
+
 class _StubNoteDao implements NoteDao {
   _StubNoteDao(this.notes);
 
@@ -79,6 +92,94 @@ class _StubNoteDao implements NoteDao {
 }
 
 void main() {
+  testWidgets(
+    'initial study load shows progress until the first card resolves',
+    (tester) async {
+      final firstLoad = Completer<model.Card?>();
+      late _InitialLoadAnkiActions actions;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ankiDeckByIdProvider.overrideWith(
+              (ref, deckId) async => Deck(id: deckId, name: 'Español'),
+            ),
+            ankiActionsProvider.overrideWith((ref) {
+              actions = _InitialLoadAnkiActions(ref, [() => firstLoad.future]);
+              return actions;
+            }),
+          ],
+          child: MaterialApp(
+            locale: const Locale('es'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const AnkiStudyPage(deckId: 1),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      final noCardsLabel = AppLocalizations.of(
+        tester.element(find.byType(Scaffold)),
+      )!.ankiNoCardsToStudy;
+      expect(find.text(noCardsLabel), findsNothing);
+      expect(actions.getNextCardCalls, 1);
+
+      firstLoad.complete(model.Card(note_id: 1, deck_id: 1));
+      await tester.pumpAndSettle();
+      expect(find.text('Mostrar respuesta'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
+
+  testWidgets('initial card-load failure can be retried successfully', (
+    tester,
+  ) async {
+    final card = model.Card(note_id: 1, deck_id: 1);
+    late _InitialLoadAnkiActions actions;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiDeckByIdProvider.overrideWith(
+            (ref, deckId) async => Deck(id: deckId, name: 'Español'),
+          ),
+          ankiActionsProvider.overrideWith((ref) {
+            actions = _InitialLoadAnkiActions(ref, [
+              () async => throw StateError('database unavailable'),
+              () async => card,
+            ]);
+            return actions;
+          }),
+        ],
+        child: MaterialApp(
+          locale: const Locale('es'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiStudyPage(deckId: 1),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final noCardsLabel = AppLocalizations.of(
+      tester.element(find.byType(Scaffold)),
+    )!.ankiNoCardsToStudy;
+    expect(find.text(noCardsLabel), findsNothing);
+    expect(find.textContaining('database unavailable'), findsOneWidget);
+    final retryLabel = AppLocalizations.of(
+      tester.element(find.byType(Scaffold)),
+    )!.actionRetry;
+    expect(find.text(retryLabel), findsOneWidget);
+    await tester.tap(find.text(retryLabel));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mostrar respuesta'), findsOneWidget);
+    expect(actions.getNextCardCalls, 2);
+    expect(tester.takeException(), isNull);
+  });
+
   Future<void> showStudyPage(
     WidgetTester tester, {
     required double textScale,
@@ -113,6 +214,22 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('successful initial load with no cards shows completion state', (
+    tester,
+  ) async {
+    await showStudyPage(tester, textScale: 1);
+
+    expect(
+      find.text(
+        AppLocalizations.of(tester.element(find.byType(Scaffold)))!
+            .ankiNoCardsToStudy,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Mostrar respuesta'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('empty study fits at 320x640 with normal text scale', (
     tester,
