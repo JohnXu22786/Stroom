@@ -129,6 +129,12 @@ jobs:
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
+              lib/services/assistant_catalog_transport.dart|\
+              lib/services/assistant_catalog_transport_io.dart|\
+              lib/services/assistant_catalog_transport_stub.dart|\
+              lib/services/assistant_catalog_transport_types.dart)
+                test_f="tests/services/assistant_catalog_service_test.dart"
+                ;;
               lib/utils/audio_playback_stub.dart)
                 test_f="tests/utils/audio_source_uri_test.dart"
                 ;;
