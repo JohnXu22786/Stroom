@@ -70,6 +70,20 @@ void main() {
     );
   });
 
+  test('bare inline destinations reject unescaped angle brackets', () {
+    expect(markdown.markdownToHtml('[x](foo<bar)'), '<p>[x](foo&lt;bar)</p>\n');
+    expect(markdown.markdownToHtml('[x](foo>bar)'), '<p>[x](foo&gt;bar)</p>\n');
+    expect(
+      markdown.markdownToHtml(r'[x](foo\<bar\>)'),
+      '<p><a href="foo%3Cbar%3E">x</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[x](<foo> "title") [y](foo(bar) "title")'),
+      '<p><a href="foo" title="title">x</a> '
+      '<a href="foo(bar)" title="title">y</a></p>\n',
+    );
+  });
+
   test('a bare destination ending in an escape is accepted as a reference', () {
     expect(
       markdown.markdownToHtml('[text][foo]\n\n[foo]: bar\\'),
