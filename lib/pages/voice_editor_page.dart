@@ -31,10 +31,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     _nameCtrls =
         _voices.map((v) => TextEditingController(text: v.name)).toList();
     _idCtrls = _voices.map((v) => TextEditingController(text: v.id)).toList();
-    _idFocusNodes = _voices.map((_) => FocusNode()).toList();
-    for (var i = 0; i < _idFocusNodes.length; i++) {
-      _idFocusNodes[i].addListener(() => _onIdFocusChange(i));
-    }
+    _idFocusNodes = _voices.map((_) => _createIdFocusNode()).toList();
   }
 
   @override
@@ -83,8 +80,14 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     return dupes;
   }
 
-  void _onIdFocusChange(int index) {
-    if (!_idFocusNodes[index].hasFocus) {
+  FocusNode _createIdFocusNode() {
+    final focusNode = FocusNode();
+    focusNode.addListener(() => _onIdFocusChange(focusNode));
+    return focusNode;
+  }
+
+  void _onIdFocusChange(FocusNode focusNode) {
+    if (_idFocusNodes.contains(focusNode) && !focusNode.hasFocus) {
       // 只刷新 UI 显示警告图标，重复检测交由保存时 _DuplicateResolveDialog 处理
       setState(() {});
     }
@@ -92,14 +95,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
 
   void _addRow() {
     setState(() {
-      final newIndex = _voices.length;
       _voices.add(VoiceEntry(name: '', id: ''));
       _nameCtrls.add(TextEditingController());
       final newIdCtrl = TextEditingController();
       _idCtrls.add(newIdCtrl);
-      final fn = FocusNode();
-      fn.addListener(() => _onIdFocusChange(newIndex));
-      _idFocusNodes.add(fn);
+      _idFocusNodes.add(_createIdFocusNode());
     });
     // 滚动到底部
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -124,13 +124,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     // 直接追加所有条目（含重复），重复检测由失焦检查和保存逻辑处理
     setState(() {
       for (final v in result) {
-        final newIndex = _voices.length;
         _voices.add(VoiceEntry(name: v.name, id: v.id));
         _nameCtrls.add(TextEditingController(text: v.name));
         _idCtrls.add(TextEditingController(text: v.id));
-        final fn = FocusNode();
-        fn.addListener(() => _onIdFocusChange(newIndex));
-        _idFocusNodes.add(fn);
+        _idFocusNodes.add(_createIdFocusNode());
       }
     });
   }
