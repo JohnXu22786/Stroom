@@ -45,6 +45,21 @@ void main() {
     await tester.pumpWidget(_buildTestApp());
     await _selectCustomSeparator(tester);
     await tester.enterText(find.byType(TextField).first, ',');
+
+    await tester.tap(find.text('Custom…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tab').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom…').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+      ',',
+    );
+
     await tester.enterText(find.byType(TextField).last, 'Alice,voice-1');
     await tester.pumpAndSettle();
 
