@@ -112,6 +112,15 @@ class _NotificationSettingsPageState
     }
   }
 
+  Future<void> _reloadSettingsAfterFailedSave(int revision) async {
+    if (!mounted || revision != _notificationSettingRevision) return;
+    try {
+      await _loadSettings();
+    } catch (_) {
+      // Keep the save error as the visible failure if the preference read fails.
+    }
+  }
+
   Future<void> _checkPermission() async {
     if (kIsWeb) {
       setState(() {
@@ -144,6 +153,7 @@ class _NotificationSettingsPageState
   }
 
   Future<void> _requestPermission() async {
+    final revision = ++_notificationSettingRevision;
     final service = NotificationService();
     final granted = await service.requestPermission(
       usageReason: _strings.notificationSettingsUsageReason,
@@ -154,10 +164,11 @@ class _NotificationSettingsPageState
     try {
       await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
     } catch (_) {
+      await _reloadSettingsAfterFailedSave(revision);
       _showNotificationSaveError();
       return;
     }
-    _notificationSettingRevision++;
+    if (!mounted || revision != _notificationSettingRevision) return;
     setState(() {
       _notificationsEnabled = granted;
     });
@@ -440,17 +451,20 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
+                            final revision = ++_notificationSettingRevision;
                             try {
                               await ref
                                   .read(notificationSettingsProvider.notifier)
                                   .setEnabled(value);
-                              _notificationSettingRevision++;
-                              if (mounted) {
-                                setState(() {
-                                  _notificationsEnabled = value;
-                                });
+                              if (!mounted ||
+                                  revision != _notificationSettingRevision) {
+                                return;
                               }
+                              setState(() {
+                                _notificationsEnabled = value;
+                              });
                             } catch (_) {
+                              await _reloadSettingsAfterFailedSave(revision);
                               _showNotificationSaveError();
                             }
                           }
