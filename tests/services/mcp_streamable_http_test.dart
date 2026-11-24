@@ -36,6 +36,15 @@ class FakeRemoteMcp {
   /// legacy GET 立即关闭且不发 endpoint。
   bool legacyNoEndpoint = false;
 
+  /// Legacy SSE emits valid fields with no optional space after the colon.
+  bool legacyNoSpaceFields = false;
+
+  /// Legacy SSE lines use CRLF, as in the browser transport's text stream.
+  bool legacyCrlfLines = false;
+
+  /// Legacy SSE splits JSON-RPC event data over multiple data fields.
+  bool splitLegacyData = false;
+
   /// legacy endpoint POST 直接失败。
   bool failLegacyPost = false;
 
@@ -206,9 +215,10 @@ class FakeRemoteMcp {
     // 下一事件循环投递 endpoint 事件：确保 listener 已挂载。
     Future(() {
       if (controller.isClosed) return;
-      controller.add('event: endpoint');
-      controller.add('data: ${url.replaceAll('sse', 'messages')}');
-      controller.add('');
+      controller.add(_legacyLine(_legacyField('event', 'endpoint')));
+      controller.add(
+          _legacyLine(_legacyField('data', url.replaceAll('sse', 'messages'))));
+      controller.add(_legacyLine(''));
     });
     return controller.stream;
   }
@@ -253,13 +263,17 @@ class FakeRemoteMcp {
                   'protocolVersion': '2024-11-05',
                   'serverInfo': {'name': name},
                 };
-      c.add('event: message');
-      c.add('data: ${jsonEncode({
-            'jsonrpc': '2.0',
-            'id': id,
-            'result': result
-          })}');
-      c.add('');
+      c.add(_legacyLine(_legacyField('event', 'message')));
+      final payload =
+          jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result});
+      if (splitLegacyData) {
+        final splitAt = payload.indexOf(',"result"');
+        c.add(_legacyLine(_legacyField('data', payload.substring(0, splitAt))));
+        c.add(_legacyLine(_legacyField('data', payload.substring(splitAt))));
+      } else {
+        c.add(_legacyLine(_legacyField('data', payload)));
+      }
+      c.add(_legacyLine(''));
     }
     return '';
   }
@@ -267,6 +281,11 @@ class FakeRemoteMcp {
   void dispose() {
     _legacyController?.close();
   }
+
+  String _legacyField(String name, String value) =>
+      '$name:${legacyNoSpaceFields ? '' : ' '}$value';
+
+  String _legacyLine(String line) => '$line${legacyCrlfLines ? '\r' : ''}';
 }
 
 void main() {
@@ -574,6 +593,32 @@ void main() {
       await client.listTools();
       expect(fake.postUrls.any((u) => u.contains('messages')), isTrue,
           reason: 'legacy SSE 模式应将消息 POST 到 endpoint 事件给出的 URL');
+    });
+
+    test('legacy SSE accepts fields without a space after the colon', () async {
+      final fake = FakeRemoteMcp(name: 'Jina')
+        ..streamable = false
+        ..legacyNoSpaceFields = true
+        ..legacyCrlfLines = true
+        ..splitLegacyData = true;
+      final client = McpClient(
+        config: McpServerConfig.sse(
+          name: 'Jina',
+          url: 'https://mcp.jina.ai/sse',
+          apiKey: 'jina-key',
+        ),
+        postLines: fake.postLines,
+        sseConnectFn: fake.sseConnect,
+        ssePostFn: fake.ssePost,
+      );
+      addTearDown(() {
+        client.dispose();
+        fake.dispose();
+      });
+
+      expect(await client.connect(), isTrue);
+      expect((await client.listTools()).map((tool) => tool.name),
+          contains('search'));
     });
 
     test('重连后旧 GET 流关闭不影响新连接（旧订阅已拆除）', () async {
