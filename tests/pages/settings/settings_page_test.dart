@@ -25,6 +25,7 @@ import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/services/notification_service.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 /// Builds the SettingsPage test app without notification override.
@@ -246,6 +247,11 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('notifications_enabled'), isFalse);
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -265,6 +271,9 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(permissionsChannel, null);
     });
+    // The singleton may carry a completed queue from another fake-async zone.
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
     SharedPreferences.setMockInitialValues({'notifications_enabled': false});
     final prefsStore = _BlockingInitialPrefsReadStore(
       {'flutter.notifications_enabled': false},
@@ -300,6 +309,11 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('notifications_enabled'), isTrue);
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
     debugDefaultTargetPlatformOverride = null;
   });
 
