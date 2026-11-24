@@ -45,6 +45,69 @@ void main() {
     });
 
     test(
+      'stops reading a successful response after it exceeds the size cap',
+      () async {
+        const chunkSize = 4096;
+        var bytesRead = 0;
+
+        Stream<List<int>> oversizedBody() async* {
+          for (var i = 0; i < 512; i++) {
+            bytesRead += chunkSize;
+            yield List<int>.filled(chunkSize, 0);
+          }
+        }
+
+        final service = AssistantCatalogService.testing(
+          client: _StreamingClient(
+            (request) async =>
+                http.StreamedResponse(oversizedBody(), 200, request: request),
+          ),
+          addressLookup: _publicAddressLookup,
+        );
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Remote assistant files may not exceed 1 MiB.',
+            ),
+          ),
+        );
+
+        expect(bytesRead, greaterThan(1024 * 1024));
+        expect(bytesRead, lessThanOrEqualTo(1024 * 1024 + chunkSize));
+        service.close();
+      },
+    );
+
+    test('accepts a successful response exactly at the size cap', () async {
+      const catalogPrefix = '{"schemaVersion":1,"catalogId":"test",'
+          '"assistants":[]}';
+      final body = '$catalogPrefix'
+          '${' ' * (1024 * 1024 - catalogPrefix.length)}';
+      final service = AssistantCatalogService.testing(
+        client: _StreamingClient(
+          (request) async => http.StreamedResponse(
+            Stream<List<int>>.value(utf8.encode(body)),
+            200,
+            request: request,
+          ),
+        ),
+        addressLookup: _publicAddressLookup,
+      );
+
+      final catalog = await service.fetchCatalog(
+        'https://catalog.example/catalog.json',
+      );
+
+      expect(utf8.encode(body), hasLength(1024 * 1024));
+      expect(catalog.assistants, isEmpty);
+      service.close();
+    });
+
+    test(
       'rejects non-HTTPS and private host URLs before making a request',
       () async {
         var requestCount = 0;
@@ -344,3 +407,13 @@ String _assistantJson({required String version}) => '''
 
 Future<List<String>> _publicAddressLookup(String _) async =>
     const ['93.184.216.34'];
+
+class _StreamingClient extends http.BaseClient {
+  _StreamingClient(this._send);
+
+  final Future<http.StreamedResponse> Function(http.BaseRequest request) _send;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      _send(request);
+}
