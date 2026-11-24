@@ -3920,6 +3920,86 @@ void main() {
 
   group('OcrPage - batch settings', () {
     testWidgets(
+      'reflows batch options at narrow width and large localized text',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [
+              _createValidOcrTestImage(),
+              _createValidOcrTestImage(),
+            ],
+            locale: const Locale('de', 'DE'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final narrowSelector = find.byKey(const Key('ocr_batch_mode'));
+        expect(narrowSelector, findsOneWidget);
+        expect(tester.getRect(narrowSelector).right, lessThanOrEqualTo(304));
+        expect(tester.takeException(), isNull);
+
+        tester.view.physicalSize = const Size(600, 1000);
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [
+              _createValidOcrTestImage(),
+              _createValidOcrTestImage(),
+            ],
+            locale: const Locale('de', 'DE'),
+            textScaler: TextScaler.linear(2),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final batchSelector = find.byKey(const Key('ocr_batch_mode'));
+        expect(batchSelector, findsOneWidget);
+        final row = tester.getRect(batchSelector);
+        expect(row.left, greaterThanOrEqualTo(16));
+        expect(row.right, lessThanOrEqualTo(584));
+        for (final label in [
+          find.text('Ergebnisse zusammenführen'),
+          find.text('Jedes Bild einzeln erkennen'),
+        ]) {
+          expect(label, findsOneWidget);
+          expect(tester.getRect(label).right, lessThanOrEqualTo(row.right));
+        }
+
+        await tester.tap(find.text('Jedes Bild einzeln erkennen'));
+        await tester.pump(const Duration(milliseconds: 300));
+        final concurrency = find.byKey(
+          const Key('ocr_per_image_concurrency'),
+        );
+        expect(concurrency, findsOneWidget);
+        expect(tester.getRect(concurrency).right, lessThanOrEqualTo(584));
+
+        tester.view.physicalSize = const Size(800, 844);
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [
+              _createValidOcrTestImage(),
+              _createValidOcrTestImage(),
+            ],
+            locale: const Locale('de', 'DE'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final fittingSelector = find.byKey(const Key('ocr_batch_mode'));
+        final fittingLabel = find.text('Stapelverarbeitung');
+        final fittingRect = tester.getRect(fittingSelector);
+        final labelRect = tester.getRect(fittingLabel);
+        expect(
+          labelRect.center.dy,
+          inInclusiveRange(fittingRect.top, fittingRect.bottom),
+        );
+        expect(fittingRect.right, lessThanOrEqualTo(984));
+      },
+    );
+
+    testWidgets(
       'locks batch mode and concurrency while startup prepares images',
       (tester) async {
         final preparationStarted = Completer<void>();
