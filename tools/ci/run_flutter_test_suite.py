@@ -83,6 +83,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     ),
     "chat-ai-ui": (
         "reasoning_section_animation_test.dart",
+        "widgets/llm/jumping_dots_test.dart",
         "widgets/chat_error_heading_layout_test.dart",
         "pages/assistant/assistant_*_test.dart",
         "pages/assistant_pages_test.dart",
