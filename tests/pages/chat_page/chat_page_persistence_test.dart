@@ -135,6 +135,54 @@ void main() {
       expect(prefs.getString('conversations'), recoveredJson);
     });
 
+    test('queued recovery saves preserve notifier write order', () async {
+      const corruptJson = '{"broken":';
+      SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+      final backupFinalizationStarted = Completer<void>();
+      final completeBackupFinalization = Completer<void>();
+      var backupAttempts = 0;
+      late ConversationsNotifier backupNotifier;
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            backupNotifier = ConversationsNotifier(
+              ref,
+              corruptConversationBackupWriter: (prefs, key, value) async {
+                backupAttempts++;
+                if (backupAttempts == 1) return false;
+                return prefs.setString(key, value);
+              },
+              corruptConversationBackupAfterWrite: () async {
+                backupFinalizationStarted.complete();
+                await completeBackupFinalization.future;
+              },
+            );
+            backupNotifier.loadForTesting();
+            return backupNotifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      notifier.state = [Conversation(id: 'first', title: 'First')];
+      final firstSave = notifier.persistNowForTesting();
+      await backupFinalizationStarted.future;
+
+      notifier.state = [Conversation(id: 'second', title: 'Second')];
+      final secondSave = notifier.persistNowForTesting();
+      completeBackupFinalization.complete();
+
+      expect(await firstSave, isTrue);
+      expect(await secondSave, isTrue);
+      expect(backupAttempts, 2);
+
+      final prefs = await SharedPreferences.getInstance();
+      final saved = jsonDecode(prefs.getString('conversations')!) as List;
+      expect((saved.single as Map)['id'], 'second');
+    });
+
     test(
       'preserves legacy records and fields when replacing target messages',
       () {

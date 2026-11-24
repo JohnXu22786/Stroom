@@ -1530,6 +1530,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     String corruptJson,
   ) async {
     _corruptConversationRecoveryGuard = corruptJson;
+    _corruptConversationRecoveryPersistedFrom = null;
+    _corruptConversationRecoveryPersistedJson = null;
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final backupKey = 'conversations.corrupt.$timestamp';
@@ -1768,6 +1770,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         }
         if (_corruptConversationRecoveryGuard == recoveryGuardAtRequest) {
           _corruptConversationRecoveryGuard = null;
+          _corruptConversationRecoveryPersistedFrom = null;
+          _corruptConversationRecoveryPersistedJson = null;
         }
       }
       return persisted;
@@ -2063,6 +2067,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
       }
+      _recordRecoveryCanonicalWrite(
+        preserveNewerConversationsJson,
+        json,
+      );
       if (await _markSupersededRestorationSnapshots(snapshot) &&
           await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
@@ -2145,6 +2153,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
       }
+      _recordRecoveryCanonicalWrite(
+        preserveNewerConversationsJson,
+        json,
+      );
       if (await _markSupersededRestorationSnapshots(stripped) &&
           await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
@@ -2182,6 +2194,19 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   ) {
     if (preservedCorruptJson == null) return false;
     final currentJson = prefs.getString('conversations');
-    return currentJson != null && currentJson != preservedCorruptJson;
+    if (currentJson == null || currentJson == preservedCorruptJson) {
+      return false;
+    }
+    return _corruptConversationRecoveryPersistedFrom != preservedCorruptJson ||
+        _corruptConversationRecoveryPersistedJson != currentJson;
+  }
+
+  void _recordRecoveryCanonicalWrite(
+    String? preservedCorruptJson,
+    String writtenJson,
+  ) {
+    if (preservedCorruptJson == null) return;
+    _corruptConversationRecoveryPersistedFrom = preservedCorruptJson;
+    _corruptConversationRecoveryPersistedJson = writtenJson;
   }
 }

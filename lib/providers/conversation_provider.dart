@@ -591,6 +591,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   List<dynamic> _unparsedConversationRecords = [];
   String? _corruptConversationDataAwaitingBackup;
   String? _corruptConversationRecoveryGuard;
+  String? _corruptConversationRecoveryPersistedFrom;
+  String? _corruptConversationRecoveryPersistedJson;
 
   ConversationsNotifier(
     this._ref, {
