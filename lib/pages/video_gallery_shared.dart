@@ -150,6 +150,9 @@ String videoMimeTypeForPath(String filePath) {
     '3gp' || '3gpp' => 'video/3gpp',
     'webm' => 'video/webm',
     'ogv' => 'video/ogg',
+    'flv' => 'video/x-flv',
+    'avi' => 'video/x-msvideo',
+    'mpeg' || 'mpg' => 'video/mpeg',
     _ => 'application/octet-stream',
   };
 }
