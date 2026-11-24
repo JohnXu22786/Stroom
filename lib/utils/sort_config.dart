@@ -107,8 +107,7 @@ class SortConfigNotifier extends StateNotifier<SortConfig> {
 
   SortConfigNotifier(
     this._storageKey, {
-    @visibleForTesting
-    Future<String?> Function(String key)? readStoredValue,
+    @visibleForTesting Future<String?> Function(String key)? readStoredValue,
   })  : _readStoredValue = readStoredValue ?? _readFromPreferences,
         super(const SortConfig());
 
