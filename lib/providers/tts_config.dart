@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import 'provider_config.dart';
@@ -297,23 +298,60 @@ final customTrimPresetsProvider =
 class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
   CustomTrimPresetsNotifier() : super([]);
 
+  final List<List<TrimPreset> Function(List<TrimPreset>)> _pendingMutations = [];
+  Future<void>? _loadFuture;
+  bool _collectingPendingMutations = false;
+
   Future<void> load() async {
+    final currentLoad = _loadFuture;
+    if (currentLoad != null) {
+      return currentLoad;
+    }
+
+    final completer = Completer<void>();
+    _loadFuture = completer.future;
+    _collectingPendingMutations = true;
+    try {
+      await _loadSavedPresets();
+    } finally {
+      _collectingPendingMutations = false;
+      _loadFuture = null;
+      completer.complete();
+    }
+  }
+
+  Future<void> _loadSavedPresets() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('custom_trim_presets');
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
-        state = list.map((m) => TrimPreset.fromMap(m)).toList();
+        state = _applyPendingMutations(
+          list.map((m) => TrimPreset.fromMap(m)).toList(),
+        );
         return;
       }
     } catch (e) {
       debugPrint('Failed to load custom trim presets: $e');
     }
-    state = [];
+    state = _applyPendingMutations([]);
+  }
+
+  List<TrimPreset> _applyPendingMutations(List<TrimPreset> presets) {
+    final mutations = List<List<TrimPreset> Function(List<TrimPreset>)>.from(
+      _pendingMutations,
+    );
+    _pendingMutations.clear();
+    _collectingPendingMutations = false;
+    return mutations.fold(presets, (current, mutation) => mutation(current));
   }
 
   Future<void> _persist() async {
     try {
+      final currentLoad = _loadFuture;
+      if (currentLoad != null) {
+        await currentLoad;
+      }
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString('custom_trim_presets', json);
@@ -324,18 +362,31 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
 
   /// 添加一个自定义裁切预设
   Future<void> add(TrimPreset preset) async {
+    if (_collectingPendingMutations) {
+      _pendingMutations.add((presets) => [...presets, preset]);
+    }
     state = [...state, preset];
     await _persist();
   }
 
   /// 更新一个自定义裁切预设
   Future<void> update(String id, TrimPreset updated) async {
+    if (_collectingPendingMutations) {
+      _pendingMutations.add(
+        (presets) => presets.map((e) => e.id == id ? updated : e).toList(),
+      );
+    }
     state = state.map((e) => e.id == id ? updated : e).toList();
     await _persist();
   }
 
   /// 删除一个自定义裁切预设
   Future<void> remove(String id) async {
+    if (_collectingPendingMutations) {
+      _pendingMutations.add(
+        (presets) => presets.where((e) => e.id != id).toList(),
+      );
+    }
     state = state.where((e) => e.id != id).toList();
     await _persist();
   }
