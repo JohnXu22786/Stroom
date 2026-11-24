@@ -118,9 +118,8 @@ String decodeHtmlCharacterFromMatch(Match match) {
 String _decodeNumericCharacterReference(String digits, {required int radix}) {
   var value = 0;
   for (final digit in digits.codeUnits) {
-    final digitValue = digit <= 0x39
-        ? digit - 0x30
-        : (digit | 0x20) - 0x61 + 10;
+    final digitValue =
+        digit <= 0x39 ? digit - 0x30 : (digit | 0x20) - 0x61 + 10;
     if (value > (0x10ffff - digitValue) ~/ radix) {
       return '\uFFFD';
     }
