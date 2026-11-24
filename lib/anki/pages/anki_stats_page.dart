@@ -59,7 +59,8 @@ class AnkiStatsPage extends ConsumerWidget {
         db.cards.totalCountAll(),
         db.cards.countByQueueAll(0), // new
         db.cards.countByQueueAll(1), // learning
-        db.cards.countByQueueAll(2), // review
+        db.cards.countByQueueAll(2), // all review cards
+        db.cards.countDueReviewAll(now.millisecondsSinceEpoch ~/ 1000),
         db.revlog.count(),
       ], eagerError: true),
       builder: (ctx, snap) {
@@ -80,7 +81,8 @@ class AnkiStatsPage extends ConsumerWidget {
         final newCount = data[1];
         final learning = data[2];
         final review = data[3];
-        final revlogCount = data[4];
+        final dueReview = data[4];
+        final revlogCount = data[5];
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -110,7 +112,7 @@ class AnkiStatsPage extends ConsumerWidget {
               icon: Icons.replay,
               color: Colors.green,
               title: l10n.ankiStatsDueForReview,
-              value: '$review',
+              value: '$dueReview',
             ),
             const SizedBox(height: 12),
             _StatCard(

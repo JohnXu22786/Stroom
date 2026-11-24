@@ -150,6 +150,14 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
+  Future<int> countDueReviewAll(int nowSec) async {
+    final result = await _db.rawQuery(
+      'SELECT COUNT(*) AS cnt FROM cards WHERE queue = 2 AND due <= ?',
+      [nowSec],
+    );
+    return result.first['cnt'] as int;
+  }
+
   Future<List<Card>> all() async {
     final rows = await _db.query('cards');
     return rows.map(Card.fromMap).toList();
