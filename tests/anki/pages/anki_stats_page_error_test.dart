@@ -70,6 +70,9 @@ class _QueryFailingCardDao implements CardDao {
   Future<int> countByQueueAll(int queueValue) async => 0;
 
   @override
+  Future<int> countDueReviewAll(int nowSec) => Future.error(error);
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

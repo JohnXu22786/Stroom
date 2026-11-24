@@ -9,21 +9,35 @@ import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 class _StubAnkiDatabase extends AnkiDatabase {
-  _StubAnkiDatabase();
+  _StubAnkiDatabase({this.reviewDueTimes = const []});
+
+  final List<int> reviewDueTimes;
 
   @override
-  late final CardDao cards = _StubCardDao();
+  late final CardDao cards = _StubCardDao(reviewDueTimes: reviewDueTimes);
 
   @override
   late final RevlogDao revlog = _StubRevlogDao();
 }
 
 class _StubCardDao implements CardDao {
+  final List<int> reviewDueTimes;
+
+  _StubCardDao({this.reviewDueTimes = const []});
+
   @override
   Future<int> totalCountAll() async => 10;
 
   @override
-  Future<int> countByQueueAll(int queueValue) async => queueValue == 1 ? 2 : 3;
+  Future<int> countByQueueAll(int queueValue) async {
+    if (queueValue == 1) return 2;
+    if (queueValue == 2) return reviewDueTimes.length;
+    return 3;
+  }
+
+  @override
+  Future<int> countDueReviewAll(int nowSec) async =>
+      reviewDueTimes.where((due) => due <= nowSec).length;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -82,6 +96,49 @@ void main() {
       }
     },
   );
+
+  testWidgets('shows only review cards due now or earlier in due statistics', (
+    tester,
+  ) async {
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final database = _StubAnkiDatabase(
+      reviewDueTimes: [nowSec - 60, nowSec + 3600],
+    );
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [ankiDatabaseProvider.overrideWith((_) async => database)],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiStatsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    final dueCard = find.ancestor(
+      of: find.text('Due for review'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: dueCard, matching: find.text('1')),
+      findsOneWidget,
+    );
+    final progressCard = find.ancestor(
+      of: find.text('Study progress'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: progressCard, matching: find.text('40%')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('uses compact radius for the statistics icon plate', (
     tester,
