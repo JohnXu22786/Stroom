@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -128,10 +130,9 @@ class AssistantCatalogService {
           'Accept':
               'application/json, application/yaml, text/markdown, text/plain',
         });
-      final response = await http.Response.fromStream(
-        await _client.send(request),
-      );
+      final response = await _client.send(request);
       if (_isRedirect(response.statusCode)) {
+        await _cancelBody(response.stream);
         if (redirectCount >= 5) {
           throw const FormatException('Too many assistant download redirects.');
         }
@@ -153,17 +154,38 @@ class AssistantCatalogService {
         continue;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        await _cancelBody(response.stream);
         throw FormatException(
           'Download failed with HTTP ${response.statusCode}.',
         );
       }
-      if (response.bodyBytes.length > _maxCatalogBytes) {
-        throw const FormatException(
-          'Remote assistant files may not exceed 1 MiB.',
-        );
-      }
-      return response.bodyBytes;
+      return _readBoundedBody(response.stream);
     }
+  }
+
+  Future<List<int>> _readBoundedBody(Stream<List<int>> stream) async {
+    final iterator = StreamIterator<List<int>>(stream);
+    final bytes = BytesBuilder(copy: false);
+    var length = 0;
+    try {
+      while (await iterator.moveNext()) {
+        final chunk = iterator.current;
+        if (chunk.length > _maxCatalogBytes - length) {
+          throw const FormatException(
+            'Remote assistant files may not exceed 1 MiB.',
+          );
+        }
+        bytes.add(chunk);
+        length += chunk.length;
+      }
+      return bytes.takeBytes();
+    } finally {
+      await iterator.cancel();
+    }
+  }
+
+  Future<void> _cancelBody(Stream<List<int>> stream) async {
+    await stream.listen((_) {}, onError: (_) {}).cancel();
   }
 
   static bool _isRedirect(int statusCode) =>
