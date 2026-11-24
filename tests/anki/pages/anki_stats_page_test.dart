@@ -9,12 +9,19 @@ import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 class _StubAnkiDatabase extends AnkiDatabase {
-  _StubAnkiDatabase({this.reviewDueTimes = const []});
+  _StubAnkiDatabase({
+    this.reviewDueTimes = const [],
+    this.dayLearningCount = 0,
+  });
 
   final List<int> reviewDueTimes;
+  final int dayLearningCount;
 
   @override
-  late final CardDao cards = _StubCardDao(reviewDueTimes: reviewDueTimes);
+  late final CardDao cards = _StubCardDao(
+    reviewDueTimes: reviewDueTimes,
+    dayLearningCount: dayLearningCount,
+  );
 
   @override
   late final RevlogDao revlog = _StubRevlogDao();
@@ -22,8 +29,9 @@ class _StubAnkiDatabase extends AnkiDatabase {
 
 class _StubCardDao implements CardDao {
   final List<int> reviewDueTimes;
+  final int dayLearningCount;
 
-  _StubCardDao({this.reviewDueTimes = const []});
+  _StubCardDao({this.reviewDueTimes = const [], this.dayLearningCount = 0});
 
   @override
   Future<int> totalCountAll() async => 10;
@@ -32,6 +40,7 @@ class _StubCardDao implements CardDao {
   Future<int> countByQueueAll(int queueValue) async {
     if (queueValue == 1) return 2;
     if (queueValue == 2) return reviewDueTimes.length;
+    if (queueValue == 3) return dayLearningCount;
     return 3;
   }
 
@@ -136,6 +145,69 @@ void main() {
     );
     expect(
       find.descendant(of: progressCard, matching: find.text('40%')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('includes day-learning cards in learning total and progress', (
+    tester,
+  ) async {
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final database = _StubAnkiDatabase(
+      reviewDueTimes: [nowSec - 60, nowSec + 3600],
+      dayLearningCount: 3,
+    );
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [ankiDatabaseProvider.overrideWith((_) async => database)],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiStatsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    final newCard = find.ancestor(
+      of: find.text('New cards'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: newCard, matching: find.text('3')),
+      findsOneWidget,
+    );
+
+    final learningCard = find.ancestor(
+      of: find.text('Learning'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: learningCard, matching: find.text('5')),
+      findsOneWidget,
+    );
+
+    final dueCard = find.ancestor(
+      of: find.text('Due for review'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: dueCard, matching: find.text('1')),
+      findsOneWidget,
+    );
+
+    final progressCard = find.ancestor(
+      of: find.text('Study progress'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: progressCard, matching: find.text('70%')),
       findsOneWidget,
     );
   });

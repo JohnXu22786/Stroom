@@ -59,6 +59,7 @@ class AnkiStatsPage extends ConsumerWidget {
         db.cards.totalCountAll(),
         db.cards.countByQueueAll(0), // new
         db.cards.countByQueueAll(1), // learning
+        db.cards.countByQueueAll(3), // day learning
         db.cards.countByQueueAll(2), // all review cards
         db.cards.countDueReviewAll(now.millisecondsSinceEpoch ~/ 1000),
         db.revlog.count(),
@@ -79,10 +80,10 @@ class AnkiStatsPage extends ConsumerWidget {
         final data = snap.data as List<int>;
         final total = data[0];
         final newCount = data[1];
-        final learning = data[2];
-        final review = data[3];
-        final dueReview = data[4];
-        final revlogCount = data[5];
+        final learning = data[2] + data[3];
+        final review = data[4];
+        final dueReview = data[5];
+        final revlogCount = data[6];
 
         return ListView(
           padding: const EdgeInsets.all(16),
