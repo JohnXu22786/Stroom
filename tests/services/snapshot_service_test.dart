@@ -235,6 +235,40 @@ void main() {
           hasLength(1));
     });
 
+    test('listing removes missing archives from a small snapshot index',
+        () async {
+      final snapshotFile = await SnapshotService.createSnapshot(force: true);
+      expect(snapshotFile, isNotNull);
+
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      const missingFile = 'backup_2026-10-01T18-29-18.268046.zip';
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': [
+          SnapshotEntry(
+            file: p.basename(snapshotFile!.path),
+            sha256: 'present',
+            createdAt: DateTime.now().toIso8601String(),
+            partVersions: const {},
+          ).toJson(),
+          const SnapshotEntry(
+            file: missingFile,
+            sha256: 'missing',
+            createdAt: '2026-10-01T18:29:18.268046',
+            partVersions: {},
+          ).toJson(),
+        ],
+      }));
+
+      final snapshots = await SnapshotService.listSnapshots();
+
+      expect(snapshots.map((entry) => entry.file),
+          [p.basename(snapshotFile.path)]);
+      expect(
+          jsonDecode(await indexFile.readAsString())['snapshots'], hasLength(1),
+          reason: 'the persisted index must drop the missing archive');
+    });
+
     test('invalid archive is not added to a rebuilt index', () async {
       await snapDir.create(recursive: true);
       const snapshotName = 'backup_2026-10-01T18-29-18.268046.zip';
@@ -313,6 +347,8 @@ void main() {
       const olderFile = 'backup_2026-10-01T18-29-18.191016.zip';
       const newerFile = 'backup_2026-10-01T18-29-18.268046.zip';
       const truncatedCreatedAt = '2026-10-01T18:29:18.000';
+      await File(p.join(snapDir.path, olderFile)).create();
+      await File(p.join(snapDir.path, newerFile)).create();
       final indexFile =
           File(p.join(snapDir.path, SnapshotService.manifestName));
       await indexFile.writeAsString(jsonEncode({

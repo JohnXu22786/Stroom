@@ -202,7 +202,24 @@ class SnapshotService {
               _extractTimestamp(name) != null &&
               !indexedFiles.contains(name));
       if (hasUnindexedSnapshot) return await _rebuildIndexFromDisk();
-      return entries;
+
+      final existingSnapshotFiles = snapshotFiles
+          .whereType<File>()
+          .map((file) => p.basename(file.path))
+          .where((name) =>
+              name.endsWith('.zip') && _extractTimestamp(name) != null)
+          .toSet();
+      final currentEntries = entries
+          .where((entry) => existingSnapshotFiles.contains(entry.file))
+          .toList();
+      if (currentEntries.length != entries.length) {
+        try {
+          await _writeIndex(currentEntries);
+        } catch (e) {
+          debugPrint('[SnapshotService] 删除缺失快照索引项失败: $e');
+        }
+      }
+      return currentEntries;
     } catch (e) {
       debugPrint('[SnapshotService] 读取快照索引失败，扫描目录重建: $e');
       return _rebuildIndexFromDisk();
