@@ -26,7 +26,8 @@ class ImageNode extends SpanNode {
     final height = parseDimension(attributes['height']);
     final imageUrl = attributes['src'] ?? '';
     final alt = attributes['alt'] ?? '';
-    final isNetImage = imageUrl.startsWith('http');
+    final scheme = Uri.tryParse(imageUrl)?.scheme.toLowerCase();
+    final isNetImage = scheme == 'http' || scheme == 'https';
     final imgWidget = isNetImage
         ? Image.network(imageUrl,
             width: width,
