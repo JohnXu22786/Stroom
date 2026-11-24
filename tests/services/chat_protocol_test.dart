@@ -336,6 +336,36 @@ void main() {
       });
     });
 
+    test('assistant 历史图片作为文本上下文保留而不生成 image 块', () async {
+      final att = Attachment(
+        fileName: 'generated.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'assistant-image',
+        storagePath: '/nonexistent',
+        fileSize: 100,
+      )..base64Data = 'cGhvdG8=';
+      final req = await AnthropicProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'assistant',
+            content: 'Here is the image.',
+            attachments: [att],
+          ),
+        ],
+      );
+
+      final content = req.messages.single['content'] as List;
+      expect(content, hasLength(2));
+      expect(content.first, {'type': 'text', 'text': 'Here is the image.'});
+      expect(content.last, {
+        'type': 'text',
+        'text': contains('generated.png'),
+      });
+      expect(
+          content.where((part) => (part as Map)['type'] == 'image'), isEmpty);
+    });
+
     test('音频/视频附件在 Anthropic 下为占位文本', () async {
       final audio = Attachment(
         fileName: 'a.mp3',
