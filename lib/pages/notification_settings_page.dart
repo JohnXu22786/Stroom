@@ -151,13 +151,13 @@ class _NotificationSettingsPageState
     await _checkPermission();
     if (!mounted) return;
 
-    _notificationSettingRevision++;
     try {
       await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
     } catch (_) {
       _showNotificationSaveError();
       return;
     }
+    _notificationSettingRevision++;
     setState(() {
       _notificationsEnabled = granted;
     });
@@ -440,11 +440,11 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
-                            _notificationSettingRevision++;
                             try {
                               await ref
                                   .read(notificationSettingsProvider.notifier)
                                   .setEnabled(value);
+                              _notificationSettingRevision++;
                               if (mounted) {
                                 setState(() {
                                   _notificationsEnabled = value;

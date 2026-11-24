@@ -74,8 +74,13 @@ class _FixedErrorUpdateNotifier extends UpdateNotifier {
 }
 
 class _BlockingInitialPrefsReadStore extends InMemorySharedPreferencesStore {
-  _BlockingInitialPrefsReadStore(Map<String, Object> values)
-      : super.withData(values);
+  // ignore: use_super_parameters
+  _BlockingInitialPrefsReadStore(
+    Map<String, Object> values, {
+    this.failNotificationWrites = false,
+  }) : super.withData(values);
+
+  final bool failNotificationWrites;
 
   final initialReadStarted = Completer<void>();
   final releaseInitialRead = Completer<void>();
@@ -87,6 +92,14 @@ class _BlockingInitialPrefsReadStore extends InMemorySharedPreferencesStore {
       await releaseInitialRead.future;
     }
     return super.getAll();
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (failNotificationWrites && key == 'flutter.notifications_enabled') {
+      return Future.value(false);
+    }
+    return super.setValue(valueType, key, value);
   }
 }
 
@@ -274,6 +287,7 @@ void main() {
     // The singleton may carry a completed queue from another fake-async zone.
     // ignore: invalid_use_of_visible_for_testing_member
     NotificationService().resetNotificationSettingQueueForTesting();
+    // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({'notifications_enabled': false});
     final prefsStore = _BlockingInitialPrefsReadStore(
       {'flutter.notifications_enabled': false},
@@ -309,6 +323,68 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('notifications_enabled'), isTrue);
+    final notificationService = NotificationService();
+    // ignore: invalid_use_of_visible_for_testing_member
+    await notificationService.notificationSettingQueueForTesting;
+    // ignore: invalid_use_of_visible_for_testing_member
+    notificationService.resetNotificationSettingQueueForTesting();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('failed notification save does not block initial preference load',
+      (tester) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 5;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    // ignore: invalid_use_of_visible_for_testing_member
+    NotificationService().resetNotificationSettingQueueForTesting();
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'notifications_enabled': true});
+    final prefsStore = _BlockingInitialPrefsReadStore(
+      {'flutter.notifications_enabled': true},
+      failNotificationWrites: true,
+    );
+    SharedPreferencesStorePlatform.instance = prefsStore;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await prefsStore.initialReadStarted.future;
+    await tester.pump();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    await tester.tap(find.byType(Switch));
+    prefsStore.releaseInitialRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    expect(
+      (await SharedPreferences.getInstance()).getBool('notifications_enabled'),
+      isTrue,
+    );
     final notificationService = NotificationService();
     // ignore: invalid_use_of_visible_for_testing_member
     await notificationService.notificationSettingQueueForTesting;
