@@ -295,6 +295,10 @@ class LinkSyntax extends DelimiterSyntax {
         return null;
       } else if (char == $space) {
         buffer.write('%20');
+      } else if (char == $lt) {
+        // An opening angle bracket in an angle-bracketed destination must be
+        // escaped.
+        return null;
       } else if (char == $gt) {
         break;
       } else {
