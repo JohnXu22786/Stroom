@@ -252,6 +252,56 @@ void main() {
         );
       },
     );
+
+    test('root folder creation shares the file name reservation lock',
+        () async {
+      Future<String> saveRootFile() => withGalleryVisibleNameLock('', () async {
+            final records = await ImageManifest.loadRecordsStrict();
+            final folders = await ImageManifest.getAllFolders();
+            final name = uniqueGalleryVisibleName(
+              records: records,
+              folder: '',
+              baseName: 'photo',
+              format: 'png',
+              existingFolders: folders,
+            );
+            await Future<void>.delayed(Duration.zero);
+            await ImageManifest.addRecord(
+              _makeRecord(
+                id: 'root_file',
+                name: name,
+                format: 'png',
+                folder: '',
+              ),
+            );
+            return name;
+          });
+
+      Future<bool> createRootFolder() => createGalleryFolderIfNameAvailable(
+            'photo.png',
+            () => ImageManifest.addFolder('photo.png'),
+          );
+
+      final outcomes = await Future.wait<Object>([
+        saveRootFile(),
+        createRootFolder(),
+      ]);
+      final savedName = outcomes[0] as String;
+      final folderCreated = outcomes[1] as bool;
+      final records = await ImageManifest.loadRecordsStrict();
+      final folders = await ImageManifest.getAllFolders();
+
+      expect(savedName, folderCreated ? 'photo (2)' : 'photo');
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: [
+            for (final record in records) '${record.name}.${record.format}'
+          ],
+          folders: folders,
+        ),
+        returnsNormally,
+      );
+    });
   });
 
   group('GalleryViewerPage - loading with real image files', () {

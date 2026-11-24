@@ -99,6 +99,39 @@ String uniqueGallerySaveAsName({
       existingFolders: existingFolders,
     );
 
+/// Adds a Gallery folder only when its export path is free of file collisions.
+///
+/// Folder creation shares the parent folder's visible-name lock with imports
+/// and Save As so a root file and a same-named folder cannot be published from
+/// stale snapshots.
+Future<bool> createGalleryFolderIfNameAvailable(
+  String folderPath,
+  Future<void> Function() createFolder,
+) async {
+  final parentFolder = ImageManifest.getParentFolderPath(folderPath);
+  return withGalleryVisibleNameLock(parentFolder, () async {
+    final candidateKey = userVisibleExportPathComparisonKey(folderPath);
+    final records = await ImageManifest.loadRecordsStrict();
+    final existingFolders = await ImageManifest.getAllFolders();
+
+    final conflictsWithFile = records.any((record) {
+      final filePath = record.folder.isEmpty
+          ? '${record.name}.${record.format}'
+          : '${record.folder}/${record.name}.${record.format}';
+      return userVisibleExportPathComparisonKey(filePath) == candidateKey;
+    });
+    final conflictsWithFolder = existingFolders.any((existingFolder) {
+      final existingKey = userVisibleExportPathComparisonKey(existingFolder);
+      return existingKey == candidateKey ||
+          existingKey.startsWith('$candidateKey/');
+    });
+    if (conflictsWithFile || conflictsWithFolder) return false;
+
+    await createFolder();
+    return true;
+  });
+}
+
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
   final List<ImageRecord> images;

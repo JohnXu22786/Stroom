@@ -1038,7 +1038,21 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onCreateFolder: (name) async {
-        await ref.read(imageRecordsProvider.notifier).createFolder(name);
+        final messenger = ScaffoldMessenger.of(context);
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerFolderConflict;
+        final created = await createGalleryFolderIfNameAvailable(
+          name,
+          () => ref.read(imageRecordsProvider.notifier).createFolder(name),
+        );
+        if (!created) {
+          if (messenger.mounted) {
+            messenger.showSnackBar(
+              SnackBar(content: Text(conflictMessage)),
+            );
+          }
+          return;
+        }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onToggleSort: (field) {
