@@ -27,6 +27,14 @@ void main() {
     );
   });
 
+  test('inline bracketed destinations reject unescaped opening angles', () {
+    expect(markdown.markdownToHtml('[x](<<foo>)'), '<p>[x](&lt;<foo>)</p>\n');
+    expect(
+      markdown.markdownToHtml(r'[x](<\<foo>)'),
+      '<p><a href="%3Cfoo">x</a></p>\n',
+    );
+  });
+
   test('a bare destination ending in an escape is accepted as a reference', () {
     expect(
       markdown.markdownToHtml('[text][foo]\n\n[foo]: bar\\'),
