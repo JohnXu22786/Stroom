@@ -39,6 +39,59 @@ Uint8List extractAudioSync({
   return engine._packageFrames(frames, audioTrack);
 }
 
+/// Extracts audio for browser Task Flow execution, yielding while scanning the
+/// sample table so the browser can process cancellation and UI events.
+Future<Uint8List> extractAudioWebAsync({
+  required Uint8List videoBytes,
+  required String videoFormat,
+  bool Function()? isCancelled,
+  void Function(int progress)? onProgress,
+}) async {
+  if (videoBytes.isEmpty) {
+    throw Exception('Video data is empty');
+  }
+  if (!AudioSeparationEngine._supportedFormats
+      .contains(videoFormat.toLowerCase().trim())) {
+    throw Exception('Unsupported video format: $videoFormat');
+  }
+  onProgress?.call(0);
+
+  await Future<void>.delayed(Duration.zero);
+  if (isCancelled?.call() ?? false) {
+    throw Exception('Audio extraction was cancelled');
+  }
+
+  final mp4 = _Mp4Demuxer(videoBytes, isCancelled: isCancelled);
+  final audioTrack = await mp4.findAudioTrackYielding();
+  if (audioTrack == null) {
+    throw Exception('No audio track found in video');
+  }
+  onProgress?.call(30);
+  if (isCancelled?.call() ?? false) {
+    throw Exception('Audio extraction was cancelled');
+  }
+
+  final frames = await mp4.extractAudioFramesYielding(
+    audioTrack,
+    isCancelled: isCancelled,
+  );
+  if (frames.isEmpty) {
+    throw Exception('No audio data extracted');
+  }
+  onProgress?.call(60);
+  if (isCancelled?.call() ?? false) {
+    throw Exception('Audio extraction was cancelled');
+  }
+
+  final result = await AudioSeparationEngine()._packageFramesYielding(
+    frames,
+    audioTrack,
+    isCancelled: isCancelled,
+  );
+  onProgress?.call(100);
+  return result;
+}
+
 /// Pure-Dart MP4/ISOBMFF audio extraction engine.
 ///
 /// Parses MP4/MOV/M4V/3GP container format and extracts the audio track.
@@ -159,6 +212,125 @@ class AudioSeparationEngine {
     return _createM4aFromAacFrames(frames, track);
   }
 
+  Future<Uint8List> _packageFramesYielding(
+    List<_AudioFrame> frames,
+    _AudioTrackInfo track, {
+    bool Function()? isCancelled,
+  }) async {
+    if (track.codec != 'raw ' &&
+        track.codec != 'twos' &&
+        track.codec != 'sowt') {
+      return _createM4aFromAacFramesYielding(
+        frames,
+        track,
+        isCancelled: isCancelled,
+      );
+    }
+
+    var dataSize = 0;
+    var work = 0;
+    for (final frame in frames) {
+      dataSize += frame.data.length;
+      work++;
+      if (work >= 256) {
+        if (isCancelled?.call() ?? false) {
+          throw Exception('Audio extraction was cancelled');
+        }
+        work = 0;
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    final pcmBytes = Uint8List(dataSize);
+    var offset = 0;
+    work = 0;
+    for (final frame in frames) {
+      for (var start = 0; start < frame.data.length; start += 256 * 1024) {
+        final end = (start + 256 * 1024).clamp(0, frame.data.length);
+        pcmBytes.setRange(offset, offset + end - start, frame.data, start);
+        offset += end - start;
+        work += end - start;
+        if (work >= 256 * 1024) {
+          if (isCancelled?.call() ?? false) {
+            throw Exception('Audio extraction was cancelled');
+          }
+          work = 0;
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+    }
+
+    final bitsPerSample = track.bitsPerSample > 0 ? track.bitsPerSample : 16;
+    if (bitsPerSample == 8 &&
+        (track.codec == 'twos' || track.codec == 'sowt')) {
+      for (var start = 0; start < pcmBytes.length; start += 256 * 1024) {
+        final end = (start + 256 * 1024).clamp(0, pcmBytes.length);
+        for (var i = start; i < end; i++) {
+          pcmBytes[i] ^= 0x80;
+        }
+        if (isCancelled?.call() ?? false) {
+          throw Exception('Audio extraction was cancelled');
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+    } else if (track.codec == 'twos') {
+      final bytesPerSample = (bitsPerSample + 7) ~/ 8;
+      var start = 0;
+      while (start < pcmBytes.length) {
+        var end = (start + 256 * 1024).clamp(0, pcmBytes.length);
+        end -= (end - start) % bytesPerSample;
+        if (end == start) end = pcmBytes.length;
+        for (var sampleOffset = start;
+            sampleOffset + bytesPerSample <= end;
+            sampleOffset += bytesPerSample) {
+          for (var left = 0; left < bytesPerSample ~/ 2; left++) {
+            final right = bytesPerSample - 1 - left;
+            final tmp = pcmBytes[sampleOffset + left];
+            pcmBytes[sampleOffset + left] = pcmBytes[sampleOffset + right];
+            pcmBytes[sampleOffset + right] = tmp;
+          }
+        }
+        start = end;
+        if (isCancelled?.call() ?? false) {
+          throw Exception('Audio extraction was cancelled');
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
+    final channels = track.channels > 0 ? track.channels : 2;
+    final wavBytes = Uint8List(44 + pcmBytes.length);
+    wavBytes.setRange(0, 4, [0x52, 0x49, 0x46, 0x46]); // RIFF
+    wavBytes.setRange(8, 12, [0x57, 0x41, 0x56, 0x45]); // WAVE
+    wavBytes.setRange(12, 16, [0x66, 0x6d, 0x74, 0x20]); // fmt chunk
+    wavBytes.setRange(36, 40, [0x64, 0x61, 0x74, 0x61]); // data
+    final header = ByteData.sublistView(wavBytes);
+    header.setUint32(4, 36 + pcmBytes.length, Endian.little);
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little);
+    header.setUint16(22, channels, Endian.little);
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(
+      28,
+      sampleRate * channels * bitsPerSample ~/ 8,
+      Endian.little,
+    );
+    header.setUint16(32, channels * bitsPerSample ~/ 8, Endian.little);
+    header.setUint16(34, bitsPerSample, Endian.little);
+    header.setUint32(40, pcmBytes.length, Endian.little);
+
+    for (var start = 0; start < pcmBytes.length; start += 256 * 1024) {
+      final end = (start + 256 * 1024).clamp(0, pcmBytes.length);
+      wavBytes.setRange(44 + start, 44 + end, pcmBytes, start);
+      if (isCancelled?.call() ?? false) {
+        throw Exception('Audio extraction was cancelled');
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    return wavBytes;
+  }
+
   // ==================================================================
   // M4A (MP4 container) muxer for AAC audio
   // ==================================================================
@@ -170,6 +342,49 @@ class AudioSeparationEngine {
   /// players and accepted by Whisper ASR APIs.
   Uint8List _createM4aFromAacFrames(
       List<_AudioFrame> frames, _AudioTrackInfo track) {
+    final output = BytesBuilder();
+    for (final chunk in _createM4aFrameChunks(frames, track)) {
+      output.add(chunk);
+    }
+    return output.toBytes();
+  }
+
+  Future<Uint8List> _createM4aFromAacFramesYielding(
+    List<_AudioFrame> frames,
+    _AudioTrackInfo track, {
+    bool Function()? isCancelled,
+  }) async {
+    final chunks = <Uint8List>[];
+    var totalLength = 0;
+    await for (final chunk in _createM4aFrameChunksYielding(
+      frames,
+      track,
+      isCancelled: isCancelled,
+    )) {
+      chunks.add(chunk);
+      totalLength += chunk.length;
+    }
+
+    final output = Uint8List(totalLength);
+    var offset = 0;
+    for (final chunk in chunks) {
+      for (var start = 0; start < chunk.length; start += 256 * 1024) {
+        final end = (start + 256 * 1024).clamp(0, chunk.length).toInt();
+        output.setRange(offset, offset + end - start, chunk, start);
+        offset += end - start;
+        if (isCancelled?.call() ?? false) {
+          throw Exception('Audio extraction was cancelled');
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    return output;
+  }
+
+  Iterable<Uint8List> _createM4aFrameChunks(
+    List<_AudioFrame> frames,
+    _AudioTrackInfo track,
+  ) sync* {
     final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
     final channels = track.channels > 0 ? track.channels : 2;
     final audioSampleEntryVersion = sampleRate > 0xFFFF ? 1 : 0;
@@ -497,11 +712,362 @@ class AudioSeparationEngine {
 
     // ---- mdat ----
     _writeBoxHeader(buf, mdatSize, 'mdat');
+    yield buf.toBytes();
     for (final frame in frames) {
-      buf.add(frame.data);
+      yield frame.data;
+    }
+  }
+
+
+  Stream<Uint8List> _createM4aFrameChunksYielding(
+    List<_AudioFrame> frames,
+    _AudioTrackInfo track, {
+    bool Function()? isCancelled,
+  }) async* {
+    var work = 0;
+    Future<void> yieldIfNeeded() async {
+      work++;
+      if (work < 256) return;
+      work = 0;
+      if (isCancelled?.call() ?? false) {
+        throw Exception('Audio extraction was cancelled');
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
+    final channels = track.channels > 0 ? track.channels : 2;
+    final audioSampleEntryVersion = sampleRate > 0xFFFF ? 1 : 0;
+
+    // The 16.16 sample-rate field cannot hold rates above 65,535 Hz. For
+    // AudioSampleEntryV1, divide by a power of two until the field fits; the
+    // srat box below carries the actual rate and overrides this value.
+    var sampleRateDivisor = 1;
+    while (sampleRate * 0x10000 ~/ sampleRateDivisor > 0xFFFFFFFF) {
+      sampleRateDivisor *= 2;
+    }
+    final sampleRateField = sampleRate * 0x10000 ~/ sampleRateDivisor;
+
+    final sampleCount = frames.length;
+
+    // ---------- AAC configuration ----------
+    const freqMap = {
+      96000: 0,
+      88200: 1,
+      64000: 2,
+      48000: 3,
+      44100: 4,
+      32000: 5,
+      24000: 6,
+      22050: 7,
+      16000: 8,
+      12000: 9,
+      11025: 10,
+      8000: 11,
+      7350: 12,
+    };
+    final freqIdx = freqMap[sampleRate] ?? 4;
+    final chanCfg = channels > 6 ? 6 : channels;
+    const audioObjectType = 2; // AAC-LC
+
+    // Prefer the source configuration so profiles such as HE-AAC/SBR and
+    // non-default AAC frame lengths survive the remux.
+    final asc = track.audioSpecificConfig ??
+        Uint8List.fromList([
+          (audioObjectType << 3) | (freqIdx >> 1),
+          ((freqIdx & 1) << 7) | (chanCfg << 3),
+        ]);
+
+    // ---------- Compute frame info ----------
+    int totalDataSize = 0;
+    final sampleSizes = <int>[];
+    for (final frame in frames) {
+      await yieldIfNeeded();
+      final s = frame.data.length;
+      sampleSizes.add(s);
+      totalDataSize += s;
     }
 
-    return buf.toBytes();
+    // ---------- Pre-compute box sizes ----------
+    final samplesPerFrame = _samplesPerAacFrame(asc, sampleRate);
+    final duration = sampleCount * samplesPerFrame;
+    final outputEditList = track.outputEditList;
+    final movieTimescale =
+        outputEditList == null ? sampleRate : track.movieTimescale;
+    final movieDuration = outputEditList == null
+        ? duration
+        : outputEditList.fold<int>(
+            0,
+            (total, entry) => total + entry.segmentDuration,
+          );
+    final usesVersion1MovieHeaders = movieDuration > 0xFFFFFFFF;
+    final usesVersion1EditList = outputEditList?.any(
+          (entry) =>
+              entry.segmentDuration > 0xFFFFFFFF ||
+              entry.mediaTime < -0x80000000 ||
+              entry.mediaTime > 0x7FFFFFFF,
+        ) ??
+        false;
+
+    // stsd entry size: mp4a base (36 for v0, 52 for v1), optional srat box,
+    // and esds box.
+    final esdsSize = _esdsBoxSize(asc);
+    final sratSize = audioSampleEntryVersion == 1 ? 16 : 0;
+    final stsdEntrySize =
+        (audioSampleEntryVersion == 1 ? 52 : 36) + sratSize + esdsSize;
+    final stsdSize =
+        16 + stsdEntrySize; // header(8)+ver/flags(4)+entryCount(4)+entry
+    const sttsSize = 24; // header + 1 entry
+    const stscSize = 28; // header + 1 entry
+    final stszSize = 20 + sampleCount * 4; // header + per-sample sizes
+    const stcoSize = 20; // header + 1 chunk offset
+    // each level below includes +8 for its own box header
+    final stblSize = 8 + stsdSize + sttsSize + stscSize + stszSize + stcoSize;
+
+    const smhdSize = 16;
+    const dinfSize = 36; // danf header(8) + dref(28)
+    final minfSize = 8 + smhdSize + dinfSize + stblSize;
+
+    const mdhdSize = 32;
+    const hdlrSize = 33;
+    final mdiaSize = 8 + mdhdSize + hdlrSize + minfSize;
+
+    final tkhdSize = usesVersion1MovieHeaders ? 104 : 92;
+    final elstEntrySize = usesVersion1EditList ? 20 : 12;
+    final elstSize =
+        outputEditList == null ? 0 : 16 + outputEditList.length * elstEntrySize;
+    final edtsSize = outputEditList == null ? 0 : 8 + elstSize;
+    final trakSize = 8 + tkhdSize + edtsSize + mdiaSize;
+
+    final mvhdSize = usesVersion1MovieHeaders ? 120 : 108;
+    final moovSize = 8 + mvhdSize + trakSize;
+
+    // ftyp: header(8) + major(4) + minor(4) + 3 compatible brands(12) = 28
+    const ftypSize = 28;
+    final mdatSize = 8 + totalDataSize;
+
+    // File layout: ftyp | moov | mdat
+    final moovOffset = ftypSize;
+    final mdatOffset = moovOffset + moovSize;
+    final mdatDataOffset = mdatOffset + 8; // skip mdat box header
+
+    // ---------- Build file ----------
+    final buf = BytesBuilder();
+
+    // ---- ftyp ----
+    _writeBoxHeader(buf, ftypSize, 'ftyp');
+    _writeCString(buf, 'M4A '); // major brand
+    _writeU32be(buf, 0x00000200); // minor version
+    _writeCString(buf, 'M4A '); // compatible brand
+    _writeCString(buf, 'mp42');
+    _writeCString(buf, 'isom');
+
+    // ---- moov ----
+    _writeBoxHeader(buf, moovSize, 'moov');
+
+    // mvhd
+    _writeBoxHeader(buf, mvhdSize, 'mvhd');
+    _writeU32be(
+      buf,
+      usesVersion1MovieHeaders ? 0x01000000 : 0,
+    ); // version + flags
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, 0); // creation_time
+      _writeU64be(buf, 0); // modification_time
+    } else {
+      _writeU32be(buf, 0); // creation_time
+      _writeU32be(buf, 0); // modification_time
+    }
+    _writeU32be(buf, movieTimescale); // timescale
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, movieDuration); // duration
+    } else {
+      _writeU32be(buf, movieDuration); // duration
+    }
+    _writeU32be(buf, 0x00010000); // rate (1.0 fixed-point)
+    _writeU16be(buf, 0x0100); // volume (1.0)
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // reserved(10)
+    // matrix (identity)
+    for (final v in [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]) {
+      _writeU32be(buf, v);
+    }
+    // pre-defined (6 x 4 bytes)
+    for (var i = 0; i < 6; i++) {
+      _writeU32be(buf, 0);
+    }
+    _writeU32be(buf, 2); // next_track_id
+
+    // trak
+    _writeBoxHeader(buf, trakSize, 'trak');
+
+    // tkhd
+    _writeBoxHeader(buf, tkhdSize, 'tkhd');
+    _writeU32be(
+      buf,
+      (usesVersion1MovieHeaders ? 0x01000000 : 0) | 0x00000007,
+    ); // version + enabled flags
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, 0); // creation_time
+      _writeU64be(buf, 0); // modification_time
+    } else {
+      _writeU32be(buf, 0); // creation_time
+      _writeU32be(buf, 0); // modification_time
+    }
+    _writeU32be(buf, 1); // track_id
+    _writeU32be(buf, 0); // reserved
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, movieDuration); // duration
+    } else {
+      _writeU32be(buf, movieDuration); // duration
+    }
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
+    _writeU16be(buf, 0); // layer
+    _writeU16be(buf, 0); // alternate_group
+    _writeU16be(buf, 0x0100); // volume (1.0)
+    _writeU16be(buf, 0); // reserved
+    // matrix (identity)
+    for (final v in [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]) {
+      _writeU32be(buf, v);
+    }
+    _writeU32be(buf, 0); // width
+    _writeU32be(buf, 0); // height
+
+    if (outputEditList != null) {
+      _writeBoxHeader(buf, edtsSize, 'edts');
+      _writeBoxHeader(buf, elstSize, 'elst');
+      _writeU32be(
+        buf,
+        usesVersion1EditList ? 0x01000000 : 0,
+      ); // version + flags
+      _writeU32be(buf, outputEditList.length);
+      for (final entry in outputEditList) {
+        if (usesVersion1EditList) {
+          _writeU64be(buf, entry.segmentDuration);
+          _writeU64be(buf, entry.mediaTime);
+        } else {
+          _writeU32be(buf, entry.segmentDuration);
+          _writeU32be(buf, entry.mediaTime);
+        }
+        _writeU16be(buf, entry.mediaRateInteger);
+        _writeU16be(buf, entry.mediaRateFraction);
+      }
+    }
+
+    // mdia
+    _writeBoxHeader(buf, mdiaSize, 'mdia');
+
+    // mdhd
+    _writeBoxHeader(buf, mdhdSize, 'mdhd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // creation_time
+    _writeU32be(buf, 0); // modification_time
+    _writeU32be(buf, sampleRate); // timescale
+    _writeU32be(buf, duration); // duration
+    _writeU16be(buf, 0x55C4); // language code (und)
+    _writeU16be(buf, 0); // quality
+
+    // hdlr
+    _writeBoxHeader(buf, hdlrSize, 'hdlr');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // pre_defined
+    _writeCString(buf, 'soun'); // handler_type
+    _writeU32be(buf, 0); // reserved
+    _writeU32be(buf, 0); // reserved
+    _writeU32be(buf, 0); // reserved
+    _writeBytes(buf, [0]); // null name terminator
+
+    // minf
+    _writeBoxHeader(buf, minfSize, 'minf');
+
+    // smhd
+    _writeBoxHeader(buf, smhdSize, 'smhd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU16be(buf, 0); // balance
+    _writeU16be(buf, 0); // reserved
+
+    // dinf
+    _writeBoxHeader(buf, dinfSize, 'dinf');
+
+    // dref
+    _writeBoxHeader(buf, dinfSize - 8, 'dref');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    // url box (self-contained)
+    _writeBoxHeader(buf, 12, 'url ');
+    _writeU32be(buf, 0x00000001); // version=0, flags=0x000001 (self-contained)
+
+    // stbl
+    _writeBoxHeader(buf, stblSize, 'stbl');
+
+    // stsd
+    _writeBoxHeader(buf, stsdSize, 'stsd');
+    _writeU32be(buf, 0); // stsd version=0, flags=0
+    _writeU32be(buf, 1); // entry_count = 1
+
+    // SampleEntry: mp4a
+    _writeU32be(buf, stsdEntrySize); // entry_size
+    _writeCString(buf, 'mp4a'); // codec
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0]); // reserved(6)
+    _writeU16be(buf, 1); // data_reference_index
+    _writeU16be(buf, audioSampleEntryVersion); // entry_version
+    _writeU16be(buf, 0); // revision_level
+    _writeU32be(buf, 0); // vendor
+    _writeU16be(buf, channels); // channel count
+    _writeU16be(buf, 16); // sample size
+    _writeU16be(buf, 0); // pre-defined
+    _writeU16be(buf, 0); // reserved
+    _writeU32be(buf, sampleRateField); // sample rate (16.16 fixed-point)
+    if (audioSampleEntryVersion == 1) {
+      // Version 1 AudioSampleEntry fields: samples/bytes per packet/frame.
+      _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+      // ISO/IEC 14496-12 Sampling Rate Box: the actual sample rate overrides
+      // the representable 16.16 rate in the AudioSampleEntry.
+      _writeBoxHeader(buf, sratSize, 'srat');
+      _writeU32be(buf, 0); // version=0, flags=0
+      _writeU32be(buf, sampleRate);
+    }
+
+    // esds box inside stsd
+    _writeEsdsBox(buf, asc);
+
+    // stts
+    _writeBoxHeader(buf, sttsSize, 'stts');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, sampleCount); // sample_count
+    _writeU32be(buf, samplesPerFrame); // sample_duration
+
+    // stsc
+    _writeBoxHeader(buf, stscSize, 'stsc');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, 1); // first_chunk
+    _writeU32be(buf, sampleCount); // samples_per_chunk
+    _writeU32be(buf, 1); // sample_description_index
+
+    // stsz
+    _writeBoxHeader(buf, stszSize, 'stsz');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // sample_size (0 = non-constant)
+    _writeU32be(buf, sampleCount);
+    for (final s in sampleSizes) {
+      await yieldIfNeeded();
+      _writeU32be(buf, s);
+    }
+
+    // stco
+    _writeBoxHeader(buf, stcoSize, 'stco');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, mdatDataOffset); // chunk_offset
+
+    // ---- mdat ----
+    _writeBoxHeader(buf, mdatSize, 'mdat');
+    yield buf.toBytes();
+    for (final frame in frames) {
+      await yieldIfNeeded();
+      yield frame.data;
+    }
   }
 
   // ==================================================================
@@ -827,10 +1393,12 @@ class _Mp4Demuxer {
 
   final Uint8List _data;
   final List<(int, int)> _mdatPayloadRanges = [];
+  final bool Function()? _isCancelled;
+  int _yieldWork = 0;
   int _offset = 0;
   int? _movieTimescale;
 
-  _Mp4Demuxer(this._data);
+  _Mp4Demuxer(this._data, {this._isCancelled});
 
   static bool _hasSupportedAacAudioSpecificConfig(Uint8List? asc) {
     if (asc == null || asc.isEmpty) return true;
@@ -841,6 +1409,16 @@ class _Mp4Demuxer {
 
     final extendedObjectType = 32 + ((asc[0] & 0x07) << 3) + (asc[1] >> 5);
     return _aacAudioObjectTypes.contains(extendedObjectType);
+  }
+
+  Future<void> _yieldIfNeeded() async {
+    _yieldWork++;
+    if (_yieldWork < 256) return;
+    _yieldWork = 0;
+    if (_isCancelled?.call() ?? false) {
+      throw Exception('Audio extraction was cancelled');
+    }
+    await Future<void>.delayed(Duration.zero);
   }
 
   /// Find the first audio track in the MP4 file.
@@ -907,6 +1485,78 @@ class _Mp4Demuxer {
 
       return audioTrack;
     } catch (e) {
+      debugPrint('[Mp4Demuxer] parse error: $e');
+      return null;
+    }
+  }
+
+
+  Future<_AudioTrackInfo?> findAudioTrackYielding() async {
+    try {
+      _offset = 0;
+      _mdatPayloadRanges.clear();
+
+      int moovOffset = -1;
+
+      while (_offset < _data.length) {
+        await _yieldIfNeeded();
+        final boxStart = _offset;
+        if (_offset + 8 > _data.length) break;
+
+        var boxSize = _readUint32();
+        final boxType = _readString(4);
+        if (boxSize == 1) {
+          if (_offset + 8 > _data.length) break;
+          boxSize = _readUint64();
+        }
+
+        final boxHeaderEnd = _offset;
+        if (boxType == 'moov') {
+          moovOffset = boxStart;
+        } else if (boxType == 'mdat') {
+          final boxEnd = boxSize == 0 ? _data.length : boxStart + boxSize;
+          _mdatPayloadRanges.add((boxHeaderEnd, boxEnd));
+        }
+
+        if (boxSize == 0) break;
+        _offset = boxStart + boxSize;
+      }
+
+      if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
+
+      _movieTimescale = _readMovieTimescale(moovOffset);
+      _offset = moovOffset + 8;
+      final moovEnd = moovOffset + _boxSizeAt(moovOffset);
+
+      _AudioTrackInfo? audioTrack;
+
+      while (_offset < moovEnd) {
+        await _yieldIfNeeded();
+        final childStart = _offset;
+        if (_offset + 8 > _data.length) break;
+
+        _readUint32(); // size
+        final childType = _readString(4);
+
+        if (childType == 'trak') {
+          final trackInfo = await _parseTrackYielding();
+          if (trackInfo != null) {
+            if (trackInfo.codec == 'mp4a' ||
+                trackInfo.codec == 'raw ' ||
+                trackInfo.codec == 'twos' ||
+                trackInfo.codec == 'sowt') {
+              audioTrack ??= trackInfo;
+            }
+          }
+          _offset = childStart + _boxSizeAt(childStart);
+        } else {
+          _offset = childStart + _boxSizeAt(childStart);
+        }
+      }
+
+      return audioTrack;
+    } catch (e) {
+      if (_isCancelled?.call() ?? false) rethrow;
       debugPrint('[Mp4Demuxer] parse error: $e');
       return null;
     }
@@ -1224,6 +1874,333 @@ class _Mp4Demuxer {
     );
   }
 
+
+  Future<_AudioTrackInfo?> _parseTrackYielding() async {
+    final trackStart = _offset;
+    final trackSize = _boxSizeAt(trackStart - 8);
+    final trackEnd = trackStart + trackSize - 8;
+
+    int trackId = 0;
+    String? handlerType;
+    String? codec;
+    int sampleRate = 0;
+    int channels = 0;
+    int bitsPerSample = 16;
+    Uint8List? audioSpecificConfig;
+    int mediaTimescale = 0;
+    final sampleDescriptions = <_AudioSampleDescription?>[];
+    int sampleCount = 0;
+    List<int> sampleSizes = [];
+    List<int> chunkOffsets = [];
+    final stscEntries = <_StscEntry>[];
+    final sampleTimingEntries = <_SttsEntry>[];
+    List<_EditListEntry>? editListEntries;
+
+    while (_offset < trackEnd) {
+      await _yieldIfNeeded();
+      final childStart = _offset;
+      if (_offset + 8 > _data.length) break;
+
+      final childSize = _readUint32();
+      final childType = _readString(4);
+
+      if (childType == 'tkhd') {
+        _offset += 4; // version(1) + flags(3)
+        _offset += 4; // creation time
+        _offset += 4; // modification time
+        trackId = _readUint32();
+        _offset = childStart + childSize;
+      } else if (childType == 'edts') {
+        final edtsEnd = childStart + childSize;
+        var editOffset = childStart + 8;
+        while (editOffset + 8 <= edtsEnd) {
+          await _yieldIfNeeded();
+          final editSize = _uint32At(editOffset);
+          if (editSize < 8 || editOffset + editSize > edtsEnd) return null;
+          final editType = String.fromCharCodes(
+            _data.sublist(editOffset + 4, editOffset + 8),
+          );
+          if (editType == 'elst') {
+            if (editListEntries != null) return null;
+            editListEntries = await _parseEditListEntriesYielding(editOffset, editSize);
+            if (editListEntries == null) return null;
+          }
+          editOffset += editSize;
+        }
+        if (editOffset != edtsEnd) return null;
+        _offset = edtsEnd;
+      } else if (childType == 'mdia') {
+        final mdiaEnd = childStart + childSize;
+
+        while (_offset < mdiaEnd) {
+          await _yieldIfNeeded();
+          final mcStart = _offset;
+          final mcSize = _readUint32();
+          final mcType = _readString(4);
+
+          if (mcType == 'mdhd') {
+            mediaTimescale = _readTimescale(mcStart, mcSize) ?? 0;
+            _offset = mcStart + mcSize;
+          } else if (mcType == 'hdlr') {
+            _offset += 4; // version + flags
+            _offset += 4; // component type
+            handlerType = _readString(4);
+            _offset = mcStart + mcSize;
+          } else if (mcType == 'minf') {
+            final minfEnd = mcStart + mcSize;
+
+            while (_offset < minfEnd) {
+              await _yieldIfNeeded();
+              final icStart = _offset;
+              final icSize = _readUint32();
+              final icType = _readString(4);
+
+              if (icType == 'stbl') {
+                final stblEnd = icStart + icSize;
+
+                while (_offset < stblEnd) {
+                  await _yieldIfNeeded();
+                  if (_offset + 8 > _data.length) return null;
+                  final scStart = _offset;
+                  final scSize = _readUint32(); // box size
+                  final scType = _readString(4);
+                  final scEnd = scStart + scSize;
+                  if (scSize < 8 || scEnd > stblEnd || scEnd > _data.length) {
+                    return null;
+                  }
+
+                  if (scType == 'stsd') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      await _yieldIfNeeded();
+                      final es = _offset;
+                      final entrySize = _readUint32();
+                      final entryCodec = _readString(4);
+                      _offset += 6; // reserved
+                      _offset += 2; // data reference index
+                      if (entryCodec == 'mp4a' ||
+                          entryCodec == 'raw ' ||
+                          entryCodec == 'twos' ||
+                          entryCodec == 'sowt') {
+                        final audioSampleEntryVersion = _readUint16();
+                        _offset += 2; // revision level
+                        _offset += 4; // vendor
+                        var entryChannels = _readUint16();
+                        final entryBitsPerSample = _readUint16();
+                        _offset += 4; // pre-defined + reserved
+                        var entrySampleRate = _readUint32() >> 16;
+                        Uint8List? entryAudioSpecificConfig;
+                        var supportedMp4aEntry = true;
+                        if (entryCodec == 'mp4a') {
+                          if (audioSampleEntryVersion == 2 &&
+                              entrySize >= 72 &&
+                              es + 72 <= _data.length) {
+                            final sampleEntryData = ByteData.sublistView(_data);
+                            final version2SampleRate =
+                                sampleEntryData.getFloat64(es + 40, Endian.big);
+                            final version2Channels = _uint32At(es + 48);
+                            if (version2SampleRate.isFinite &&
+                                version2SampleRate > 0) {
+                              entrySampleRate = version2SampleRate.round();
+                            }
+                            if (version2Channels > 0) {
+                              entryChannels = version2Channels;
+                            }
+                          }
+                          final decoderConfig = _readMp4aDecoderConfig(
+                            es,
+                            entrySize,
+                            audioSampleEntryVersion,
+                          );
+                          if (decoderConfig != null) {
+                            final objectTypeIndication =
+                                decoderConfig.objectTypeIndication;
+                            supportedMp4aEntry = _aacObjectTypeIndications
+                                    .contains(objectTypeIndication) &&
+                                (objectTypeIndication != 0x40 ||
+                                    _hasSupportedAacAudioSpecificConfig(
+                                      decoderConfig.audioSpecificConfig,
+                                    ));
+                            entryAudioSpecificConfig =
+                                decoderConfig.audioSpecificConfig;
+                          }
+                        }
+                        sampleDescriptions.add(supportedMp4aEntry
+                            ? _AudioSampleDescription(
+                                codec: entryCodec,
+                                sampleRate: entrySampleRate,
+                                channels: entryChannels,
+                                bitsPerSample: entryBitsPerSample,
+                                audioSpecificConfig: entryAudioSpecificConfig,
+                              )
+                            : null);
+                      } else {
+                        sampleDescriptions.add(null);
+                      }
+                      _offset = es + _boxSizeAt(es);
+                    }
+                  } else if (scType == 'stts') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    int total = 0;
+                    for (var i = 0; i < entryCount; i++) {
+                      await _yieldIfNeeded();
+                      final count = _readUint32();
+                      final duration = _readUint32();
+                      total += count;
+                      sampleTimingEntries.add((count, duration));
+                    }
+                    sampleCount = total;
+                  } else if (scType == 'stsc') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      await _yieldIfNeeded();
+                      final firstChunk = _readUint32();
+                      final spc = _readUint32();
+                      final sampleDescriptionIndex = _readUint32();
+                      stscEntries
+                          .add((firstChunk, spc, sampleDescriptionIndex));
+                    }
+                  } else if (scType == 'stsz') {
+                    final stszEnd = scStart + scSize;
+                    if (scSize < 20 ||
+                        stszEnd > stblEnd ||
+                        stszEnd > _data.length) {
+                      return null;
+                    }
+                    _offset += 4; // version + flags
+                    final sampleSize = _readUint32();
+                    sampleCount = _readUint32();
+                    if (sampleSize == 0) {
+                      final entryCapacity = (scSize - 20) ~/ 4;
+                      if (sampleCount > entryCapacity) return null;
+                      for (var i = 0; i < sampleCount; i++) {
+                        await _yieldIfNeeded();
+                        sampleSizes.add(_readUint32());
+                      }
+                    } else {
+                      if (sampleCount > _data.length ~/ sampleSize) {
+                        return null;
+                      }
+                      sampleSizes = List.filled(sampleCount, sampleSize);
+                    }
+                  } else if (scType == 'stco') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      await _yieldIfNeeded();
+                      chunkOffsets.add(_readUint32());
+                    }
+                  } else if (scType == 'co64') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      await _yieldIfNeeded();
+                      final high = _readUint32();
+                      final low = _readUint32();
+                      chunkOffsets.add((high << 32) | low);
+                    }
+                  } else {
+                    _offset = scEnd;
+                  }
+                }
+              } else {
+                _offset = icStart + _boxSizeAt(icStart);
+              }
+            }
+          } else {
+            _offset = mcStart + _boxSizeAt(mcStart);
+          }
+        }
+      } else {
+        _offset = childStart + _boxSizeAt(childStart);
+      }
+    }
+
+    if (handlerType != 'soun') return null;
+    if (sampleSizes.isEmpty || chunkOffsets.isEmpty) return null;
+
+    // Build per-chunk samples-per-chunk map from stsc entries.
+    // Each stsc entry specifies: firstChunk (1-based), samplesPerChunk, and
+    // the sample-description index used by those chunks.
+    // The entry applies from firstChunk to the next entry's firstChunk - 1.
+    final sampleToChunk = List.filled(chunkOffsets.length, 1);
+    final sampleDescriptionForChunk = List.filled(chunkOffsets.length, 1);
+    if (stscEntries.isNotEmpty) {
+      for (var i = 0; i < stscEntries.length; i++) {
+        await _yieldIfNeeded();
+        final (firstChunk, spc, sampleDescriptionIndex) = stscEntries[i];
+        final endChunk = (i + 1 < stscEntries.length)
+            ? stscEntries[i + 1].$1 - 1
+            : chunkOffsets.length;
+        for (var c = firstChunk - 1;
+            c < endChunk && c < chunkOffsets.length;
+            c++) {
+          await _yieldIfNeeded();
+          sampleToChunk[c] = spc;
+          sampleDescriptionForChunk[c] = sampleDescriptionIndex;
+        }
+      }
+    }
+
+    final usedDescriptionIndices = <int>{};
+    for (var i = 0; i < sampleToChunk.length; i++) {
+      await _yieldIfNeeded();
+      if (sampleToChunk[i] > 0) {
+        usedDescriptionIndices.add(sampleDescriptionForChunk[i]);
+      }
+    }
+    if (usedDescriptionIndices.isEmpty) return null;
+    final activeDescriptions = <_AudioSampleDescription>[];
+    for (final index in usedDescriptionIndices) {
+      await _yieldIfNeeded();
+      if (index < 1 || index > sampleDescriptions.length) return null;
+      final description = sampleDescriptions[index - 1];
+      if (description == null) return null;
+      activeDescriptions.add(description);
+    }
+    final selectedDescription = activeDescriptions.first;
+    if (activeDescriptions.skip(1).any((description) =>
+        !selectedDescription.hasSameOutputFormat(description))) {
+      // The output muxer emits one sample description, so it cannot represent
+      // chunks that use incompatible source audio descriptions.
+      return null;
+    }
+    codec = selectedDescription.codec;
+    sampleRate = selectedDescription.sampleRate;
+    channels = selectedDescription.channels;
+    bitsPerSample = selectedDescription.bitsPerSample;
+    audioSpecificConfig = selectedDescription.audioSpecificConfig;
+    final editListSelection = codec == 'mp4a'
+        ? await _selectSamplesForEditListYielding(
+            editListEntries,
+            sampleTimingEntries,
+            sampleSizes.length,
+            mediaTimescale,
+            sampleRate,
+            audioSpecificConfig,
+          )
+        : null;
+
+    return _AudioTrackInfo(
+      trackId: trackId,
+      codec: codec,
+      sampleRate: sampleRate,
+      channels: channels,
+      bitsPerSample: bitsPerSample,
+      audioSpecificConfig: audioSpecificConfig,
+      sampleCount: sampleCount,
+      sampleSizes: sampleSizes,
+      chunkOffsets: chunkOffsets,
+      sampleToChunkMap: sampleToChunk,
+      includedSampleIndices: editListSelection?.sampleIndices,
+      outputEditList: editListSelection?.outputEditList,
+      movieTimescale: _movieTimescale ?? sampleRate,
+    );
+  }
+
   int? _readMovieTimescale(int moovOffset) {
     final moovEnd = moovOffset + _boxSizeAt(moovOffset);
     var childOffset = moovOffset + 8;
@@ -1255,6 +2232,46 @@ class _Mp4Demuxer {
     final timescale = _uint32At(timescaleOffset);
     return timescale > 0 ? timescale : null;
   }
+
+  Future<List<_EditListEntry>?> _parseEditListEntriesYielding(
+    int boxStart,
+    int boxSize,
+  ) async {
+    final boxEnd = boxStart + boxSize;
+    if (boxEnd > _data.length || boxSize < 16) return null;
+    final version = _data[boxStart + 8];
+    final entryCount = _uint32At(boxStart + 12);
+    final entries = <_EditListEntry>[];
+    var entryOffset = boxStart + 16;
+
+    for (var i = 0; i < entryCount; i++) {
+      await _yieldIfNeeded();
+      if (version == 0) {
+        if (entryOffset + 12 > boxEnd) return null;
+        entries.add(_EditListEntry(
+          segmentDuration: _uint32At(entryOffset),
+          mediaTime: _int32At(entryOffset + 4),
+          mediaRateInteger: _int16At(entryOffset + 8),
+          mediaRateFraction: _int16At(entryOffset + 10),
+        ));
+        entryOffset += 12;
+      } else if (version == 1) {
+        if (entryOffset + 20 > boxEnd) return null;
+        entries.add(_EditListEntry(
+          segmentDuration: _uint64At(entryOffset),
+          mediaTime: _int64At(entryOffset + 8),
+          mediaRateInteger: _int16At(entryOffset + 16),
+          mediaRateFraction: _int16At(entryOffset + 18),
+        ));
+        entryOffset += 20;
+      } else {
+        return null;
+      }
+    }
+
+    return entryOffset == boxEnd ? entries : null;
+  }
+
 
   List<_EditListEntry>? _parseEditListEntries(int boxStart, int boxSize) {
     final boxEnd = boxStart + boxSize;
@@ -1290,6 +2307,125 @@ class _Mp4Demuxer {
 
     return entryOffset == boxEnd ? entries : null;
   }
+
+  Future<_EditListSelection?> _selectSamplesForEditListYielding(
+    List<_EditListEntry>? entries,
+    List<_SttsEntry> sampleTimingEntries,
+    int sampleCount,
+    int mediaTimescale,
+    int sampleRate,
+    Uint8List? audioSpecificConfig,
+  ) async {
+    if (entries == null) return null;
+    if (entries.isEmpty) return const _EditListSelection(<int>{}, null);
+    final movieTimescale = _movieTimescale;
+    if (movieTimescale == null || movieTimescale <= 0 || mediaTimescale <= 0) {
+      return const _EditListSelection(<int>{}, null);
+    }
+    final hasEmptyEdit = entries.any((entry) => entry.mediaTime == -1);
+
+    final mediaRanges = <(int, int)?>[];
+    for (final entry in entries) {
+      await _yieldIfNeeded();
+      if (entry.mediaTime == -1 || entry.segmentDuration == 0) {
+        mediaRanges.add(null);
+        continue;
+      }
+      final mediaRate =
+          entry.mediaRateInteger * 0x10000 + entry.mediaRateFraction;
+      if (entry.mediaTime < 0 || mediaRate <= 0) {
+        return const _EditListSelection(<int>{}, null);
+      }
+      final mediaDuration =
+          (entry.segmentDuration * mediaTimescale * mediaRate +
+                  movieTimescale * 0x10000 -
+                  1) ~/
+              (movieTimescale * 0x10000);
+      mediaRanges.add((entry.mediaTime, entry.mediaTime + mediaDuration));
+    }
+
+    final includedSampleIndices = <int>{};
+    final firstSampleIndexByEdit = List<int?>.filled(entries.length, null);
+    var sampleIndex = 0;
+    var mediaTime = 0;
+    for (final (count, duration) in sampleTimingEntries) {
+      await _yieldIfNeeded();
+      for (var i = 0; i < count && sampleIndex < sampleCount; i++) {
+        await _yieldIfNeeded();
+        if (hasEmptyEdit) {
+          for (var editIndex = 0; editIndex < mediaRanges.length; editIndex++) {
+            await _yieldIfNeeded();
+            final range = mediaRanges[editIndex];
+            if (range != null &&
+                mediaTime >= range.$1 &&
+                mediaTime < range.$2) {
+              includedSampleIndices.add(sampleIndex);
+              firstSampleIndexByEdit[editIndex] ??= sampleIndex;
+            }
+          }
+        } else if (mediaRanges.any(
+          (range) =>
+              range != null && mediaTime >= range.$1 && mediaTime < range.$2,
+        )) {
+          includedSampleIndices.add(sampleIndex);
+        }
+        mediaTime += duration;
+        sampleIndex++;
+      }
+    }
+
+    if (!hasEmptyEdit) {
+      return _EditListSelection(includedSampleIndices, null);
+    }
+
+    final samplesPerFrame = audioSpecificConfig == null
+        ? 1024
+        : _samplesPerAacFrame(audioSpecificConfig, sampleRate);
+    final outputMediaTimes = <int, int>{};
+    final selectedSampleIndices = includedSampleIndices.toList()..sort();
+    for (var outputIndex = 0;
+        outputIndex < selectedSampleIndices.length;
+        outputIndex++) {
+      await _yieldIfNeeded();
+      outputMediaTimes[selectedSampleIndices[outputIndex]] =
+          outputIndex * samplesPerFrame;
+    }
+
+    final outputEditList = <_EditListEntry>[];
+    for (var editIndex = 0; editIndex < entries.length; editIndex++) {
+      await _yieldIfNeeded();
+      final entry = entries[editIndex];
+      if (entry.segmentDuration == 0) continue;
+      if (entry.mediaTime == -1) {
+        outputEditList.add(_EditListEntry(
+          segmentDuration: entry.segmentDuration,
+          mediaTime: -1,
+          mediaRateInteger: 1,
+          mediaRateFraction: 0,
+        ));
+        continue;
+      }
+
+      final firstSampleIndex = firstSampleIndexByEdit[editIndex];
+      if (firstSampleIndex == null) {
+        outputEditList.add(_EditListEntry(
+          segmentDuration: entry.segmentDuration,
+          mediaTime: -1,
+          mediaRateInteger: 1,
+          mediaRateFraction: 0,
+        ));
+        continue;
+      }
+      outputEditList.add(_EditListEntry(
+        segmentDuration: entry.segmentDuration,
+        mediaTime: outputMediaTimes[firstSampleIndex]!,
+        mediaRateInteger: entry.mediaRateInteger,
+        mediaRateFraction: entry.mediaRateFraction,
+      ));
+    }
+    return _EditListSelection(includedSampleIndices, outputEditList);
+  }
+
 
   _EditListSelection? _selectSamplesForEditList(
     List<_EditListEntry>? entries,
@@ -1569,6 +2705,60 @@ class _Mp4Demuxer {
           ));
         }
         sampleIdx++;
+      }
+    }
+
+    return frames;
+  }
+
+  Future<List<_AudioFrame>> extractAudioFramesYielding(
+    _AudioTrackInfo track, {
+    bool Function()? isCancelled,
+  }) async {
+    if (track.sampleSizes.isEmpty || track.chunkOffsets.isEmpty) {
+      return [];
+    }
+
+    final frames = <_AudioFrame>[];
+    final includedSampleIndices = track.includedSampleIndices;
+    var sampleIdx = 0;
+    var samplesSinceYield = 0;
+
+    for (var chunkIdx = 0;
+        chunkIdx < track.chunkOffsets.length &&
+            sampleIdx < track.sampleSizes.length;
+        chunkIdx++) {
+      final chunkMdatOffset = track.chunkOffsets[chunkIdx];
+      final spc = chunkIdx < track.sampleToChunkMap.length
+          ? track.sampleToChunkMap[chunkIdx]
+          : 1;
+      var offsetInChunk = 0;
+
+      for (var s = 0; s < spc && sampleIdx < track.sampleSizes.length; s++) {
+        final sampleSize = track.sampleSizes[sampleIdx];
+        final fileOffset = chunkMdatOffset + offsetInChunk;
+        final sampleEnd = fileOffset + sampleSize;
+        final isInMdatPayload = _mdatPayloadRanges.any(
+          (range) => fileOffset >= range.$1 && sampleEnd <= range.$2,
+        );
+        if (sampleEnd <= _data.length &&
+            isInMdatPayload &&
+            (includedSampleIndices == null ||
+                includedSampleIndices.contains(sampleIdx))) {
+          frames.add(_AudioFrame(
+            Uint8List.sublistView(_data, fileOffset, sampleEnd),
+          ));
+        }
+        offsetInChunk += sampleSize;
+        sampleIdx++;
+        samplesSinceYield++;
+        if (samplesSinceYield >= 256) {
+          if (isCancelled?.call() ?? false) {
+            throw Exception('Audio extraction was cancelled');
+          }
+          samplesSinceYield = 0;
+          await Future<void>.delayed(Duration.zero);
+        }
       }
     }
 

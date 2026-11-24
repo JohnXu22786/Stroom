@@ -110,9 +110,17 @@ Uint8List _extractVideoBytes((Uint8List, String) input) {
 /// Uses an isolate on native platforms and the current event loop on Web.
 Future<Uint8List> _extractVideoBytesInBackground(
   Uint8List videoBytes,
-  String videoFormat,
+  String videoFormat, {
+  bool Function()? isCancelled,
+}
 ) {
-  if (kIsWeb) return webAudio.extractAudioFromWebBytes(videoBytes, videoFormat);
+  if (kIsWeb) {
+    return webAudio.extractAudioFromWebBytes(
+      videoBytes,
+      videoFormat,
+      isCancelled: isCancelled,
+    );
+  }
   return compute(_extractVideoBytes, (videoBytes, videoFormat));
 }
 
@@ -383,7 +391,11 @@ Future<String> executeAudioSeparationBlock({
     if (extractAudio != null) {
       extraction = extractAudio(input, inputFormat);
     } else if (usesWebFileStore) {
-      extraction = _extractVideoBytesInBackground(webVideoBytes!, inputFormat);
+      extraction = _extractVideoBytesInBackground(
+        webVideoBytes!,
+        inputFormat,
+        isCancelled: () => !isFlowExecutionActive(execNotifier, execId),
+      );
     } else {
       extraction = _readAndExtractInIsolate(input, inputFormat);
     }
