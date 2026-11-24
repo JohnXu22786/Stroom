@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:stroom/pages/unified_task_list/file_opener.dart';
 import 'package:stroom/services/manifest_database.dart';
-import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
@@ -35,7 +35,7 @@ void main() {
     addTearDown(WebFileStore.disableTestMode);
     const fileName = 'completed.txt';
     final bytes = Uint8List.fromList(utf8.encode('task output'));
-    await FileManifest.writeFile(fileName, bytes);
+    await TextManifest.writeFile(fileName, bytes);
 
     expect(await readFileBytesForOpen(fileName, isWeb: true), bytes);
   });

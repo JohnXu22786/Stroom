@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catcatch/models/media_kind.dart';
-import '../../utils/file_manifest.dart';
 import '../../utils/text_manifest.dart';
 import '../audio_player_page.dart';
 import '../text_preview_edit_page.dart';
@@ -131,7 +130,7 @@ bool shouldAbortFileOpenForMissingFile({
 Future<Uint8List?> readFileBytesForOpen(
   String filePath, {
   required bool isWeb,
-}) => isWeb ? FileManifest.readFile(filePath) : File(filePath).readAsBytes();
+}) => isWeb ? TextManifest.readFile(filePath) : File(filePath).readAsBytes();
 
 /// Some containers can contain either audio or video. Probe their saved bytes
 /// instead of treating their extensions as a media kind.
