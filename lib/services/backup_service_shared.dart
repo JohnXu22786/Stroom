@@ -21,10 +21,17 @@ void addStringToArchive(Archive archive, String name, String content) {
 }
 
 Future<void> addTaskFileToArchive(
-    Archive archive, String archiveName, String sourcePath) async {
+  Archive archive,
+  String archiveName,
+  String sourcePath, {
+  bool required = false,
+}) async {
   debugPrint(
       '[BackupServiceShared] addTaskFileToArchive: $archiveName <- $sourcePath');
   if (WebFileStore.isTestMode) {
+    if (required) {
+      throw FileSystemException('无法读取必需的备份文件', sourcePath);
+    }
     addStringToArchive(archive, archiveName, '[]');
     return;
   }
@@ -33,11 +40,14 @@ Future<void> addTaskFileToArchive(
     if (await file.exists()) {
       final data = await file.readAsBytes();
       archive.addFile(ArchiveFile(archiveName, data.length, data));
+    } else if (required) {
+      throw FileSystemException('备份文件不存在', sourcePath);
     } else {
       addStringToArchive(archive, archiveName, '[]');
     }
   } catch (e) {
     debugPrint('添加任务文件 $archiveName 失败: $e');
+    if (required) rethrow;
     addStringToArchive(archive, archiveName, '[]');
   }
 }
