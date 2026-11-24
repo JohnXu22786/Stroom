@@ -36,8 +36,10 @@ void main() {
     const fileName = 'completed.txt';
     final bytes = Uint8List.fromList(utf8.encode('task output'));
     await TextManifest.writeFile(fileName, bytes);
+    final path = await TextManifest.readFilePath(fileName);
 
-    expect(await readFileBytesForOpen(fileName, isWeb: true), bytes);
+    expect(path, 'texts/$fileName');
+    expect(await readFileBytesForOpen(path!, isWeb: true), bytes);
   });
 
   test('routes .ts as video while .tsx remains text', () async {

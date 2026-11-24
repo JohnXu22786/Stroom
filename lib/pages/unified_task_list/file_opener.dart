@@ -130,7 +130,16 @@ bool shouldAbortFileOpenForMissingFile({
 Future<Uint8List?> readFileBytesForOpen(
   String filePath, {
   required bool isWeb,
-}) => isWeb ? TextManifest.readFile(filePath) : File(filePath).readAsBytes();
+}) => isWeb
+    ? TextManifest.readFile(_textManifestFileName(filePath))
+    : File(filePath).readAsBytes();
+
+String _textManifestFileName(String filePath) {
+  const webTextPrefix = 'texts/';
+  return filePath.startsWith(webTextPrefix)
+      ? filePath.substring(webTextPrefix.length)
+      : filePath;
+}
 
 /// Some containers can contain either audio or video. Probe their saved bytes
 /// instead of treating their extensions as a media kind.
