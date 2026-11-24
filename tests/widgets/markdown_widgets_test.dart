@@ -14,7 +14,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:visibility_detector/visibility_detector.dart';
+import 'package:markdown_widget/widget/link_recognizer_lifecycle.dart';
 
 /// Helper: creates a [m.Document] with the [LatexSyntax] registered and
 /// parses [text], returning the root nodes so tests can inspect the AST.
@@ -40,6 +40,11 @@ List<m.Node> _parseLikeMarkdownGenerator(String text) {
   return doc.parse(text);
 }
 
+Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
+    widget is LinkRecognizerLifecycle
+        ? _unwrapLinkRecognizerLifecycle(widget.child)
+        : widget;
+
 List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   final found = <Widget>[];
 
@@ -53,8 +58,10 @@ List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   }
 
   for (final widget in widgets) {
-    if (widget is Padding && widget.child is Text) {
-      final textSpan = (widget.child as Text).textSpan;
+    if (widget is Padding) {
+      final child = _unwrapLinkRecognizerLifecycle(widget.child!);
+      if (child is! Text) continue;
+      final textSpan = child.textSpan;
       if (textSpan != null) visit(textSpan);
     }
   }
@@ -645,8 +652,8 @@ $$
       );
       final spans = [
         for (final widget in widgets)
-          if (widget is Padding && widget.child is Text)
-            (widget.child as Text).textSpan!,
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
       ];
       TextSpan? findSpan(String text) {
         for (final span in spans) {
@@ -2946,7 +2953,9 @@ $$
 
       // The underline must be scoped to exactly the tagged content: the
       // inner leaf span is underlined, the surrounding text is not.
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       expect(_leafSpanWithText(rootSpan.textSpan!, '下划线文本')!.style?.decoration,
           TextDecoration.underline,
           reason: 'the tagged text must carry TextDecoration.underline');
@@ -2972,7 +2981,9 @@ $$
         ),
       ));
 
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       final boldLeaf = _leafSpanWithText(rootSpan.textSpan!, '加粗')!;
       expect(boldLeaf.style?.fontWeight, FontWeight.bold,
           reason: 'nested **bold** must keep the bold weight');
