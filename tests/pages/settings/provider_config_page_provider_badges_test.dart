@@ -59,6 +59,7 @@ class _ProviderBadgesNotifier extends ProviderEntriesNotifier {
         ),
       ],
       mcpGroups: builtinMcpProviderGroups,
+      llmCredentialMigrationUnavailable: true,
     );
   }
 

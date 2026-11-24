@@ -802,7 +802,13 @@ class _ProviderConfigDetailPageState
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -843,9 +849,10 @@ class _ProviderConfigDetailPageState
                         ),
                       ),
                       if (_hostController.text.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           _hostController.text,
                           maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
@@ -872,7 +879,11 @@ class _ProviderConfigDetailPageState
             width: double.infinity,
             child: TextButton.icon(
               icon: const Icon(Icons.add),
-              label: Text(AppLocalizations.of(context)!.builtInPromptAdd),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.builtInPromptAdd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: _addModel,
             ),
           ),

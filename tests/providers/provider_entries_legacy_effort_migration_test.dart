@@ -4,6 +4,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_credential_store.dart';
+
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final Map<String, String> _values = {};
+
+  @override
+  Future<String?> read(String reference) async => _values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    _values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    _values.remove(reference);
+  }
+}
 
 /// Behavior tests for the legacy effort-param data migration:
 /// reasoning params saved before the isEffortParam flag existed are
@@ -70,7 +88,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         providerEntriesProvider.overrideWith(
-          (ref) => ProviderEntriesNotifier(),
+          (ref) => ProviderEntriesNotifier(
+            credentialStore: _MemoryCredentialStore(),
+          ),
         ),
       ],
     );
@@ -138,7 +158,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -154,7 +176,10 @@ void main() {
 
     test('modern data (keys present, false) is left untouched', () async {
       final modernParams = [
-        legacyParam('thinking.type', [], isToggle: true),
+        {
+          ...legacyParam('thinking.type', [], isToggle: true),
+          'isEffortParam': false,
+        },
         {
           ...legacyParam('budget_tokens', ['5000', '10000']),
           'isEffortParam': false,
@@ -165,7 +190,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -202,7 +229,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -226,7 +255,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -253,7 +284,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -280,7 +313,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -308,7 +343,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -331,7 +368,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -394,7 +433,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );

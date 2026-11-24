@@ -25,6 +25,7 @@ import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/notification_service.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
@@ -38,7 +39,9 @@ Widget _buildSettingsTestApp({
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = ProviderEntriesNotifier();
+        final notifier = ProviderEntriesNotifier(
+          credentialStore: _TestCredentialStore(),
+        );
         // load() is normally called in the provider factory, so we call it here too.
         notifier.load();
         return notifier;
@@ -57,6 +60,23 @@ Widget _buildSettingsTestApp({
       home: const SettingsPage(),
     ),
   );
+}
+
+class _TestCredentialStore implements LlmCredentialStore {
+  final Map<String, String> _values = {};
+
+  @override
+  Future<String?> read(String reference) async => _values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    _values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    _values.remove(reference);
+  }
 }
 
 Future<void> _scrollSettingsToEnd(WidgetTester tester) async {
