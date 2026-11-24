@@ -450,13 +450,21 @@ void main() {
   });
 
   group('In-conversation search offset tests', () {
-    test('case-insensitive match offsets refer to original Unicode text', () {
-      final text = '\u0130x';
-      final matches = caseInsensitiveMatchOffsets(text, 'x');
+    test('case-insensitive offsets map expanded lowercase to source text', () {
+      final text = '\u0130x foo';
+      String lowercaseWithExpansion(String value) =>
+          value.replaceAll('\u0130', 'i\u0307').toLowerCase();
 
-      expect(matches, hasLength(1));
-      expect(matches.single.$1, 1);
-      expect(matches.single.$2, 2);
+      final foldedText = lowercaseWithExpansion(text);
+      final oldStart = foldedText.indexOf('x');
+      expect(text.substring(oldStart, oldStart + 1), ' ');
+
+      final matches = caseInsensitiveMatchOffsetsForTesting(
+        text,
+        'x',
+        lowercase: lowercaseWithExpansion,
+      );
+      expect(matches, [(1, 2)]);
       expect(text.substring(matches.single.$1, matches.single.$2), 'x');
 
       final ordinaryMatches = caseInsensitiveMatchOffsets('Hi hi', 'HI');

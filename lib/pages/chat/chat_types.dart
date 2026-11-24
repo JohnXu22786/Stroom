@@ -74,21 +74,35 @@ class SearchMatch {
   SearchMatch(this.messageId, this.matchStart, this.matchEnd);
 }
 
-/// Finds matches in lowercased text and maps their ranges back to [text].
-/// Lowercasing can expand a character into multiple UTF-16 code units, so
-/// offsets in the transformed string are not always valid source offsets.
-List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) {
+/// Finds case-insensitive matches in [text] and returns source UTF-16 ranges.
+List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) =>
+    _caseInsensitiveMatchOffsets(text, query, (value) => value.toLowerCase());
+
+/// Allows tests to model lowercase mappings that expand a Unicode character.
+List<(int, int)> caseInsensitiveMatchOffsetsForTesting(
+  String text,
+  String query, {
+  required String Function(String) lowercase,
+}) =>
+    _caseInsensitiveMatchOffsets(text, query, lowercase);
+
+/// Maps offsets from lowercased text back to the original [text].
+List<(int, int)> _caseInsensitiveMatchOffsets(
+  String text,
+  String query,
+  String Function(String) lowercase,
+) {
   if (query.isEmpty) return [];
 
-  final lowerText = text.toLowerCase();
-  final lowerQuery = query.toLowerCase();
+  final lowerText = lowercase(text);
+  final lowerQuery = lowercase(query);
   final boundaries = <(int, int)>[(0, 0)];
   var sourceOffset = 0;
   var lowerOffset = 0;
   for (final rune in text.runes) {
     final sourceCharacter = String.fromCharCode(rune);
     sourceOffset += sourceCharacter.length;
-    lowerOffset += sourceCharacter.toLowerCase().length;
+    lowerOffset += lowercase(sourceCharacter).length;
     boundaries.add((lowerOffset, sourceOffset));
   }
 
