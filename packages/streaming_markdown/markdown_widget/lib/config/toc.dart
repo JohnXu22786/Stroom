@@ -161,7 +161,9 @@ class _TocWidgetState extends State<TocWidget> {
   }
 
   void _updateTocList(List<Toc> list) {
-    if (list.isNotEmpty && currentIndex >= list.length) {
+    if (list.isEmpty) {
+      currentIndex = 0;
+    } else if (currentIndex >= list.length) {
       currentIndex = list.length - 1;
     }
     _refreshList(list);
