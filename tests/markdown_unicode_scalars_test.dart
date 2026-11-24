@@ -34,6 +34,16 @@ void main() {
     );
   });
 
+  test(
+    'an unmatched closing parenthesis invalidates a bare reference target',
+    () {
+      expect(
+        markdown.markdownToHtml('[text][foo]\n\n[foo]: target)'),
+        '<p>[text][foo]</p>\n<p>[foo]: target)</p>\n',
+      );
+    },
+  );
+
   test('a reference title ending in an escape stays literal', () {
     expect(
       markdown.markdownToHtml(r'[foo]: bar "baz\'),

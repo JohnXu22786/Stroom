@@ -214,6 +214,9 @@ class LinkParser extends TextParser {
       } else if (char == $lparen) {
         parenCount++;
       } else if (char == $rparen) {
+        if (parenCount == 0) {
+          break;
+        }
         parenCount--;
         if (parenCount == 0) {
           advance();
