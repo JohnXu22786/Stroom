@@ -16,6 +16,15 @@ void main() {
     );
   });
 
+  test('numeric references remap Windows-1252 C1 values', () {
+    expect(
+      markdown.markdownToHtml(
+        '&#128; &#129; &#130; &#141; &#157; &#159; &#x80; &#x9F;',
+      ),
+      '<p>€ \u0081 ‚ \u008D \u009D Ÿ € Ÿ</p>\n',
+    );
+  });
+
   test('long numeric references outside Unicode are replaced safely', () {
     final decimal = '9' * 1000;
     final hexadecimal = 'f' * 1000;
