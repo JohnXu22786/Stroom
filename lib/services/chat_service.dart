@@ -403,6 +403,8 @@ class ChatService {
     _assistantSettings = settings;
   }
 
+  AssistantSettings? get assistantSettings => _assistantSettings;
+
   /// Filter out the `_OmittedSentinel` values (params that failed to coerce).
   /// Sentinel-mapped entries must be removed so they don't get re-serialized
   /// into the JSON request body.

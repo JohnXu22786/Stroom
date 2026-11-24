@@ -78,6 +78,15 @@ class AvailableModel {
 }
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
+class _ConversationAssistantConfig {
+  String? prompt;
+  bool hasPrompt = false;
+  AssistantSettings? settings;
+  bool hasSettings = false;
+  List<CustomParameter>? customParams;
+  bool hasCustomParams = false;
+}
+
 class ChatAdapter {
   final Locale? Function()? _localeOverride;
 
@@ -130,12 +139,14 @@ class ChatAdapter {
     return {'configId': config.id, 'modelId': model.id};
   }
 
-  /// 当前缓存的对话助手 system prompt（供上下文管理注入用）。
-  String? get assistantPrompt => _cachedAssistantPrompt;
+  /// Assistant prompt and settings for the specific conversation.
+  String? assistantPromptFor(String convId) =>
+      _activeServices[convId]?.assistantPrompt ??
+      _assistantConfigsByConversation[convId]?.prompt;
 
-  /// 当前缓存的对话助手设置（供上下文管理估算用：
-  /// 工具结果渲染截断上限与发送侧保持同一来源）。
-  AssistantSettings? get assistantSettings => _cachedAssistantSettings;
+  AssistantSettings? assistantSettingsFor(String convId) =>
+      _activeServices[convId]?.assistantSettings ??
+      _assistantConfigsByConversation[convId]?.settings;
 
   /// The first active [ChatService] instance, or null if none are running.
   /// **Warning**: nondeterministic when multiple conversations are streaming
@@ -288,6 +299,7 @@ class ChatAdapter {
                 config,
                 endpointType,
                 assistant: assistant,
+                convId: convId,
               ));
     }
     if (assistant != null && entriesState != null) {
@@ -328,6 +340,7 @@ class ChatAdapter {
             config,
             endpointType,
             assistant: assistant,
+            convId: convId,
           );
         });
       }
@@ -348,6 +361,7 @@ class ChatAdapter {
         _cachedProviderConfig,
         _cachedEndpointType,
         assistant: assistant,
+        convId: convId,
       );
       return svc;
     });
@@ -359,6 +373,7 @@ class ChatAdapter {
     ProviderConfigItem? providerConfig,
     String endpointType, {
     Assistant? assistant,
+    String? convId,
   }) {
     final svc = ChatService(
       provider: provider,
@@ -368,11 +383,25 @@ class ChatAdapter {
       localeOverride: _localeOverride,
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
-    // the global cached assistant template).
-    final prompt = assistant?.prompt ?? _cachedAssistantPrompt;
-    final settings = assistant?.settings ?? _cachedAssistantSettings;
+    // this conversation's adapter-set assistant template).
+    final conversationConfig = convId == null
+        ? null
+        : _assistantConfigsByConversation[convId];
+    final prompt =
+        assistant?.prompt ??
+        (conversationConfig?.hasPrompt == true
+            ? conversationConfig!.prompt
+            : null);
+    final settings =
+        assistant?.settings ??
+        (conversationConfig?.hasSettings == true
+            ? conversationConfig!.settings
+            : null);
     final customParams =
-        assistant?.settings.customParameters ?? _cachedAssistantCustomParams;
+        assistant?.settings.customParameters ??
+        (conversationConfig?.hasCustomParams == true
+            ? conversationConfig!.customParams
+            : null);
     if (prompt != null) {
       svc.setAssistantPrompt(prompt);
     }
@@ -456,13 +485,14 @@ class ChatAdapter {
   /// cancelService 不会移除它，导致模型切换被旧配置 service 吞掉
   /// （"UI 显示模型 B、请求走模型 A"）。用后即弃，随 GC 回收。
   /// 返回 null 表示 adapter 未配置。
-  ChatService? createTransientService() {
+  ChatService? createTransientService({String? convId}) {
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _buildTransientService(
       _cachedProvider!,
       _cachedModelConfig!,
       _cachedProviderConfig,
       _cachedEndpointType,
+      convId: convId,
     );
   }
 
@@ -507,9 +537,10 @@ class ChatAdapter {
         modelConfig,
         config,
         endpointType,
+        convId: convId,
       );
     } else {
-      svc = createTransientService();
+      svc = createTransientService(convId: convId);
     }
     if (svc == null) return null;
     if (convId != null && convId.isNotEmpty) {
@@ -528,8 +559,9 @@ class ChatAdapter {
     BaseChatProvider provider,
     ModelConfig modelConfig,
     ProviderConfigItem? providerConfig,
-    String endpointType,
-  ) {
+    String endpointType, {
+    String? convId,
+  }) {
     final svc = ChatService(
       provider: provider,
       modelConfig: modelConfig,
@@ -537,14 +569,26 @@ class ChatAdapter {
       endpointType: endpointType,
       localeOverride: _localeOverride,
     );
-    if (_cachedAssistantPrompt != null) {
-      svc.setAssistantPrompt(_cachedAssistantPrompt);
+    final conversationConfig = convId == null
+        ? null
+        : _assistantConfigsByConversation[convId];
+    final prompt = conversationConfig?.hasPrompt == true
+        ? conversationConfig!.prompt
+        : null;
+    final settings = conversationConfig?.hasSettings == true
+        ? conversationConfig!.settings
+        : null;
+    final customParams = conversationConfig?.hasCustomParams == true
+        ? conversationConfig!.customParams
+        : null;
+    if (prompt != null) {
+      svc.setAssistantPrompt(prompt);
     }
-    if (_cachedAssistantSettings != null) {
-      svc.setAssistantSettings(_cachedAssistantSettings);
+    if (settings != null) {
+      svc.setAssistantSettings(settings);
     }
-    if (_cachedAssistantCustomParams != null) {
-      svc.setAssistantCustomParams(_cachedAssistantCustomParams);
+    if (customParams != null) {
+      svc.setAssistantCustomParams(customParams);
     }
     return svc;
   }
@@ -554,6 +598,7 @@ class ChatAdapter {
     final svc = _activeServices.remove(convId);
     svc?.cancel();
     svc?.dispose();
+    _assistantConfigsByConversation.remove(convId);
     // 同步中止该对话的任务瞬时服务（压缩等）。
     releaseTaskService(convId);
   }
@@ -574,6 +619,7 @@ class ChatAdapter {
       svc.dispose();
     }
     _activeServices.clear();
+    _assistantConfigsByConversation.clear();
     for (final svc in _pendingTaskServices.values) {
       svc.cancel();
       svc.dispose();
@@ -581,10 +627,8 @@ class ChatAdapter {
     _pendingTaskServices.clear();
   }
 
-  // Cached assistant config applied to newly created services.
-  String? _cachedAssistantPrompt;
-  AssistantSettings? _cachedAssistantSettings;
-  List<CustomParameter>? _cachedAssistantCustomParams;
+  final Map<String, _ConversationAssistantConfig>
+      _assistantConfigsByConversation = {};
 
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
@@ -772,30 +816,48 @@ class ChatAdapter {
 
   /// Pass assistant-level custom parameters to the underlying ChatService.
   /// These will be merged into the API request body alongside model-level params.
-  void setAssistantCustomParams(List<CustomParameter>? params) {
-    _cachedAssistantCustomParams = params;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantCustomParams(params);
-    }
+  void setAssistantCustomParams(
+    List<CustomParameter>? params, {
+    required String convId,
+  }) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..customParams = params
+      ..hasCustomParams = true;
+    _activeServices[convId]?.setAssistantCustomParams(params);
   }
 
   /// Pass the assistant's system prompt to the underlying ChatService.
   /// This prompt will be prepended as a system-role message in API requests.
-  void setAssistantPrompt(String? prompt) {
-    _cachedAssistantPrompt = prompt;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantPrompt(prompt);
-    }
+  void setAssistantPrompt(String? prompt, {required String convId}) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..prompt = prompt
+      ..hasPrompt = true;
+    _activeServices[convId]?.setAssistantPrompt(prompt);
   }
 
   /// Pass assistant-level settings to the underlying ChatService.
   /// When an assistant setting's enable flag is true, it overrides the
   /// corresponding model parameter. When false, the model parameter is used.
-  void setAssistantSettings(AssistantSettings? settings) {
-    _cachedAssistantSettings = settings;
-    for (final svc in _activeServices.values) {
-      svc.setAssistantSettings(settings);
-    }
+  void setAssistantSettings(
+    AssistantSettings? settings, {
+    required String convId,
+  }) {
+    final config = _assistantConfigsByConversation.putIfAbsent(
+      convId,
+      _ConversationAssistantConfig.new,
+    );
+    config
+      ..settings = settings
+      ..hasSettings = true;
+    _activeServices[convId]?.setAssistantSettings(settings);
   }
 
   Stream<String> sendStream(
