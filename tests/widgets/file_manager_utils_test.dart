@@ -5,7 +5,9 @@ import 'package:stroom/widgets/file_manager_utils.dart';
 
 void main() {
   group('formatDate', () {
-    test('uses absolute dates for future files and relative labels for recent past', () {
+    test(
+        'uses absolute dates for future files and relative labels for recent past',
+        () {
       final now = DateTime.utc(2025, 3, 10, 12);
       final strings = lookupAppLocalizations(const Locale('en', 'US'));
 
