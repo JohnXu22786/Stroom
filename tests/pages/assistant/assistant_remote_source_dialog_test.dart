@@ -17,6 +17,84 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets('discards a catalog response after its URL changes', (
+    tester,
+  ) async {
+    final firstResponse = Completer<http.Response>();
+    final firstRequestStarted = Completer<void>();
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: TextButton(
+                onPressed: () => showAssistantRemoteSourceDialog(
+                  context,
+                  ref,
+                  serviceFactory: () => AssistantCatalogService(
+                    client: MockClient((request) {
+                      if (request.url.host == 'first.example.com') {
+                        if (!firstRequestStarted.isCompleted) {
+                          firstRequestStarted.complete();
+                        }
+                        return firstResponse.future;
+                      }
+                      return Future.value(
+                        http.Response(
+                          jsonEncode({
+                            'schemaVersion': 1,
+                            'catalogId': 'second-catalog',
+                            'assistants': [],
+                          }),
+                          200,
+                          request: request,
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                child: const Text('open remote source'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open remote source'));
+    await tester.pumpAndSettle();
+    final urlField = find.byType(TextField).first;
+    await tester.enterText(urlField, 'https://first.example.com/catalog.json');
+    await tester.pump();
+    await tester.tap(find.text('Load catalog'));
+    await tester.pump();
+    expect(firstRequestStarted.isCompleted, isTrue);
+
+    await tester.enterText(urlField, 'https://second.example.com/catalog.json');
+    firstResponse.complete(
+      http.Response(
+        jsonEncode({
+          'schemaVersion': 1,
+          'catalogId': 'first-catalog',
+          'assistants': [],
+        }),
+        200,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Catalog: first-catalog'), findsNothing);
+    await tester.tap(find.text('Load catalog'));
+    await tester.pumpAndSettle();
+    expect(find.text('Catalog: second-catalog'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('continues import when schema info covers the dialog', (
     tester,
   ) async {
