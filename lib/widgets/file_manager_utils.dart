@@ -3,11 +3,9 @@ export '../utils/format_file_size.dart';
 import '../l10n/app_localizations.dart';
 
 /// Date formatting with relative labels (today, yesterday)
-String formatDate(DateTime date, AppLocalizations strings) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final fileDay = DateTime(date.year, date.month, date.day);
-  final diffDays = today.difference(fileDay).inDays;
+String formatDate(DateTime date, AppLocalizations strings, {DateTime? now}) {
+  final currentDate = now ?? DateTime.now();
+  final diffDays = _calendarDayDifference(currentDate, date);
   final time =
       '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   if (diffDays == 0) {
@@ -18,6 +16,16 @@ String formatDate(DateTime date, AppLocalizations strings) {
   }
   if (diffDays < 7) return strings.fileManagerDaysAgoTime(diffDays, time);
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $time';
+}
+
+int _calendarDayDifference(DateTime currentDate, DateTime date) {
+  final today = DateTime.utc(
+    currentDate.year,
+    currentDate.month,
+    currentDate.day,
+  );
+  final fileDay = DateTime.utc(date.year, date.month, date.day);
+  return today.difference(fileDay).inDays;
 }
 
 /// 文件名清洗：将路径分隔符等非法字符替换为下划线，
