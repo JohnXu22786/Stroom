@@ -5,6 +5,38 @@ import 'package:stroom/widgets/file_manager_utils.dart';
 
 void main() {
   group('formatDate', () {
+    test(
+        'uses absolute dates for future files and relative labels for recent past',
+        () {
+      final now = DateTime.utc(2025, 3, 10, 12);
+      final strings = lookupAppLocalizations(const Locale('en', 'US'));
+
+      expect(
+        formatDate(DateTime.utc(2025, 3, 10, 13), strings, now: now),
+        'Today 13:00',
+      );
+      expect(
+        formatDate(DateTime.utc(2025, 3, 9, 13), strings, now: now),
+        'Yesterday 13:00',
+      );
+      expect(
+        formatDate(DateTime.utc(2025, 3, 8, 13), strings, now: now),
+        '2 days ago 13:00',
+      );
+      expect(
+        formatDate(DateTime.utc(2025, 3, 4, 13), strings, now: now),
+        '6 days ago 13:00',
+      );
+      expect(
+        formatDate(DateTime.utc(2025, 3, 11, 13), strings, now: now),
+        '2025-03-11 13:00',
+      );
+      expect(
+        formatDate(DateTime.utc(2025, 3, 16, 13), strings, now: now),
+        '2025-03-16 13:00',
+      );
+    });
+
     test('labels a file from the previous calendar date as yesterday', () {
       final now = DateTime.utc(2025, 3, 10, 12);
       final date = DateTime.utc(2025, 3, 9, 13);

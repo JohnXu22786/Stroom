@@ -14,7 +14,9 @@ String formatDate(DateTime date, AppLocalizations strings, {DateTime? now}) {
   if (diffDays == 1) {
     return strings.fileManagerYesterdayTime(time);
   }
-  if (diffDays < 7) return strings.fileManagerDaysAgoTime(diffDays, time);
+  if (diffDays >= 2 && diffDays < 7) {
+    return strings.fileManagerDaysAgoTime(diffDays, time);
+  }
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $time';
 }
 
