@@ -18,12 +18,10 @@ String formatHms(DurationResult d) {
 }
 
 DurationResult? parseSmartDuration(String text) {
-  final numbers = text
-      .split(RegExp(r'[^\d]+'))
-      .where((s) => s.isNotEmpty)
-      .map(int.parse)
-      .toList();
-  if (numbers.isEmpty) return null;
+  final components =
+      text.split(RegExp(r'[^\d]+')).where((s) => s.isNotEmpty).toList();
+  if (components.isEmpty || components.length > 3) return null;
+  final numbers = components.map(int.parse).toList();
 
   var h = 0, m = 0, s = 0;
   if (numbers.length == 1) {
