@@ -8,6 +8,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:photo_view/photo_view.dart';
 
 import '../utils/byte_lru_cache.dart';
+import '../utils/content_hash_save_lock.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/image_manifest.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/storage_file_publication.dart';
@@ -15,6 +17,85 @@ import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 
 import '../widgets/constrained_text.dart';
+
+final ContentHashSaveLock _galleryVisibleNameLocks = ContentHashSaveLock();
+
+/// Serializes Gallery name allocation for export-equivalent folders.
+Future<T> withGalleryVisibleNameLock<T>(
+  String folder,
+  Future<T> Function() action,
+) => ImageManifest.withFolderMutationLock(
+  folder,
+  () => _galleryVisibleNameLocks.withLock(
+    'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
+    action,
+  ),
+);
+
+/// Finds a free Gallery filename, preserving [baseName] when available.
+String uniqueGalleryVisibleName({
+  required Iterable<ImageRecord> records,
+  required String folder,
+  required String baseName,
+  required String format,
+  Iterable<String> existingFolders = const [],
+  Iterable<String> reservedFileNames = const [],
+}) {
+  String visiblePath(String folderPath, String fileName) =>
+      folderPath.isEmpty ? fileName : '$folderPath/$fileName';
+
+  final folderKey = userVisibleExportPathComparisonKey(folder);
+  final existingPaths = records
+      .where(
+        (record) =>
+            userVisibleExportPathComparisonKey(record.folder) == folderKey,
+      )
+      .map(
+        (record) => userVisibleExportPathComparisonKey(
+          visiblePath(folder, '${record.name}.${record.format}'),
+        ),
+      )
+      .toSet();
+  final reservedPaths = reservedFileNames
+      .map(
+        (fileName) =>
+            userVisibleExportPathComparisonKey(visiblePath(folder, fileName)),
+      )
+      .toSet();
+
+  var suffix = 1;
+  while (true) {
+    final name = suffix == 1 ? baseName : '$baseName ($suffix)';
+    final pathKey = userVisibleExportPathComparisonKey(
+      visiblePath(folder, '$name.$format'),
+    );
+    final conflictsWithFolder = existingFolders.any((existingFolder) {
+      final folderPathKey = userVisibleExportPathComparisonKey(existingFolder);
+      return folderPathKey == pathKey || folderPathKey.startsWith('$pathKey/');
+    });
+    if (!existingPaths.contains(pathKey) &&
+        !reservedPaths.contains(pathKey) &&
+        !conflictsWithFolder) {
+      return name;
+    }
+    suffix++;
+  }
+}
+
+/// Finds a free Save As name while preserving the historical first-copy name.
+String uniqueGallerySaveAsName({
+  required Iterable<ImageRecord> records,
+  required String folder,
+  required String sourceName,
+  required String format,
+  Iterable<String> existingFolders = const [],
+}) => uniqueGalleryVisibleName(
+  records: records,
+  folder: folder,
+  baseName: '${sourceName}_edited',
+  format: format,
+  existingFolders: existingFolders,
+);
 
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
@@ -254,68 +335,78 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       final newHash = computeImageHash(editedBytes);
       final newFileName = '$newHash.${file.format}';
       late ImageRecord newRecord;
-      await ImageManifest.withFolderReadLock(
-        file.folder,
-        () => ImageManifest.withSaveLocks([newHash, file.hash], () async {
-          await publishStorageFiles<void, ImageRecord>(
-            publish: (writeFile) async {
-              await writeFile(newFileName, editedBytes);
-              if (isSaveAs) {
-                newRecord = ImageRecord(
-                  name: '${file.name}_edited',
-                  hash: newHash,
-                  format: file.format,
-                  createdAt: DateTime.now(),
-                  size: editedBytes.length,
+      Future<void> save() => ImageManifest.withSaveLocks(
+        [newHash, file.hash],
+        () => publishStorageFiles<void, ImageRecord>(
+          publish: (writeFile) async {
+            await writeFile(newFileName, editedBytes);
+            if (isSaveAs) {
+              final existingRecords = await ImageManifest.loadRecordsStrict();
+              final existingFolders = await ImageManifest.getAllFolders();
+              newRecord = ImageRecord(
+                name: uniqueGallerySaveAsName(
+                  records: existingRecords,
                   folder: file.folder,
-                );
-                await ImageManifest.addRecord(newRecord);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!
-                            .imageViewerImageSavedAsCopy,
-                      ),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              } else {
-                newRecord = ImageRecord(
-                  name: file.name,
-                  hash: newHash,
+                  sourceName: file.name,
                   format: file.format,
-                  createdAt: file.createdAt,
-                  size: editedBytes.length,
-                  folder: file.folder,
-                );
-                await ImageManifest.addRecord(newRecord);
-                await ImageManifest.deleteRecord(file.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!.imageViewerImageUpdated,
-                      ),
-                      duration: Duration(seconds: 2),
+                  existingFolders: existingFolders,
+                ),
+                hash: newHash,
+                format: file.format,
+                createdAt: DateTime.now(),
+                size: editedBytes.length,
+                folder: file.folder,
+              );
+              await ImageManifest.addRecord(newRecord);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      AppLocalizations.of(context)!.imageViewerImageSavedAsCopy,
                     ),
-                  );
-                }
+                    duration: Duration(seconds: 2),
+                  ),
+                );
               }
-            },
-            loadRecords: ImageManifest.loadRecordsStrict,
-            isReferenced: (record, name) =>
-                record.hash == newHash &&
-                (name == record.storageFileName ||
-                    name == imageThumbFileName(record.hash)),
-            writeFile: ImageManifest.writeFile,
-            readFile: ImageManifest.readFile,
-            fileExists: ImageManifest.fileExists,
-            deleteFile: ImageManifest.deleteFile,
-          );
-        }),
+            } else {
+              newRecord = ImageRecord(
+                name: file.name,
+                hash: newHash,
+                format: file.format,
+                createdAt: file.createdAt,
+                size: editedBytes.length,
+                folder: file.folder,
+              );
+              await ImageManifest.addRecord(newRecord);
+              await ImageManifest.deleteRecord(file.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      AppLocalizations.of(context)!.imageViewerImageUpdated,
+                    ),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            }
+          },
+          loadRecords: ImageManifest.loadRecordsStrict,
+          isReferenced: (record, name) =>
+              record.hash == newHash &&
+              (name == record.storageFileName ||
+                  name == imageThumbFileName(record.hash)),
+          writeFile: ImageManifest.writeFile,
+          readFile: ImageManifest.readFile,
+          fileExists: ImageManifest.fileExists,
+          deleteFile: ImageManifest.deleteFile,
+        ),
       );
+      if (isSaveAs) {
+        await withGalleryVisibleNameLock(file.folder, save);
+      } else {
+        await ImageManifest.withFolderReadLock(file.folder, save);
+      }
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.

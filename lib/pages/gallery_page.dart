@@ -86,22 +86,22 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   /// 缩略图解码目标尺寸（与生成尺寸一致：≤256px，宽高比保持）
   static const int _thumbDecodeSize = 256;
 
-  /// Sanitize a filename: strip path separators, truncate, keep extension.
+  /// Finds an available import name based on current visible folder paths.
   String _uniqueImageName(
     String baseName,
+    String format,
+    String folder,
     List<ImageRecord> records,
     Set<String> usedInBatch,
-  ) {
-    bool taken(String name) =>
-        usedInBatch.contains(name) ||
-        records.any((r) => r.name == name && r.folder == _currentFolder);
-    if (!taken(baseName)) return baseName;
-    int i = 2;
-    while (taken('$baseName ($i)')) {
-      i++;
-    }
-    return '$baseName ($i)';
-  }
+    Iterable<String> existingFolders,
+  ) => uniqueGalleryVisibleName(
+    records: records,
+    folder: folder,
+    baseName: baseName,
+    format: format,
+    existingFolders: existingFolders,
+    reservedFileNames: usedInBatch,
+  );
 
   // ====================================================================
   // Image preview (full-screen gallery viewer)
@@ -289,7 +289,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       );
       dialogShown = true;
 
-      final records = ref.read(imageRecordsProvider);
       final usedInBatch = <String>{};
       count = await importBatchWithPartialRefresh(
         items: pickedFiles,
@@ -314,49 +313,55 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             return false;
           }
           final storageFileName = '$hash.$format';
-          final displayName = _uniqueImageName(
-            p.basenameWithoutExtension(rawName),
-            records,
-            usedInBatch,
-          );
-          usedInBatch.add(displayName);
-
           final destinationFolder = _currentFolder;
-          await ImageManifest.withFilePublicationLock(
-            hash,
-            destinationFolder,
-            () async {
-              await publishStorageFiles<void, ImageRecord>(
-                publish: (writeFile) async {
-                  await writeFile(storageFileName, bytes);
-                  final thumbnailBytes =
-                      await ImageThumbnailLoader.generateThumbnail(bytes);
-                  if (thumbnailBytes != null) {
-                    await writeFile(imageThumbFileName(hash), thumbnailBytes);
-                  }
-                  await ImageManifest.addRecord(
-                    ImageRecord(
-                      name: displayName,
-                      hash: hash,
-                      format: format,
-                      createdAt: DateTime.now(),
-                      size: bytes.length,
-                      folder: destinationFolder,
-                    ),
-                  );
-                },
-                loadRecords: ImageManifest.loadRecordsStrict,
-                isReferenced: (record, fileName) =>
-                    record.hash == hash &&
-                    (fileName == record.storageFileName ||
-                        fileName == imageThumbFileName(record.hash)),
-                writeFile: ImageManifest.writeFile,
-                readFile: ImageManifest.readFile,
-                fileExists: ImageManifest.fileExists,
-                deleteFile: ImageManifest.deleteFile,
-              );
-            },
-          );
+          await withGalleryVisibleNameLock(destinationFolder, () async {
+            final records = await ImageManifest.loadRecordsStrict();
+            final existingFolders = await ImageManifest.getAllFolders();
+            final displayName = _uniqueImageName(
+              p.basenameWithoutExtension(rawName),
+              format,
+              destinationFolder,
+              records,
+              usedInBatch,
+              existingFolders,
+            );
+            usedInBatch.add('$displayName.$format');
+            await ImageManifest.withFilePublicationLock(
+              hash,
+              destinationFolder,
+              () async {
+                await publishStorageFiles<void, ImageRecord>(
+                  publish: (writeFile) async {
+                    await writeFile(storageFileName, bytes);
+                    final thumbnailBytes =
+                        await ImageThumbnailLoader.generateThumbnail(bytes);
+                    if (thumbnailBytes != null) {
+                      await writeFile(imageThumbFileName(hash), thumbnailBytes);
+                    }
+                    await ImageManifest.addRecord(
+                      ImageRecord(
+                        name: displayName,
+                        hash: hash,
+                        format: format,
+                        createdAt: DateTime.now(),
+                        size: bytes.length,
+                        folder: destinationFolder,
+                      ),
+                    );
+                  },
+                  loadRecords: ImageManifest.loadRecordsStrict,
+                  isReferenced: (record, fileName) =>
+                      record.hash == hash &&
+                      (fileName == record.storageFileName ||
+                          fileName == imageThumbFileName(record.hash)),
+                  writeFile: ImageManifest.writeFile,
+                  readFile: ImageManifest.readFile,
+                  fileExists: ImageManifest.fileExists,
+                  deleteFile: ImageManifest.deleteFile,
+                );
+              },
+            );
+          });
           return true;
         },
         refresh: () async {

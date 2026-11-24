@@ -79,6 +79,10 @@ String _exportPathComparisonKey(String path) => unorm.nfc(
       }).join(),
     );
 
+/// Returns the comparison key used by user-visible export path validation.
+String userVisibleExportPathComparisonKey(String path) =>
+    _exportPathComparisonKey(path);
+
 /// Rejects file/file and file/directory collisions before an export writes.
 void validateUserVisibleExportPaths({
   required Iterable<String> files,

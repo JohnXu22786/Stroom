@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/gallery_viewer_page.dart';
 import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/image_thumbnail_loader.dart';
 
@@ -20,6 +21,7 @@ ImageRecord _makeRecord({
   String hash = 'abc123',
   String format = 'jpg',
   int size = 100,
+  String folder = '/test',
 }) {
   return ImageRecord(
     id: id,
@@ -28,7 +30,7 @@ ImageRecord _makeRecord({
     format: format,
     createdAt: DateTime(2024, 1, 1),
     size: size,
-    folder: '/test',
+    folder: folder,
   );
 }
 
@@ -65,6 +67,189 @@ void main() {
     ManifestDatabase.enableTestMode();
     ImageManifest.invalidateCache();
     ImageThumbnailLoader.clear();
+  });
+
+  group('uniqueGallerySaveAsName', () {
+    test(
+      'concurrent copies get distinct paths accepted by gallery export',
+      () async {
+        final original = _makeRecord(name: 'trip', format: 'png', folder: '');
+        final records = [original];
+
+        Future<String> saveAsCopy(String id) =>
+            withGalleryVisibleNameLock(original.folder, () async {
+              final name = uniqueGallerySaveAsName(
+                records: records,
+                folder: original.folder,
+                sourceName: original.name,
+                format: original.format,
+              );
+              await Future<void>.delayed(Duration.zero);
+              records.add(
+                _makeRecord(
+                  id: id,
+                  name: name,
+                  format: original.format,
+                  folder: original.folder,
+                ),
+              );
+              return name;
+            });
+
+        final names = await Future.wait([
+          saveAsCopy('copy_1'),
+          saveAsCopy('copy_2'),
+        ]);
+
+        expect(names.toSet(), {'trip_edited', 'trip_edited (2)'});
+        expect(
+          () => validateUserVisibleExportPaths(
+            files: [
+              for (final record in records)
+                record.folder.isEmpty
+                    ? '${record.name}.${record.format}'
+                    : '${record.folder}/${record.name}.${record.format}',
+            ],
+          ),
+          returnsNormally,
+        );
+
+        final caseVariantRecords = [
+          _makeRecord(
+            id: 'upper',
+            name: 'trip',
+            format: 'png',
+            folder: 'Photos',
+          ),
+          _makeRecord(
+            id: 'lower',
+            name: 'trip',
+            format: 'png',
+            folder: 'photos',
+          ),
+        ];
+        final caseVariantNames = await Future.wait([
+          for (final record in caseVariantRecords)
+            withGalleryVisibleNameLock(record.folder, () async {
+              final name = uniqueGallerySaveAsName(
+                records: caseVariantRecords,
+                folder: record.folder,
+                sourceName: record.name,
+                format: record.format,
+              );
+              await Future<void>.delayed(Duration.zero);
+              caseVariantRecords.add(record.copyWith(name: name));
+              return name;
+            }),
+        ]);
+        expect(caseVariantNames.toSet(), {'trip_edited', 'trip_edited (2)'});
+
+        final importAndSaveRecords = [original];
+        Future<String> saveAsName() => withGalleryVisibleNameLock('', () async {
+          final name = uniqueGallerySaveAsName(
+            records: importAndSaveRecords,
+            folder: '',
+            sourceName: 'trip',
+            format: 'png',
+          );
+          await Future<void>.delayed(Duration.zero);
+          importAndSaveRecords.add(
+            _makeRecord(id: 'save_as', name: name, format: 'png', folder: ''),
+          );
+          return name;
+        });
+        Future<String> importName() => withGalleryVisibleNameLock('', () async {
+          final name = uniqueGalleryVisibleName(
+            records: importAndSaveRecords,
+            folder: '',
+            baseName: 'trip_edited',
+            format: 'png',
+          );
+          await Future<void>.delayed(Duration.zero);
+          importAndSaveRecords.add(
+            _makeRecord(id: 'import', name: name, format: 'png', folder: ''),
+          );
+          return name;
+        });
+        final importAndSaveNames = await Future.wait([
+          saveAsName(),
+          importName(),
+        ]);
+        expect(importAndSaveNames.toSet(), {'trip_edited', 'trip_edited (2)'});
+        expect(
+          uniqueGalleryVisibleName(
+            records: [],
+            folder: 'test',
+            baseName: 'trip',
+            format: 'jpg',
+            reservedFileNames: ['trip.png'],
+          ),
+          'trip',
+        );
+      },
+    );
+
+    test(
+      'keeps the first suffix free across unrelated names and extensions',
+      () {
+        final original = _makeRecord(
+          name: 'trip',
+          format: 'PNG',
+          folder: 'test',
+        );
+        final records = [
+          original,
+          _makeRecord(
+            id: 'other_extension',
+            name: 'trip_edited',
+            format: 'jpg',
+            folder: original.folder,
+          ),
+          _makeRecord(
+            id: 'other_name',
+            name: 'other',
+            format: 'PNG',
+            folder: original.folder,
+          ),
+          _makeRecord(
+            id: 'other_folder',
+            name: 'trip_edited',
+            format: 'PNG',
+            folder: 'elsewhere',
+          ),
+        ];
+
+        expect(
+          uniqueGallerySaveAsName(
+            records: records,
+            folder: original.folder,
+            sourceName: original.name,
+            format: original.format,
+          ),
+          'trip_edited',
+        );
+        expect(
+          uniqueGallerySaveAsName(
+            records: records,
+            folder: original.folder,
+            sourceName: original.name,
+            format: original.format,
+            existingFolders: ['${original.folder}/trip_edited.PNG'],
+          ),
+          'trip_edited (2)',
+        );
+        expect(
+          uniqueGallerySaveAsName(
+            records: [_makeRecord(name: 'trip', format: 'png', folder: '')],
+            folder: '',
+            sourceName: 'trip',
+            format: 'png',
+            existingFolders: ['trip_edited.png'],
+          ),
+          'trip_edited (2)',
+        );
+      },
+    );
   });
 
   group('GalleryViewerPage - loading with real image files', () {
