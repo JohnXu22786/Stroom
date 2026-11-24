@@ -8,6 +8,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart'
     show
+        Conversation,
         ConversationsNotifier,
         conversationsProvider,
         kTemporaryConversationDuration;
@@ -86,6 +87,52 @@ void main() {
 
       expect(prefs.getString('conversations'), recoveredJson);
       expect(backupAttempts, 2);
+    });
+
+    test('startup merge keeps Tier B data after the initial backup', () async {
+      const corruptJson = '{"broken":';
+      const recoveredJson = '[{"id":"recovered"}]';
+      SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+      final backupFinalizationStarted = Completer<void>();
+      final completeBackupFinalization = Completer<void>();
+      late ConversationsNotifier backupNotifier;
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            backupNotifier = ConversationsNotifier(
+              ref,
+              corruptConversationBackupWriter: (prefs, key, value) =>
+                  prefs.setString(key, value),
+              corruptConversationBackupAfterWrite: () async {
+                backupFinalizationStarted.complete();
+                await completeBackupFinalization.future;
+              },
+            );
+            backupNotifier.state = [
+              Conversation(id: 'in-memory', title: 'In memory'),
+            ];
+            backupNotifier.loadForTesting();
+            return backupNotifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(conversationsProvider.notifier);
+      await backupFinalizationStarted.future;
+
+      final prefs = await SharedPreferences.getInstance();
+      final fallbackSaved = await persistConversationFallbackIfRecovered(
+        prefs,
+        recoveredJson,
+      );
+      expect(fallbackSaved, isTrue);
+
+      completeBackupFinalization.complete();
+      await notifier.ready;
+      await notifier.waitForPersistenceQueueForTesting();
+
+      expect(prefs.getString('conversations'), recoveredJson);
     });
 
     test(

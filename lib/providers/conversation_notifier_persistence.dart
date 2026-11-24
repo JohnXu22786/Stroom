@@ -1448,7 +1448,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // even after the old migration had already "run".
       try {
         if (mounted) {
-          if (_corruptConversationDataAwaitingBackup == null) {
+          if (_corruptConversationDataAwaitingBackup == null &&
+              _corruptConversationRecoveryGuard == null) {
             await assignNullAssistantConversations(
               prefs,
               state,
@@ -1528,6 +1529,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     SharedPreferences prefs,
     String corruptJson,
   ) async {
+    _corruptConversationRecoveryGuard = corruptJson;
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final backupKey = 'conversations.corrupt.$timestamp';
@@ -1729,6 +1731,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     // Preserve the recovery marker on every snapshot queued while a backup is
     // pending, even if an earlier queued save completes recovery first.
     final corruptJsonAtRequest = _corruptConversationDataAwaitingBackup;
+    final recoveryGuardAtRequest =
+        _corruptConversationRecoveryGuard ?? corruptJsonAtRequest;
     final write = _persistQueue.then((_) async {
       // Keep backup retry and the canonical write in the same serialized
       // section. Otherwise an overlapping retry can remove a newer save.
@@ -1737,12 +1741,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         try {
           final prefs = await SharedPreferences.getInstance();
           final currentJson = prefs.getString('conversations');
-          if (currentJson != null && currentJson != corruptJson) {
-            return false;
-          }
-          if (currentJson == corruptJson &&
-              !await _backupCorruptConversationsFile(prefs, corruptJson)) {
-            return false;
+          final matchingBackupExists = prefs.getKeys().any(
+                (key) =>
+                    key.startsWith('conversations.corrupt.') &&
+                    prefs.getString(key) == corruptJson,
+              );
+          if (currentJson == corruptJson ||
+              (currentJson == null && !matchingBackupExists)) {
+            if (!await _backupCorruptConversationsFile(prefs, corruptJson)) {
+              return false;
+            }
           }
         } catch (e) {
           debugPrint('Failed to retry corrupt conversations backup: $e');
@@ -1752,11 +1760,15 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final persisted = await _persistSnapshot(
         snapshot,
         requestGeneration,
-        preserveNewerConversationsJson: corruptJson,
+        preserveNewerConversationsJson: recoveryGuardAtRequest,
       );
-      if (corruptJson != null &&
-          _corruptConversationDataAwaitingBackup == corruptJson) {
-        _corruptConversationDataAwaitingBackup = null;
+      if (requestGeneration == _persistRequestGeneration) {
+        if (_corruptConversationDataAwaitingBackup == corruptJsonAtRequest) {
+          _corruptConversationDataAwaitingBackup = null;
+        }
+        if (_corruptConversationRecoveryGuard == recoveryGuardAtRequest) {
+          _corruptConversationRecoveryGuard = null;
+        }
       }
       return persisted;
     });

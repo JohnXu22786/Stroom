@@ -590,6 +590,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Future<void> Function()? corruptConversationBackupAfterWrite;
   List<dynamic> _unparsedConversationRecords = [];
   String? _corruptConversationDataAwaitingBackup;
+  String? _corruptConversationRecoveryGuard;
 
   ConversationsNotifier(
     this._ref, {
@@ -654,6 +655,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   @visibleForTesting
   Future<bool> persistNowForTesting() => _persistCoreResult();
+
+  @visibleForTesting
+  Future<void> waitForPersistenceQueueForTesting() => _persistQueue;
 
   Timer? _persistTimer;
 
