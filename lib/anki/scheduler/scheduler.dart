@@ -85,23 +85,25 @@ class AnkiScheduler {
     }
 
     card.mtime = nowSec;
-    await cards.update(card);
+    await col.transaction((txn) async {
+      await cards.update(card, executor: txn);
 
-    // Log the review
-    await col.revlog.insert(RevlogEntry(
-      cid: cid,
-      button_chosen: rating,
-      interval: card.interval,
-      last_interval: lastIvl,
-      ease_factor: card.ease_factor,
-      taken_millis: reviewDuration,
-      review_kind:
-          card.ctype == CardType.learn || card.ctype == CardType.relearn
-              ? RevlogReviewKind.relearning
-              : RevlogReviewKind.review,
-    ));
+      // Log the review with the card update in the same transaction.
+      await col.revlog.insert(RevlogEntry(
+        cid: cid,
+        button_chosen: rating,
+        interval: card.interval,
+        last_interval: lastIvl,
+        ease_factor: card.ease_factor,
+        taken_millis: reviewDuration,
+        review_kind:
+            card.ctype == CardType.learn || card.ctype == CardType.relearn
+                ? RevlogReviewKind.relearning
+                : RevlogReviewKind.review,
+      ), executor: txn);
 
-    await col.save();
+      await col.save(executor: txn);
+    });
   }
 
   Future<int> countDue(ColDao col, CardDao cardDao, int did) async {

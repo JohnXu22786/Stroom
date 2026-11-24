@@ -110,6 +110,52 @@ void main() {
     },
   );
 
+  test('revlog insert failure rolls back the card answer', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..due = 1
+      ..interval = 10
+      ..ease_factor = 2500
+      ..reps = 2;
+    await collection.cards.insert(card);
+    await collection.db.update('col', {'mod': 1}, where: 'id = 1');
+    final beforeCard = (await collection.cards.get(card.id))!.toMap();
+    final beforeModified = (await collection.db.query(
+      'col',
+      columns: ['mod'],
+      where: 'id = 1',
+    )).single['mod'];
+    await collection.db.execute('''
+      CREATE TRIGGER fail_review_log_insert
+      BEFORE INSERT ON revlog
+      BEGIN
+        SELECT RAISE(ABORT, 'injected revlog insert failure');
+      END
+    ''');
+
+    await expectLater(
+      AnkiScheduler().answerCard(collection.col, collection.cards, card.id, 3),
+      throwsA(anything),
+    );
+
+    expect((await collection.cards.get(card.id))!.toMap(), beforeCard);
+    expect(await collection.revlog.listByCard(card.id), isEmpty);
+    expect(
+      (await collection.db.query(
+        'col',
+        columns: ['mod'],
+        where: 'id = 1',
+      )).single['mod'],
+      beforeModified,
+    );
+  });
+
   test(
     'Again on a day-learning card follows review lapse scheduling',
     () async {

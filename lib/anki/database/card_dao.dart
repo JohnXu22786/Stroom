@@ -94,17 +94,18 @@ class CardDao {
     return card.id;
   }
 
-  Future<void> update(Card card) async {
+  Future<void> update(Card card, {DatabaseExecutor? executor}) async {
     card
       ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
       ..usn = -1;
-    await _db.update(
+    final db = executor ?? _db;
+    await db.update(
       'cards',
       card.toMap(),
       where: 'id = ?',
       whereArgs: [card.id],
     );
-    await _touchCollection();
+    await _touchCollection(db);
   }
 
   Future<void> delete(int id) async {
