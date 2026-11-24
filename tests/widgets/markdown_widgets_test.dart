@@ -13,6 +13,7 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 /// Helper: creates a [m.Document] with the [LatexSyntax] registered and
 /// parses [text], returning the root nodes so tests can inspect the AST.
@@ -116,7 +117,174 @@ List<String> _collectPlainText(List<m.Node> nodes) {
   return texts;
 }
 
+class _VersionedPConfig extends PConfig {
+  final String rendererVersion;
+
+  const _VersionedPConfig({
+    required this.rendererVersion,
+    super.textStyle,
+  });
+}
+
 void main() {
+  testWidgets('incremental Markdown rebuilds with changed config snapshot',
+      (WidgetTester tester) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    addTearDown(() {
+      VisibilityDetectorController.instance.updateInterval =
+          const Duration(milliseconds: 500);
+    });
+    var fullText = 'First paragraph\n\nSecond paragraph';
+    MarkdownConfig configWithTextColor(Color color) =>
+        buildMarkdownConfig(isDark: false).copy(configs: [
+          PConfig(textStyle: TextStyle(color: color)),
+        ]);
+
+    final oldConfig = configWithTextColor(Colors.red);
+    final newConfig = configWithTextColor(Colors.blue);
+    var parsedNodes = 0;
+    final markdownGenerator = MarkdownGenerator(
+      onNodeAccepted: (node, index) => parsedNodes++,
+    );
+
+    Widget build(
+      MarkdownConfig config, {
+      String? append,
+      int? sequence,
+      MarkdownConfig Function(String activeText)? activeConfigBuilder,
+      Object? activeConfigBuilderKey,
+    }) =>
+        MaterialApp(
+          home: Scaffold(
+            body: MarkdownWidget(
+              data: '',
+              selectable: false,
+              incremental: true,
+              incrementalKey: 'same-session',
+              incrementalAppend: append,
+              incrementalSequence: sequence,
+              fullTextOnInvalidation: () => fullText,
+              config: config,
+              activeConfigBuilder: activeConfigBuilder,
+              activeConfigBuilderKey: activeConfigBuilderKey,
+              markdownGenerator: markdownGenerator,
+            ),
+          ),
+        );
+
+    Finder paragraph(String text) => find.byWidgetPredicate(
+          (widget) => widget is Text && widget.textSpan?.toPlainText() == text,
+        );
+
+    Color paragraphColor(String text) {
+      final span = tester.widget<Text>(paragraph(text)).textSpan!;
+      TextStyle? findStyle(InlineSpan current) {
+        if (current is! TextSpan) return null;
+        if (current.text == text && current.style != null) {
+          return current.style;
+        }
+        for (final child in current.children ?? const <InlineSpan>[]) {
+          final style = findStyle(child);
+          if (style != null) return style;
+        }
+        return null;
+      }
+
+      return findStyle(span)!.color!;
+    }
+
+    await tester.pumpWidget(build(oldConfig));
+    expect(paragraph('First paragraph'), findsOneWidget);
+    expect(paragraphColor('First paragraph'), Colors.red);
+
+    final parsedNodesBeforeEquivalentConfig = parsedNodes;
+    await tester.pumpWidget(build(configWithTextColor(Colors.red)));
+    expect(parsedNodes, parsedNodesBeforeEquivalentConfig);
+
+    // The callback's full snapshot may contain streamed text whose append
+    // widget update was coalesced. A config-only update must rebuild from it.
+    fullText += '\n\nCoalesced paragraph';
+    await tester.pumpWidget(build(newConfig));
+    expect(paragraph('First paragraph'), findsOneWidget);
+    expect(paragraphColor('First paragraph'), Colors.blue);
+    expect(paragraph('Second paragraph'), findsOneWidget);
+    expect(paragraphColor('Second paragraph'), Colors.blue);
+    expect(paragraph('Coalesced paragraph'), findsOneWidget);
+    expect(paragraphColor('Coalesced paragraph'), Colors.blue);
+
+    fullText += ' later';
+    await tester.pumpWidget(build(newConfig, append: ' later', sequence: 1));
+    expect(paragraph('Coalesced paragraph later'), findsOneWidget);
+    expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+
+    Widget firstRenderer(String code, String language) =>
+        Text('first:$code:$language');
+    Widget secondRenderer(String code, String language) =>
+        Text('second:$code:$language');
+    MarkdownConfig configWithRenderer(
+      Widget Function(String code, String language) renderer,
+    ) =>
+        buildMarkdownConfig(isDark: false).copy(configs: [
+          const PConfig(textStyle: TextStyle(color: Colors.blue)),
+          PreConfig(builder: renderer),
+        ]);
+
+    final parsedNodesBeforeRendererChange = parsedNodes;
+    await tester.pumpWidget(build(configWithRenderer(firstRenderer)));
+    expect(parsedNodes, greaterThan(parsedNodesBeforeRendererChange));
+    final parsedNodesAfterFirstRenderer = parsedNodes;
+    await tester.pumpWidget(build(configWithRenderer(secondRenderer)));
+    expect(parsedNodes, greaterThan(parsedNodesAfterFirstRenderer));
+
+    MarkdownConfig configWithCustomVersion(String version) => MarkdownConfig(
+          configs: [
+            _VersionedPConfig(
+              rendererVersion: version,
+              textStyle: const TextStyle(color: Colors.blue),
+            ),
+          ],
+          incrementalConfigKey: version,
+        );
+    final parsedNodesBeforeCustomConfigChange = parsedNodes;
+    await tester.pumpWidget(build(configWithCustomVersion('renderer-v1')));
+    expect(parsedNodes, greaterThan(parsedNodesBeforeCustomConfigChange));
+    final parsedNodesAfterCustomConfigV1 = parsedNodes;
+    await tester.pumpWidget(build(configWithCustomVersion('renderer-v2')));
+    expect(parsedNodes, greaterThan(parsedNodesAfterCustomConfigV1));
+
+    var firstActiveBuilderCalls = 0;
+    var secondActiveBuilderCalls = 0;
+    MarkdownConfig firstActiveConfig(String activeText) {
+      firstActiveBuilderCalls++;
+      return MarkdownConfig(configs: [
+        const PConfig(textStyle: TextStyle(color: Colors.red)),
+      ]);
+    }
+
+    MarkdownConfig secondActiveConfig(String activeText) {
+      secondActiveBuilderCalls++;
+      return MarkdownConfig(configs: [
+        const PConfig(textStyle: TextStyle(color: Colors.blue)),
+      ]);
+    }
+
+    final sameConfigKey = MarkdownConfig(
+      configs: [const PConfig()],
+      incrementalConfigKey: 'same-config-version',
+    );
+    await tester.pumpWidget(build(
+      sameConfigKey,
+      activeConfigBuilder: firstActiveConfig,
+    ));
+    expect(firstActiveBuilderCalls, greaterThan(0));
+    await tester.pumpWidget(build(
+      sameConfigKey,
+      activeConfigBuilder: secondActiveConfig,
+    ));
+    expect(secondActiveBuilderCalls, greaterThan(0));
+    expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+  });
+
   group('Markdown image URL schemes', () {
     testWidgets('routes uppercase HTTP and HTTPS URLs to network images',
         (WidgetTester tester) async {

@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:markdown_widget/markdown_widget.dart';
@@ -49,6 +50,10 @@ class MarkdownWidget extends StatefulWidget {
   /// rebuilding widgets for sealed blocks.
   final MarkdownIncrementalConfigBuilder? activeConfigBuilder;
 
+  /// Stable identity for equivalent [activeConfigBuilder] closures recreated
+  /// during rebuilds. Change this when the builder's rendering behavior changes.
+  final Object? activeConfigBuilderKey;
+
   /// A single append event for delta-driven stream rendering.
   final String? incrementalAppend;
 
@@ -77,6 +82,7 @@ class MarkdownWidget extends StatefulWidget {
     this.incremental = false,
     this.incrementalKey,
     this.activeConfigBuilder,
+    this.activeConfigBuilderKey,
     this.incrementalAppend,
     this.incrementalSequence,
     this.incrementalInitialUpdateCount = 0,
@@ -267,12 +273,29 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
             widget.incrementalAppend == null);
     final hasNewDelta = widget.incrementalAppend != null &&
         widget.incrementalSequence != _lastIncrementalSequence;
+    final activeConfigBuilderChanged =
+        oldWidget.activeConfigBuilderKey != widget.activeConfigBuilderKey ||
+            (!identical(
+                  oldWidget.activeConfigBuilder,
+                  widget.activeConfigBuilder,
+                ) &&
+                (oldWidget.activeConfigBuilderKey == null ||
+                    widget.activeConfigBuilderKey == null));
+    final configChanged =
+        !_sameMarkdownConfig(oldWidget.config, widget.config) ||
+            activeConfigBuilderChanged;
     final skippedDeltas = sameSession &&
         widget.incrementalSequence != null &&
         _lastIncrementalSequence != null &&
         widget.incrementalSequence! > _lastIncrementalSequence! + 1;
 
-    if (sameSession && _streamSession != null && skippedDeltas) {
+    if (sameSession && _streamSession != null && configChanged) {
+      // Existing widgets were built with the old config. Rebuild the session
+      // from the current snapshot so sealed and active content use one config,
+      // including append events coalesced with this widget update.
+      clearState();
+      _startIncrementalSession(widget.data);
+    } else if (sameSession && _streamSession != null && skippedDeltas) {
       // Provider notifications and Flutter rebuilds can coalesce. If one or
       // more append events were replaced before this widget updated, rebuild
       // from the published chunk snapshot so the skipped bytes remain visible.
@@ -322,6 +345,92 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
       controller.scrollToIndex(index, preferPosition: AutoScrollPosition.begin);
     };
   }
+
+  bool _sameMarkdownConfig(MarkdownConfig? first, MarkdownConfig? second) {
+    final left = first ?? MarkdownConfig.defaultConfig;
+    final right = second ?? MarkdownConfig.defaultConfig;
+
+    final leftPre = left.pre;
+    final rightPre = right.pre;
+    final samePreBuilder = leftPre.incrementalConfigKey != null ||
+            rightPre.incrementalConfigKey != null
+        ? leftPre.incrementalConfigKey == rightPre.incrementalConfigKey
+        : identical(leftPre.builder, rightPre.builder);
+
+    return left.incrementalConfigKey == right.incrementalConfigKey &&
+        left.hr.runtimeType == right.hr.runtimeType &&
+        left.hr.height == right.hr.height &&
+        left.hr.color == right.hr.color &&
+        _sameHeadingConfig(left.h1, right.h1) &&
+        _sameHeadingConfig(left.h2, right.h2) &&
+        _sameHeadingConfig(left.h3, right.h3) &&
+        _sameHeadingConfig(left.h4, right.h4) &&
+        _sameHeadingConfig(left.h5, right.h5) &&
+        _sameHeadingConfig(left.h6, right.h6) &&
+        leftPre.runtimeType == rightPre.runtimeType &&
+        leftPre.padding == rightPre.padding &&
+        leftPre.decoration == rightPre.decoration &&
+        leftPre.margin == rightPre.margin &&
+        leftPre.textStyle == rightPre.textStyle &&
+        leftPre.styleNotMatched == rightPre.styleNotMatched &&
+        identical(leftPre.wrapper, rightPre.wrapper) &&
+        mapEquals(leftPre.theme, rightPre.theme) &&
+        leftPre.language == rightPre.language &&
+        samePreBuilder &&
+        left.a.runtimeType == right.a.runtimeType &&
+        left.a.style == right.a.style &&
+        identical(left.a.onTap, right.a.onTap) &&
+        left.p.runtimeType == right.p.runtimeType &&
+        left.p.textStyle == right.p.textStyle &&
+        left.blockquote.runtimeType == right.blockquote.runtimeType &&
+        left.blockquote.sideColor == right.blockquote.sideColor &&
+        left.blockquote.textColor == right.blockquote.textColor &&
+        left.blockquote.sideWith == right.blockquote.sideWith &&
+        left.blockquote.padding == right.blockquote.padding &&
+        left.blockquote.margin == right.blockquote.margin &&
+        left.li.runtimeType == right.li.runtimeType &&
+        left.li.marginLeft == right.li.marginLeft &&
+        left.li.marginBottom == right.li.marginBottom &&
+        identical(left.li.marker, right.li.marker) &&
+        _sameTableConfig(left.table, right.table) &&
+        left.code.runtimeType == right.code.runtimeType &&
+        left.code.style == right.code.style &&
+        left.img.runtimeType == right.img.runtimeType &&
+        identical(left.img.builder, right.img.builder) &&
+        identical(left.img.errorBuilder, right.img.errorBuilder) &&
+        left.input.runtimeType == right.input.runtimeType &&
+        identical(left.input.builder, right.input.builder);
+  }
+
+  bool _sameHeadingConfig(HeadingConfig first, HeadingConfig second) {
+    final leftDivider = first.divider;
+    final rightDivider = second.divider;
+    return first.runtimeType == second.runtimeType &&
+        first.style == second.style &&
+        first.padding == second.padding &&
+        (identical(leftDivider, rightDivider) ||
+            (leftDivider != null &&
+                rightDivider != null &&
+                leftDivider.space == rightDivider.space &&
+                leftDivider.color == rightDivider.color &&
+                leftDivider.height == rightDivider.height));
+  }
+
+  bool _sameTableConfig(TableConfig first, TableConfig second) =>
+      first.runtimeType == second.runtimeType &&
+      mapEquals(first.columnWidths, second.columnWidths) &&
+      first.defaultColumnWidth == second.defaultColumnWidth &&
+      first.textDirection == second.textDirection &&
+      first.border == second.border &&
+      first.defaultVerticalAlignment == second.defaultVerticalAlignment &&
+      first.textBaseline == second.textBaseline &&
+      first.headerRowDecoration == second.headerRowDecoration &&
+      first.bodyRowDecoration == second.bodyRowDecoration &&
+      first.headerStyle == second.headerStyle &&
+      first.bodyStyle == second.bodyStyle &&
+      first.headPadding == second.headPadding &&
+      first.bodyPadding == second.bodyPadding &&
+      identical(first.wrapper, second.wrapper);
 }
 
 ///wrap widget by [AutoScrollTag] that can use [AutoScrollController] to scrollToIndex

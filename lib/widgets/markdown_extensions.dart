@@ -2185,6 +2185,9 @@ PreConfig codeBlockPreConfig({
     textStyle: baseConfig.textStyle,
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
+    // The builder is recreated to capture the current stream snapshot. Its
+    // rendering mode is stable until the stream or theme mode changes.
+    incrementalConfigKey: (isDark, isStreaming),
     builder: (code, language) {
       final fenceIndex = nextFenceIndex++;
       if (isStreaming && streamingText != null && !hasStreamingFenceInfo) {
@@ -2566,6 +2569,7 @@ MarkdownConfig buildMarkdownConfig({
         const NoDividerH3Config(),
       ],
     ],
+    incrementalConfigKey: (isDark, isStreaming),
   );
 }
 
