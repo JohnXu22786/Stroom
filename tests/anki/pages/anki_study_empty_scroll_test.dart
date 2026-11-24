@@ -30,8 +30,9 @@ class _DelayedAnswerAnkiActions extends AnkiActions {
 
   final List<model.Card?> cards;
   int failNextCardLoads = 0;
-  final answerCompleted = Completer<void>();
+  final answerCompletions = <Completer<void>>[];
   final ratings = <int>[];
+  final savedRatings = <(int cardId, int rating)>[];
   int getNextCardCalls = 0;
 
   @override
@@ -47,7 +48,14 @@ class _DelayedAnswerAnkiActions extends AnkiActions {
   @override
   Future<void> answerCard(int cardId, int rating, {int duration = 0}) {
     ratings.add(rating);
-    return answerCompleted.future;
+    final completion = Completer<void>();
+    answerCompletions.add(completion);
+    return completion.future;
+  }
+
+  void persistFirstAnswerThenFail() {
+    savedRatings.add((10, ratings.first));
+    answerCompletions.first.completeError(StateError('answer response lost'));
   }
 }
 
@@ -191,19 +199,27 @@ void main() {
     expect(actions.ratings, [1]);
     expect(actions.getNextCardCalls, 1);
 
-    actions.answerCompleted.complete();
-    await tester.pumpAndSettle();
+    actions.persistFirstAnswerThenFail();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(actions.ratings, [1]);
+    expect(actions.savedRatings, [(10, 1)]);
     expect(actions.getNextCardCalls, 2);
     expect(find.text('Siguiente'), findsOneWidget);
     expect(find.text('Mostrar respuesta'), findsOneWidget);
+    ScaffoldMessenger.of(
+      tester.element(find.byType(Scaffold)),
+    ).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
 
     actions.failNextCardLoads = 1;
     await tester.tap(find.text('Mostrar respuesta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bien'));
-    await tester.pumpAndSettle();
+    actions.answerCompletions.last.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Siguiente'), findsOneWidget);
     expect(actions.ratings, [1, 3]);
     final retryLabel = AppLocalizations.of(

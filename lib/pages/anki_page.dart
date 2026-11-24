@@ -689,6 +689,8 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   }
 
   Future<void> _load() async {
+    final previousCardId = _current?.id;
+    final previousCardAnswered = _currentAnswered;
     final card = await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
     Note? note;
     if (card != null) {
@@ -703,36 +705,64 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
         _note = note;
         _showAnswer = false;
         _studying = card != null;
-        _currentAnswered = false;
+        _currentAnswered = previousCardAnswered && card?.id == previousCardId;
       });
   }
 
   Future<void> _answer(int rating) async {
     if (_current == null || _answering || _currentAnswered) return;
+    final answeredCardId = _current!.id;
     setState(() => _answering = true);
+    var answerSaved = false;
     try {
       await ref
           .read(ankiActionsProvider)
-          .answerCard(_current!.id, rating, duration: 3);
+          .answerCard(answeredCardId, rating, duration: 3);
+      answerSaved = true;
       if (!mounted) return;
       setState(() => _currentAnswered = true);
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString()),
-          action: _currentAnswered
-              ? SnackBarAction(
-                  label: AppLocalizations.of(context)!.actionRetry,
-                  onPressed: () => _retryLoad(),
-                )
-              : null,
-        ),
-      );
+      if (!answerSaved) {
+        setState(() => _currentAnswered = true);
+        try {
+          await _load();
+        } catch (loadError) {
+          if (!mounted) return;
+          _showRetryLoadError(loadError);
+          return;
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            action: _current?.id == answeredCardId
+                ? SnackBarAction(
+                    label: AppLocalizations.of(context)!.actionRetry,
+                    onPressed: () => _retryLoad(),
+                  )
+                : null,
+          ),
+        );
+        return;
+      }
+      _showRetryLoadError(error);
     } finally {
       if (mounted) setState(() => _answering = false);
     }
+  }
+
+  void _showRetryLoadError(Object error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error.toString()),
+        action: SnackBarAction(
+          label: AppLocalizations.of(context)!.actionRetry,
+          onPressed: () => _retryLoad(),
+        ),
+      ),
+    );
   }
 
   Future<void> _retryLoad() async {
@@ -742,15 +772,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString()),
-          action: SnackBarAction(
-            label: AppLocalizations.of(context)!.actionRetry,
-            onPressed: () => _retryLoad(),
-          ),
-        ),
-      );
+      _showRetryLoadError(error);
     } finally {
       if (mounted) setState(() => _answering = false);
     }
