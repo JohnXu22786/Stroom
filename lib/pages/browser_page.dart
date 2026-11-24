@@ -1569,6 +1569,7 @@ Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: ConstrainedText(
         l10n.browserDeleteScriptTitle,
         maxLines: 1,
@@ -1588,6 +1589,40 @@ Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
           onPressed: () => Navigator.pop(context, true),
           child: ConstrainedText(
             l10n.browserScriptDelete,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<bool?> confirmBrowserUserScriptTrust(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: ConstrainedText(
+        l10n.browserScriptTrustWarningTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: Text(l10n.browserScriptTrustWarning),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: ConstrainedText(
+            l10n.browserCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: ConstrainedText(
+            l10n.browserContinue,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1774,36 +1809,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   }
 
   Future<void> _importScriptFromUrl() async {
-    final l10n = AppLocalizations.of(context)!;
-    final trusted = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: ConstrainedText(
-          l10n.browserScriptTrustWarningTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: Text(l10n.browserScriptTrustWarning),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: ConstrainedText(
-              l10n.browserCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: ConstrainedText(
-              l10n.browserContinue,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
+    final trusted = await confirmBrowserUserScriptTrust(context);
     if (trusted != true || !mounted) return;
     final imported = await showBrowserUserScriptImportDialog(context);
     if (imported == null || !mounted) return;
