@@ -5,6 +5,65 @@ import 'package:markdown_widget/widget/markdown.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
+  testWidgets('TocWidget resets selection when its heading list becomes empty',
+      (
+    tester,
+  ) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    addTearDown(() {
+      VisibilityDetectorController.instance.updateInterval = const Duration(
+        milliseconds: 500,
+      );
+    });
+    final tocController = TocController();
+
+    Widget build({String? data}) => MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 160,
+                  child: TocWidget(
+                    controller: tocController,
+                    itemBuilder: (data) => Text(
+                      'item:${data.index},current:${data.currentIndex}',
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: data == null
+                      ? const SizedBox.shrink()
+                      : MarkdownWidget(
+                          data: data, tocController: tocController),
+                ),
+              ],
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(
+      build(data: '# First heading\n\n## Second heading'),
+    );
+    tocController.onIndexChanged(1);
+    await tester.pump();
+    expect(find.text('item:1,current:1'), findsOneWidget);
+    final headings = tocController.tocList;
+
+    await tester.pumpWidget(build());
+    tocController.setTocList([]);
+    await tester.pump();
+    expect(tocController.tocList, isEmpty);
+
+    tocController.setTocList(headings);
+    await tester.pump();
+    expect(find.text('item:0,current:0'), findsOneWidget);
+    expect(find.text('item:1,current:1'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    tocController.dispose();
+  });
+
   testWidgets('TocWidget reconnects when its controller changes', (
     tester,
   ) async {
