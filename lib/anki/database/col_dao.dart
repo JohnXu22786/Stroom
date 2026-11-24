@@ -150,8 +150,12 @@ class ColDao {
     await load();
   }
 
+  /// Runs related collection writes in a single database transaction.
+  Future<T> transaction<T>(Future<T> Function(DatabaseExecutor) action) =>
+      _db.transaction(action);
+
   /// Persist the JSON blobs back to the col row.
-  Future<void> save() async {
+  Future<void> save({DatabaseExecutor? executor}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final nowSecs = nowMs ~/ 1000;
     modified = nowSecs;
@@ -173,7 +177,7 @@ class ColDao {
           ..usn = -1;
       }
     }
-    await _db.update(
+    await (executor ?? _db).update(
         'col',
         {
           'mod': modified,
