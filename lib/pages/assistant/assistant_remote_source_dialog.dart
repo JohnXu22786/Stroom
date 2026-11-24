@@ -50,6 +50,8 @@ class _AssistantRemoteSourceDialogState
     extends State<_AssistantRemoteSourceDialog> {
   late final TextEditingController _urlController;
   RemoteAssistantCatalog? _catalog;
+  int _catalogRequestGeneration = 0;
+  bool _loadingCatalog = false;
   bool _busy = false;
   bool _autoUpdate = false;
   bool _reviewSafety = false;
@@ -78,21 +80,31 @@ class _AssistantRemoteSourceDialogState
   }
 
   Future<void> _loadCatalog() async {
+    final requestGeneration = ++_catalogRequestGeneration;
+    final catalogUrl = _urlController.text;
     setState(() {
       _busy = true;
+      _loadingCatalog = true;
       _error = null;
       _catalog = null;
     });
     final service = widget.serviceFactory?.call() ?? AssistantCatalogService();
     try {
-      final catalog = await service.fetchCatalog(_urlController.text);
-      if (!mounted) return;
+      final catalog = await service.fetchCatalog(catalogUrl);
+      if (!mounted || requestGeneration != _catalogRequestGeneration) return;
       setState(() => _catalog = catalog);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted && requestGeneration == _catalogRequestGeneration) {
+        setState(() => _error = '$error');
+      }
     } finally {
       service.close();
-      if (mounted) setState(() => _busy = false);
+      if (mounted && requestGeneration == _catalogRequestGeneration) {
+        setState(() {
+          _busy = false;
+          _loadingCatalog = false;
+        });
+      }
     }
   }
 
@@ -273,10 +285,17 @@ class _AssistantRemoteSourceDialogState
                     ),
                   ),
                 ),
-                onChanged: (_) => setState(() {
-                  _catalog = null;
-                  _error = null;
-                }),
+                onChanged: (_) {
+                  _catalogRequestGeneration++;
+                  setState(() {
+                    if (_loadingCatalog) {
+                      _busy = false;
+                      _loadingCatalog = false;
+                    }
+                    _catalog = null;
+                    _error = null;
+                  });
+                },
               ),
               const SizedBox(height: 10),
               SwitchListTile(
