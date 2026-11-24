@@ -1,0 +1,6290 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/pages/llm_account_management_page.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
+import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/cloudflare_workers_ai_connector.dart';
+import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/services/llm_oauth_token_client.dart';
+import 'package:stroom/services/llm_routing_service.dart';
+import 'package:stroom/services/devin_cli_acp.dart';
+import 'package:stroom/services/devin_cli_acp_service.dart';
+
+const _devinCliTestExecutableSha256 =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+String? _fieldLabel(InputDecoration? decoration) {
+  final label = decoration?.label;
+  return label is ConstrainedText ? label.data : decoration?.labelText;
+}
+
+void main() {
+  testWidgets(
+    'account editor follows localized theme and narrow large-text layout',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('fr'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          ),
+          darkTheme: ThemeData.dark(),
+          themeMode: ThemeMode.dark,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: child!,
+          ),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Comptes LLM et groupes de modèles'), findsOneWidget);
+      expect(find.text('Comptes'), findsOneWidget);
+      await tester.tap(find.byTooltip('Ajouter un compte'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ajouter un compte LLM'), findsOneWidget);
+      final connector = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).first,
+      );
+      final dropdown = tester.widget<DropdownButton<String>>(
+        find.descendant(
+          of: find.byWidget(connector),
+          matching: find.byType(DropdownButton<String>),
+        ),
+      );
+      expect(
+        dropdown.dropdownColor,
+        StroomMenuStyle.surface(tester.element(find.byWidget(connector))),
+      );
+      expect(dropdown.borderRadius, StroomMenuStyle.borderRadius);
+      await tester.showKeyboard(find.byType(TextField).first);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('account menu uses the shared light-theme surface', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        theme: ThemeData.light(),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ajouter un compte'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ajouter un compte LLM'), findsOneWidget);
+    final field = find.byType(DropdownButtonFormField<String>).first;
+    final dropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(of: field, matching: find.byType(DropdownButton<String>)),
+    );
+    expect(
+      dropdown.dropdownColor,
+      StroomMenuStyle.surface(tester.element(field)),
+    );
+    expect(dropdown.borderRadius, StroomMenuStyle.borderRadius);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop account page offers Zed keychain import', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      expect(find.byTooltip('从 Zed 导入 API 凭据'), findsOneWidget);
+    } else {
+      expect(find.byTooltip('从 Zed 导入 API 凭据'), findsNothing);
+    }
+  });
+
+  testWidgets(
+    'Cloudflare Workers AI keeps token secure and account ID separate',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final preferences = _MemoryPreferences();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Workers AI');
+
+      final connectorField = find.byType(DropdownButtonFormField<String>).first;
+      await tester.ensureVisible(connectorField);
+      tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+        'cloudflare-ai',
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> enterField(String label, String value) async {
+        final field = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == label,
+        );
+        await tester.ensureVisible(field);
+        await tester.enterText(field, value);
+      }
+
+      await enterField('Cloudflare Account ID', 'account-123');
+      await enterField('Cloudflare API Token', 'synthetic-cloudflare-token');
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == '上游模型与能力' &&
+              widget.readOnly,
+        ),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.connectorType, 'cloudflare-ai');
+      expect(saved.authType, 'api_key');
+      expect(saved.endpointConfig['cloudflareAccountId'], 'account-123');
+      expect(
+        saved.endpointConfig.toString(),
+        isNot(contains('synthetic-cloudflare-token')),
+      );
+      expect(
+        await service.readCredential(saved.id),
+        'synthetic-cloudflare-token',
+      );
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('synthetic-cloudflare-token')),
+      );
+      expect(
+        saved.models.map((model) => model.upstreamModelId).toList(),
+        kCloudflareWorkersAiModelIds,
+      );
+      expect(saved.models.first.capabilities, {'contextLength': 15000});
+    },
+  );
+
+  testWidgets('Azure account saves endpoint settings and secure API key', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Azure production');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    await tester.ensureVisible(connectorField);
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'azure-ai',
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> enterField(String label, String value) async {
+      final field = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == label,
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    await enterField(
+      'Azure resource / Foundry host',
+      'https://example-resource.openai.azure.com',
+    );
+    await enterField('Azure deployment ID', 'gpt-4o-production');
+    await enterField('Azure API version', '2024-12-01-preview');
+    await enterField('Azure API Key', 'synthetic-azure-secret');
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'azure-ai');
+    expect(saved.endpointConfig, {
+      'apiProtocol': 'openai.chat_completions',
+      'baseUrl': 'https://example-resource.openai.azure.com',
+      'azureDeploymentId': 'gpt-4o-production',
+      'apiVersion': '2024-12-01-preview',
+    });
+    expect(saved.models.single.upstreamModelId, 'gpt-4o-production');
+    expect(
+      saved.models.single.config['catalogSource'],
+      'configured-azure-deployment',
+    );
+    expect(credentials.values.values, ['synthetic-azure-secret']);
+    expect(
+      saved.endpointConfig.toString(),
+      isNot(contains('synthetic-azure-secret')),
+    );
+    final refreshed = await service.discoverModels(saved, refreshRemote: true);
+    expect(refreshed.single.id, saved.models.single.id);
+    expect(refreshed.single.upstreamModelId, 'gpt-4o-production');
+  });
+
+  testWidgets('OpenAI-compatible account offers named API presets', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final presetField = find.byType(DropdownButtonFormField<String>).at(1);
+    final presetButton = find.descendant(
+      of: presetField,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final items = tester.widget<DropdownButton<String>>(presetButton).items!;
+    expect(
+      items.map((item) => item.value),
+      containsAll([
+        'agentrouter',
+        'ai21',
+        'aimlapi',
+        'alibaba',
+        'alibaba-cn',
+        'agnes-cn',
+        'arcee-ai',
+        'ainative',
+        'ainetcafe',
+        'aion',
+        'ant-ling',
+        'anyapi',
+        'apmix',
+        'auriko',
+        'baichuan',
+        'baidu',
+        'baseten',
+        'bigmodel',
+        'bazaarlink',
+        'beatapi',
+        'chenzk',
+        'dahl',
+        'cheaperinference',
+        'byteplus',
+        'cerebras',
+        'chutes',
+        'deepinfra',
+        'doubao',
+        'fireworks',
+        'groq',
+        'huggingface',
+        'iflytek',
+        'internlm',
+        'mistral',
+        'novita',
+        'nvidia',
+        'siliconflow',
+        'stepfun-cn',
+        'stepfun-international',
+        'together',
+        'yi',
+        'freeaiapikey',
+        'freeinference',
+        'freemodel-dev',
+        'freetheai',
+        'friendliai',
+        'galadriel',
+        'greenpt',
+        'hcnsec',
+        'helixmind',
+        'helyxai',
+        'heroku',
+        'hyperbolic',
+      ]),
+    );
+    tester.widget<DropdownButton<String>>(presetButton).onChanged!('fireworks');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      'Fireworks AI',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.fireworks.ai/inference/v1/chat/completions',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      contains('accounts/fireworks/models/deepseek-v4-flash'),
+    );
+  });
+
+  testWidgets('AgentRouter preset creates an API-key account with defaults', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('agentrouter');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'agentrouter-test-key',
+    );
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  _fieldLabel(widget.decoration) == '端点地址（连接器需要时填写）',
+            ),
+          )
+          .controller!
+          .text,
+      'https://agentrouter.org/v1/messages',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  _fieldLabel(widget.decoration) == '上游模型与能力',
+            ),
+          )
+          .controller!
+          .text,
+      'claude-opus-4-8,reasoning\n'
+      'claude-opus-5,reasoning\n'
+      'gpt-5.6-sol',
+    );
+    final defaultProtocol = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '默认 API 协议',
+      ),
+    );
+    expect(defaultProtocol.initialValue, 'anthropic.messages');
+    final modelProtocol = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '模型 API 协议',
+      ),
+    );
+    expect(modelProtocol.initialValue, '');
+    modelProtocol.onChanged!('openai.responses');
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.authType, 'api_key');
+    expect(saved.endpointConfig['providerPresetId'], 'agentrouter');
+    expect(saved.endpointConfig['apiProtocol'], 'anthropic.messages');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://agentrouter.org/v1/messages',
+    );
+    expect(saved.endpointConfig['apiKeyHeader'], 'x-api-key');
+    expect(saved.endpointConfig['apiKeyScheme'], isEmpty);
+    expect(saved.endpointConfig['modelsUrl'], isNull);
+    expect(saved.models.map((model) => model.upstreamModelId), [
+      'claude-opus-4-8',
+      'claude-opus-5',
+      'gpt-5.6-sol',
+    ]);
+    expect(
+      saved.models.first.config['apiProtocolOverride'],
+      'openai.responses',
+    );
+    expect(await service.readCredential(saved.id), 'agentrouter-test-key');
+  });
+
+  testWidgets(
+    'GigaChat preset stores its API key securely and seeds source models',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              _fieldLabel(widget.decoration) == '服务商预设',
+        ),
+      );
+      preset.onChanged!('gigachat');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+        ),
+        'gigachat-test-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.connectorType, 'openai-compatibility');
+      expect(saved.endpointConfig['providerPresetId'], 'gigachat');
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(
+        saved.endpointConfig['baseUrl'],
+        'https://gigachat.devices.sberbank.ru/api/v1',
+      );
+      expect(
+        saved.models.map((model) => model.upstreamModelId),
+        orderedEquals(['GigaChat-2-Max', 'GigaChat-2-Pro', 'GigaChat-2-Lite']),
+      );
+      expect(
+        saved.models.map((model) => model.config['apiProtocolOverride']),
+        everyElement(isNull),
+      );
+      expect(credentials.values.values, ['gigachat-test-key']);
+    },
+  );
+
+  testWidgets('Dahl preset seeds the manual API-key account defaults', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('dahl');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'dahl-test-key',
+    );
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  _fieldLabel(widget.decoration) == '端点地址（连接器需要时填写）',
+            ),
+          )
+          .controller!
+          .text,
+      'https://inference.dahl.global/v1/chat/completions',
+    );
+    final models = tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                _fieldLabel(widget.decoration) == '上游模型与能力',
+          ),
+        )
+        .controller!
+        .text;
+    expect(models, 'MiniMaxAI/MiniMax-M2.7\nmoonshotai/Kimi-K2.6');
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'dahl');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://inference.dahl.global/v1/chat/completions',
+    );
+    expect(saved.endpointConfig['modelsUrl'], isNull);
+    expect(saved.models.map((model) => model.upstreamModelId), [
+      'MiniMaxAI/MiniMax-M2.7',
+      'moonshotai/Kimi-K2.6',
+    ]);
+    expect(saved.models.map((model) => model.capabilities), [
+      {'contextLength': 200000},
+      {'contextLength': 200000},
+    ]);
+    expect(credentials.values.values, ['dahl-test-key']);
+    expect(saved.endpointConfig.toString(), isNot(contains('dahl-test-key')));
+  });
+
+  testWidgets(
+    'preset switches apply defaults without replacing explicit model overrides',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'cheaperinference-preset-switch',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Fireworks account',
+          endpointConfig: const {
+            'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'fireworks',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'custom-gpt-5.4',
+              upstreamModelId: 'gpt-5.4',
+              displayName: 'GPT 5.4',
+            ),
+            LlmUpstreamModel(
+              id: 'custom-gpt-5.4-mini',
+              upstreamModelId: 'gpt-5.4-mini',
+              displayName: 'GPT 5.4 mini',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
+            ),
+          ],
+        ),
+        secret: 'existing-fireworks-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              _fieldLabel(widget.decoration) == '服务商预设',
+        ),
+      );
+      preset.onChanged!('cheaperinference');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+        ),
+        'new-cheaperinference-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverride'],
+        'openai.responses',
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      final nextPreset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              _fieldLabel(widget.decoration) == '服务商预设',
+        ),
+      );
+      nextPreset.onChanged!('bazaarlink');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+        ),
+        'new-bazaarlink-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final switchedAway = (await service.listAccounts()).single;
+      final defaultModel = switchedAway.models.singleWhere(
+        (model) => model.upstreamModelId == 'gpt-5.4',
+      );
+      expect(defaultModel.config['apiProtocolOverride'], isNull);
+      expect(defaultModel.config['apiProtocolOverrideSource'], isNull);
+      expect(
+        switchedAway.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+    },
+  );
+
+  testWidgets(
+    'switching from CheaperInference to a custom endpoint clears inherited defaults',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'cheaperinference-custom-switch',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'CheaperInference',
+          endpointConfig: const {
+            'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
+            'modelsUrl': 'https://api.cheaperinference.com/v1/models',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'cheaperinference',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'custom-switch-gpt-5.4',
+              upstreamModelId: 'gpt-5.4',
+              displayName: 'GPT 5.4',
+              config: {
+                'apiProtocolOverride': 'openai.responses',
+                'apiProtocolOverrideSource': 'provider-preset-default',
+              },
+            ),
+            LlmUpstreamModel(
+              id: 'custom-switch-gpt-5.4-mini',
+              upstreamModelId: 'gpt-5.4-mini',
+              displayName: 'GPT 5.4 mini',
+              config: {'apiProtocolOverride': 'openai.chat_completions'},
+            ),
+          ],
+        ),
+        secret: 'existing-cheaperinference-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              _fieldLabel(widget.decoration) == '服务商预设',
+        ),
+      );
+      preset.onChanged!('');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+        ),
+        'custom-endpoint-key',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig.containsKey('providerPresetId'), isFalse);
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverride'],
+        isNull,
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4')
+            .config['apiProtocolOverrideSource'],
+        isNull,
+      );
+      expect(
+        saved.models
+            .singleWhere((model) => model.upstreamModelId == 'gpt-5.4-mini')
+            .config['apiProtocolOverride'],
+        'openai.chat_completions',
+      );
+    },
+  );
+
+  testWidgets('changing OpenAI provider preset requires a replacement key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'preset-key-change',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Fireworks account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'fireworks',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'fireworks-model',
+            upstreamModelId: 'accounts/fireworks/models/deepseek-v4-flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {'chat': true, 'streaming': true, 'reasoning': true},
+          ),
+        ],
+      ),
+      secret: 'existing-fireworks-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    modelsField.controller!.text += '\nuser-owned-model,reasoning';
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('bytez');
+    await tester.pumpAndSettle();
+    final modelLines = tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                _fieldLabel(widget.decoration) == '上游模型与能力',
+          ),
+        )
+        .controller!
+        .text;
+    expect(modelLines, contains('user-owned-model,reasoning'));
+    expect(modelLines, contains('meta-llama/Llama-3.3-70B-Instruct'));
+    expect(modelLines, isNot(contains('accounts/fireworks/models/')));
+    expect(
+      modelLines
+          .split('\n')
+          .where((line) => line.startsWith('user-owned-model')),
+      hasLength(1),
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(
+      await service.readCredential('preset-key-change'),
+      'existing-fireworks-key',
+    );
+    expect(
+      (await service.listAccounts()).single.endpointConfig['providerPresetId'],
+      'fireworks',
+    );
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'new-bytez-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig['providerPresetId'], 'bytez');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://api.bytez.com/models/v2/openai/v1/chat/completions',
+    );
+    expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
+    expect(await service.readCredential('preset-key-change'), 'new-bytez-key');
+    expect(
+      saved.models
+          .singleWhere((model) => model.upstreamModelId == 'user-owned-model')
+          .displayName,
+      'user-owned-model',
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      containsAll([
+        'meta-llama/Llama-3.3-70B-Instruct',
+        'mistralai/Mistral-7B-Instruct-v0.3',
+        'Qwen/Qwen2.5-72B-Instruct',
+        'user-owned-model',
+      ]),
+    );
+  });
+
+  testWidgets('switching to an M37 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm37-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Baidu account',
+        endpointConfig: const {
+          'baseUrl': 'https://qianfan.baidubce.com/v2/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'baidu',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm37-preset-switch:ernie-5.1',
+            upstreamModelId: 'ernie-5.1',
+            displayName: 'ERNIE 5.1',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm37-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+      secret: 'old-baidu-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('agnes-cn');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.agnes-ai.cn/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('agnes-2.0-flash'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(modelsField.controller!.text, isNot(contains('ernie-5.1')));
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(await service.readCredential('m37-preset-switch'), 'old-baidu-key');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'new-agnes-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig['providerPresetId'], 'agnes-cn');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://api.agnes-ai.cn/v1/chat/completions',
+    );
+    expect(
+      saved.endpointConfig['modelsUrl'],
+      'https://api.agnes-ai.cn/v1/models',
+    );
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-agnes-key');
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('agnes-2.0-flash'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('ernie-5.1')),
+    );
+    final agnes = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'agnes-2.0-flash',
+    );
+    expect(agnes.capabilities['contextLength'], 262144);
+    expect(agnes.capabilities['maxOutputTokens'], 65536);
+    expect(agnes.capabilities['reasoning'], isTrue);
+    expect(agnes.capabilities['supportedThinkingEfforts'], [
+      'none',
+      'low',
+      'medium',
+      'high',
+      'max',
+    ]);
+    expect(agnes.capabilities['vision'], isTrue);
+    expect(agnes.capabilities['toolCalling'], isTrue);
+  });
+
+  testWidgets('switching to an M39 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm39-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'DeepInfra account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.deepinfra.com/v1/openai/chat/completions',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'deepinfra',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm39-preset-switch:deepseek-v4-flash',
+            upstreamModelId: 'deepseek-ai/DeepSeek-V4-Flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm39-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'old-deepinfra-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('daoxe');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://api.daoxe.com/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('claude-sonnet-4-6'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(
+      modelsField.controller!.text,
+      isNot(contains('deepseek-ai/DeepSeek-V4-Flash')),
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(
+      await service.readCredential('m39-preset-switch'),
+      'old-deepinfra-key',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'new-daoxe-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'daoxe');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://api.daoxe.com/v1/chat/completions',
+    );
+    expect(
+      saved.endpointConfig['modelsUrl'],
+      'https://api.daoxe.com/v1/models',
+    );
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-daoxe-key');
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('claude-sonnet-4-6'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('deepseek-ai/DeepSeek-V4-Flash')),
+    );
+    final daoxeModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'claude-sonnet-4-6',
+    );
+    expect(daoxeModel.capabilities, isEmpty);
+    expect(
+      saved.models
+          .singleWhere((model) => model.upstreamModelId == 'custom-model')
+          .config['apiProtocolOverride'],
+      'anthropic.messages',
+    );
+  });
+
+  testWidgets('switching to an M40 preset refreshes its models and key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'm40-preset-switch',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Fireworks account',
+        endpointConfig: const {
+          'baseUrl': 'https://api.fireworks.ai/inference/v1/chat/completions',
+          'modelsUrl': 'https://api.fireworks.ai/v1/accounts/fireworks/models?filter=supports_serverless=true',
+          'apiProtocol': 'openai.chat_completions',
+          'providerPresetId': 'fireworks',
+          'customHeader': 'retained',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'm40-preset-switch:accounts/fireworks/models/deepseek-v4-flash',
+            upstreamModelId: 'accounts/fireworks/models/deepseek-v4-flash',
+            displayName: 'DeepSeek V4 Flash',
+            capabilities: {'contextLength': 131072},
+          ),
+          LlmUpstreamModel(
+            id: 'm40-preset-switch:custom-model',
+            upstreamModelId: 'custom-model',
+            displayName: 'My custom model',
+            capabilities: {'vision': true},
+            config: {'apiProtocolOverride': 'anthropic.messages'},
+          ),
+        ],
+      ),
+      secret: 'old-fireworks-key',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '服务商预设',
+      ),
+    );
+    preset.onChanged!('heroku');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+      'https://us.inference.heroku.com/v1/chat/completions',
+    );
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('claude-opus-4-7'));
+    expect(modelsField.controller!.text, contains('custom-model'));
+    expect(
+      modelsField.controller!.text,
+      isNot(contains('accounts/fireworks/models/deepseek-v4-flash')),
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入凭据。'), findsOneWidget);
+    expect(
+      await service.readCredential('m40-preset-switch'),
+      'old-fireworks-key',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'new-heroku-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.endpointConfig['providerPresetId'], 'heroku');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://us.inference.heroku.com/v1/chat/completions',
+    );
+    expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
+    expect(saved.endpointConfig['customHeader'], 'retained');
+    expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(await service.readCredential(saved.id), 'new-heroku-key');
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('claude-opus-4-7'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('accounts/fireworks/models/deepseek-v4-flash')),
+    );
+    final herokuModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'claude-opus-4-7',
+    );
+    expect(herokuModel.capabilities, isEmpty);
+    final customModel = saved.models.singleWhere(
+      (model) => model.upstreamModelId == 'custom-model',
+    );
+    expect(customModel.capabilities, {'vision': true});
+    expect(customModel.config['apiProtocolOverride'], 'anthropic.messages');
+  });
+
+  testWidgets('Trae offers token import and in-app SOLO sign-in', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!('trae');
+    await tester.pumpAndSettle();
+
+    expect(find.text('在 Stroom 内登录 Trae SOLO'), findsOneWidget);
+    expect(find.text('Trae Cloud-IDE-JWT'), findsOneWidget);
+    expect(
+      find.text(
+        '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'switching StepFun regions requires a new key and saves selected defaults',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'stepfun-regional-key-change',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'StepFun account',
+          endpointConfig: const {
+            'baseUrl': 'https://api.stepfun.com/v1/chat/completions',
+            'modelsUrl': 'https://api.stepfun.com/v1/models',
+            'apiProtocol': 'openai.chat_completions',
+            'providerPresetId': 'stepfun-cn',
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'stepfun-regional-key-change:step-5-preview',
+              upstreamModelId: 'step-5-preview',
+              displayName: 'Step 5 Preview',
+              capabilities: {
+                'contextLength': 65536,
+                'reasoning': true,
+                'vision': true,
+                'toolCalling': true,
+              },
+              config: {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        ),
+        secret: 'old-china-key',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final preset = tester.widget<DropdownButtonFormField<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButtonFormField<String> &&
+              _fieldLabel(widget.decoration) == '服务商预设',
+        ),
+      );
+      preset.onChanged!('stepfun-international');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField).at(1)).controller!.text,
+        'https://api.stepfun.ai/v1/chat/completions',
+      );
+      final modelsField = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == '上游模型与能力',
+        ),
+      );
+      expect(
+        modelsField.controller!.text,
+        contains('step-5-preview,reasoning,vision,toolCalling'),
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('请输入凭据。'), findsOneWidget);
+      expect(
+        await service.readCredential('stepfun-regional-key-change'),
+        'old-china-key',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+        ),
+        'new-international-key',
+      );
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig['providerPresetId'], 'stepfun-international');
+      expect(
+        saved.endpointConfig['baseUrl'],
+        'https://api.stepfun.ai/v1/chat/completions',
+      );
+      expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      final stepFive = saved.models.singleWhere(
+        (model) => model.upstreamModelId == 'step-5-preview',
+      );
+      expect(stepFive.capabilities['contextLength'], 1024000);
+      expect(stepFive.capabilities['supportedThinkingEfforts'], [
+        'low',
+        'medium',
+        'high',
+      ]);
+      expect(stepFive.config['apiProtocolOverride'], 'anthropic.messages');
+      expect(await service.readCredential(saved.id), 'new-international-key');
+    },
+  );
+
+  test(
+    'Cursor OAuth fallback models preserve inline vision metadata',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          expect(options.uri.path, '/auth/poll');
+          return ResponseBody.fromString(
+            jsonEncode({
+              'accessToken': 'cursor-access-token',
+              'refreshToken': 'cursor-refresh-token',
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['application/json'],
+            },
+          );
+        });
+      final gateway = _testGateway(service, oauthDio: dio);
+      final authorization = await gateway.oauthAuthorization
+          .beginCursorAuthorization(
+            AiGatewayAccount(
+              id: 'cursor-vision-oauth',
+              connectorType: 'cursor',
+              authType: 'oauth',
+              displayName: 'Cursor',
+            ),
+          );
+
+      final account = await authorization.completed;
+      expect(account.models, isNotEmpty);
+      expect(
+        account.models.every((model) => model.capabilities['vision'] == true),
+        isTrue,
+      );
+      expect(
+        account.models.first.config['imageInputSupport'],
+        contains('Inline PNG, JPEG, GIF, or WebP data only'),
+      );
+    },
+  );
+
+  testWidgets('Cline and ClinePass expose separate OAuth and API-key choices', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    for (final (connectorId, expectedLabels) in [
+      ('cline', ['Cline WorkOS OAuth', 'Cline API Key']),
+      ('clinepass', ['ClinePass via Cline OAuth', 'ClinePass API Key']),
+    ]) {
+      final connector = find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connector,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        connectorId,
+      );
+      await tester.pumpAndSettle();
+
+      final auth = find.byType(DropdownButtonFormField<String>).at(1);
+      final authButton = find.descendant(
+        of: auth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      final items = tester.widget<DropdownButton<String>>(authButton).items!;
+      expect(
+        items.map((item) => item.value),
+        containsAll(['api_key', 'oauth']),
+      );
+      expect(
+        items.map((item) => (item.child as ConstrainedText).data),
+        containsAll(expectedLabels),
+      );
+    }
+  });
+
+  testWidgets(
+    'UncloseAI defaults to no auth and exposes its optional key mode',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final connector = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).at(0),
+      );
+      connector.onChanged!('uncloseai');
+      await tester.pumpAndSettle();
+
+      final auth = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).at(1),
+      );
+      expect(auth.initialValue, 'none');
+      final authButton = find.descendant(
+        of: find.byType(DropdownButtonFormField<String>).at(1),
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(authButton)
+            .items!
+            .map((item) => item.value),
+        containsAll(['none', 'api_key']),
+      );
+      final endpoint = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .firstWhere(
+            (field) =>
+                _fieldLabel(field.decoration) ==
+                'UncloseAI 使用固定 OpenAI Chat Completions 端点',
+          );
+      expect(endpoint.enabled, isFalse);
+      expect(endpoint.controller?.text, 'https://hermes.ai.unturf.com/v1');
+      expect(find.text('无需 API key；可选 key 仅用于身份标识。'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Openference OAuth and API-key accounts are distinct in the editor',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final gateway = _testGateway(service);
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final oauthProvider = gateway.providerCatalog.findProvider(
+        'openference',
+      )!;
+      final apiProvider = gateway.providerCatalog.findProvider(
+        'openference-api',
+      )!;
+      expect(oauthProvider.displayName, 'Openference');
+      expect(oauthProvider.supportedAuthTypes, {'oauth'});
+      expect(apiProvider.displayName, 'Openference API');
+      expect(apiProvider.supportedAuthTypes, {'api_key'});
+      expect(oauthProvider.supportsChatAdapter, isTrue);
+      expect(apiProvider.supportsChatAdapter, isTrue);
+
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      final connectorButton = find.descendant(
+        of: connectorDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      final connectorMenu = tester.widget<DropdownButton<String>>(
+        connectorButton,
+      );
+      expect(
+        connectorMenu.items!.map((item) => item.value),
+        containsAll(['openference', 'openference-api']),
+      );
+      connectorMenu.onChanged!('openference');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。'),
+        findsOneWidget,
+      );
+      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+      final oauthAuth = find.byType(DropdownButtonFormField<String>).at(1);
+      final oauthButton = find.descendant(
+        of: oauthAuth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(oauthButton)
+            .items!
+            .map((item) => item.value),
+        ['oauth'],
+      );
+
+      final updatedConnectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: updatedConnectorDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('openference-api');
+      await tester.pumpAndSettle();
+      final apiAuth = find.byType(DropdownButtonFormField<String>).at(1);
+      final apiButton = find.descendant(
+        of: apiAuth,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(apiButton)
+            .items!
+            .map((item) => item.value),
+        ['api_key'],
+      );
+      expect(find.text('Openference API Key'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Auggie account is local, named, and credential-free', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'Workstation Auggie');
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'auggie',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.text('Auggie API Key'), findsNothing);
+    final modelField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+    );
+    expect(
+      tester.widget<TextField>(modelField).controller!.text,
+      contains('sonnet4.6'),
+    );
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'auggie');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Workstation Auggie');
+    expect(saved.credentialRef, isNull);
+    expect(credentials.values, isEmpty);
+  });
+
+  testWidgets('Codex App Server account stays local and credential-free', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Local Codex');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'codex-app-server',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.textContaining('codex login'), findsOneWidget);
+    expect(find.text('检查本地 Codex CLI 登录状态'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration)?.contains('端点地址') == true,
+      ),
+      findsNothing,
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'codex-app-server');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Local Codex');
+    expect(saved.credentialRef, isNull);
+    expect(
+      saved.endpointConfig,
+      containsPair('apiProtocol', 'openai.responses'),
+    );
+    expect(saved.endpointConfig, isNot(contains('baseUrl')));
+    expect(credentials.values, isEmpty);
+  });
+
+  testWidgets('ZCode account uses its local Coding Plan and stores no secret', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Local ZCode');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'zcode-cli',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.textContaining('官方 ZCode'), findsOneWidget);
+    expect(find.textContaining('GLM Coding Plan'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  _fieldLabel(widget.decoration) == '上游模型与能力',
+            ),
+          )
+          .controller!
+          .text,
+      contains('glm-5.3-flash'),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration)?.contains('端点地址') == true,
+      ),
+      findsNothing,
+    );
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'zcode-cli');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Local ZCode');
+    expect(saved.credentialRef, isNull);
+    expect(saved.endpointConfig, isEmpty);
+    expect(credentials.values, isEmpty);
+  });
+
+  testWidgets(
+    'editing an Auggie account preserves discovered models and clears stale protocol',
+    (tester) async {
+      final preferences = _MemoryPreferences();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final account = LlmAccount(
+        id: 'saved-auggie',
+        connectorType: 'auggie',
+        authType: 'none',
+        displayName: 'Saved Auggie',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'apiProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'saved-auggie-custom',
+            upstreamModelId: 'custom-live-model',
+            displayName: 'Custom live model',
+            capabilities: {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+          jsonEncode({
+            'version': 1,
+            'items': [account.toMap()],
+          });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final modelField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      );
+      expect(
+        tester.widget<TextField>(modelField).controller!.text,
+        contains('custom-live-model'),
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.models.map((model) => model.upstreamModelId), [
+        'custom-live-model',
+      ]);
+      expect(saved.endpointConfig, isNot(contains('apiProtocol')));
+    },
+  );
+
+  testWidgets('switching an account to Auggie clears its old API protocol', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'legacy-custom-protocol',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Legacy compatible account',
+        endpointConfig: const {
+          'baseUrl': 'https://example.test/v1',
+          'apiProtocol': 'openai.responses',
+        },
+      ),
+      secret: 'test-api-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final connector = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'auggie',
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'auggie');
+    expect(saved.endpointConfig, isNot(contains('apiProtocol')));
+  });
+
+  testWidgets('GitLab Duo offers PAT and configured OAuth with prerequisites', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('gitlab-duo')!;
+    expect(provider.supportedAuthTypes, {'pat', 'oauth'});
+    expect(provider.supportsChatAdapter, isTrue);
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      'gitlab-duo',
+    );
+    await tester.pumpAndSettle();
+
+    final auth = find.byType(DropdownButtonFormField<String>).at(1);
+    final authButton = find.descendant(
+      of: auth,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final authDropdown = tester.widget<DropdownButton<String>>(authButton);
+    expect(authDropdown.value, 'pat');
+    authDropdown.onChanged!('oauth');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('GitLab 用户设置'), findsOneWidget);
+    expect(find.textContaining('ai_features read_user'), findsOneWidget);
+    expect(
+      find.textContaining('http://localhost:20128/callback'),
+      findsOneWidget,
+    );
+    expect(find.text('GitLab Duo OAuth client ID'), findsOneWidget);
+    final clientSecret = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == 'GitLab Duo OAuth client secret',
+      ),
+    );
+    expect(clientSecret.obscureText, isTrue);
+    final updatedAuth = find.byType(DropdownButtonFormField<String>).at(1);
+    final updatedAuthButton = find.descendant(
+      of: updatedAuth,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(updatedAuthButton)
+          .items!
+          .map((item) => item.value),
+      containsAll(['pat', 'oauth']),
+    );
+  });
+
+  testWidgets('reauthorizes Qoder OAuth when the admin client secret changes', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'qoder-oauth-secret-change',
+        connectorType: 'qoder',
+        authType: 'oauth',
+        displayName: 'Qoder OAuth account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'qoderLoginUrl': 'https://login.example.test/authorize',
+          'qoderExchangeUrl': 'https://login.example.test/token',
+          'qoderUserInfoUrl': 'https://login.example.test/user',
+          'qoderClientId': 'qoder-client',
+        },
+      ),
+      secret: jsonEncode({
+        'api_key': 'old-dashscope-key',
+        'access_token': 'old-qoder-access',
+        'refresh_token': 'old-qoder-refresh',
+        'client_id': 'qoder-client',
+        'client_secret': 'old-qoder-secret',
+        'oauth_contract': 'qoder-admin-code-v1',
+      }),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(
+            service,
+            oauthAuthorization: oauthAuthorization,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == 'QODER_OAUTH_CLIENT_SECRET',
+      ),
+      'new-qoder-secret',
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.configurations, hasLength(1));
+    expect(
+      oauthAuthorization.configurations.single['clientSecret'],
+      'new-qoder-secret',
+    );
+  });
+
+  testWidgets(
+    'Qoder account editor exposes PAT, API key and admin OAuth setup',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final gateway = _testGateway(service);
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final connector = find.byType(DropdownButtonFormField<String>).at(0);
+      final connectorButton = find.descendant(
+        of: connector,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        'qoder',
+      );
+      await tester.pumpAndSettle();
+      final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+      final authButton = find.descendant(
+        of: authDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(authButton)
+            .items!
+            .map((item) => item.value),
+        containsAll(['api_key', 'oauth', 'pat']),
+      );
+      tester.widget<DropdownButton<String>>(authButton).onChanged!('api_key');
+      await tester.pumpAndSettle();
+      expect(find.text('DashScope API Key'), findsOneWidget);
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: authDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('oauth');
+      await tester.pumpAndSettle();
+      expect(find.text('QODER_OAUTH_AUTHORIZE_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_TOKEN_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_USER_INFO_URL'), findsOneWidget);
+      expect(find.text('QODER_OAUTH_CLIENT_ID'), findsOneWidget);
+      final clientSecret = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == 'QODER_OAUTH_CLIENT_SECRET',
+        ),
+      );
+      expect(clientSecret.obscureText, isTrue);
+
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: authDropdown,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .onChanged!('pat');
+      await tester.pumpAndSettle();
+      expect(find.text('Qoder Personal Access Token'), findsOneWidget);
+      expect(find.textContaining('45 秒'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'Command Code account keeps supplier and model protocols separate',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'command-code-protocol-ui',
+          connectorType: 'command-code',
+          authType: 'api_key',
+          displayName: 'Command Code',
+          endpointConfig: const {'apiProtocol': 'openai.responses'},
+          models: const [
+            LlmUpstreamModel(
+              id: 'claude-model',
+              upstreamModelId: 'claude-sonnet-4-6',
+              displayName: 'Claude model',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'supportedApiProtocols': [
+                  'anthropic.messages',
+                  'openai.responses',
+                ],
+              },
+              config: {'apiProtocolOverride': 'anthropic.messages'},
+            ),
+          ],
+        ),
+        secret: 'private-command-code-key',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final defaultProtocol = find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '默认 API 协议',
+      );
+      expect(defaultProtocol, findsOneWidget);
+      final protocolsField = tester.widget<DropdownButtonFormField<String>>(
+        defaultProtocol,
+      );
+      expect(protocolsField.initialValue, 'openai.responses');
+      protocolsField.onChanged!('openai.chat_completions');
+      await tester.pumpAndSettle();
+
+      final modelsField = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == '上游模型与能力',
+        ),
+      );
+      expect(
+        modelsField.controller!.text,
+        contains('apiProtocolOverride=anthropic.messages'),
+      );
+      expect(modelsField.decoration?.helperText, contains('为每个模型选择'));
+      final modelProtocol = find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            _fieldLabel(widget.decoration) == '模型 API 协议',
+      );
+      final modelProtocolField = tester.widget<DropdownButtonFormField<String>>(
+        modelProtocol,
+      );
+      expect(modelProtocolField.initialValue, 'anthropic.messages');
+      await tester.ensureVisible(modelProtocol);
+      await tester.pumpAndSettle();
+      await tester.tap(modelProtocol);
+      await tester.pumpAndSettle();
+      Finder menuItem(String value) => find.byWidgetPredicate(
+        (widget) => widget is DropdownMenuItem<String> && widget.value == value,
+      );
+      expect(menuItem(''), findsOneWidget);
+      expect(menuItem('anthropic.messages'), findsAtLeastNWidgets(1));
+      expect(menuItem('openai.responses'), findsAtLeastNWidgets(1));
+      // Chat Completions is present only in the supplier default dropdown.
+      expect(menuItem('openai.chat_completions'), findsOneWidget);
+      await tester.tap(find.text('OpenAI Responses').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
+      expect(saved.models.single.capabilities['supportedApiProtocols'], [
+        'anthropic.messages',
+        'openai.responses',
+      ]);
+      expect(
+        saved.models.single.config['apiProtocolOverride'],
+        'openai.responses',
+      );
+    },
+  );
+
+  testWidgets('editing a Devin CLI account does not restart CLI login', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-existing',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Existing Devin CLI',
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, isEmpty);
+    expect(
+      (await service.listAccounts()).single.displayName,
+      'Existing Devin CLI',
+    );
+
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('重新登录官方 Devin CLI'));
+    await tester.tap(find.text('重新登录官方 Devin CLI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.loginAccounts.single.id, 'devin-cli-existing');
+  });
+
+  testWidgets('failed CLI reconnect save preserves the existing login', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-reconnect-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Existing Devin CLI',
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('重新登录官方 Devin CLI'));
+    await tester.tap(find.text('重新登录官方 Devin CLI'));
+    await tester.pumpAndSettle();
+
+    preferences.failNextSet = true;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.logoutAccounts, isEmpty);
+    expect(
+      (await service.listAccounts()).single.displayName,
+      'Existing Devin CLI',
+    );
+  });
+
+  testWidgets('an existing Devin CLI executable can be explicitly reapproved', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-reapprove-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(() => executable.writeAsString('original CLI build'));
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+    final originalApproval = (await tester.runAsync(
+      () => DevinCliAcpLaunch.approveExecutablePath(executable.path),
+    ))!;
+    await tester.runAsync(() => executable.writeAsString('updated CLI build'));
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-reapprove',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: {
+          DevinCliAcpLaunch.executablePathKey: originalApproval.path,
+          DevinCliAcpLaunch.executableSha256Key: originalApproval.sha256,
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(
+            service,
+            devinCliAcpService: _RecordingDevinCliAcpService(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重新信任当前 CLI 可执行文件并更新 SHA-256'), findsOneWidget);
+    await tester.tap(find.text('重新信任当前 CLI 可执行文件并更新 SHA-256'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    final updated = (await service.listAccounts()).single;
+    final currentApproval = (await tester.runAsync(
+      () => DevinCliAcpLaunch.approveExecutablePath(executable.path),
+    ))!;
+    expect(
+      updated.endpointConfig[DevinCliAcpLaunch.executableSha256Key],
+      currentApproval.sha256,
+    );
+    expect(
+      updated.endpointConfig[DevinCliAcpLaunch.executableSha256Key],
+      isNot(originalApproval.sha256),
+    );
+  });
+
+  testWidgets('changing away from Devin CLI removes its isolated login', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cli-convert',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'devinCliExecutablePath': '/trusted/devin',
+          'devinCliExecutableSha256': _devinCliTestExecutableSha256,
+        },
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(DropdownButtonFormField<String>);
+    tester.widget<DropdownButtonFormField<String>>(fields.at(0)).onChanged!(
+      'ollama',
+    );
+    await tester.pumpAndSettle();
+    tester.widget<DropdownButtonFormField<String>>(fields.at(1)).onChanged!(
+      'none',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect(localCli.logoutAccounts.single.id, 'devin-cli-convert');
+    expect((await service.listAccounts()).single.connectorType, 'ollama');
+  });
+
+  testWidgets(
+    'failed CLI cleanup restores the original connector and group mappings',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'devin-conversion-cleanup-failure',
+          connectorType: 'devin-cli-agentic',
+          authType: 'cli_session',
+          displayName: 'Devin CLI account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'devin-default-model',
+              upstreamModelId: 'devin-cli-default',
+              displayName: 'Devin default',
+            ),
+          ],
+        ),
+      );
+      final group = LlmModelGroup(
+        id: 'devin-conversion-group',
+        displayName: 'Devin model group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'devin-conversion-cleanup-failure',
+            localModelId: 'devin-default-model',
+            upstreamModelId: 'devin-cli-default',
+          ),
+        ],
+      );
+      await service.saveModelGroup(group);
+      final localCli = _RecordingDevinCliAcpService()
+        ..logoutError = StateError('temporary local cleanup failure');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(
+            gateway: _testGateway(service, devinCliAcpService: localCli),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byType(DropdownButtonFormField<String>).at(0),
+          )
+          .onChanged!('ollama');
+      await tester.pumpAndSettle();
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byType(DropdownButtonFormField<String>).at(1),
+          )
+          .onChanged!('none');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == '上游模型与能力',
+        ),
+        '',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(localCli.logoutAccounts, hasLength(1));
+      expect(
+        (await service.listAccounts()).single.connectorType,
+        'devin-cli-agentic',
+      );
+      expect(
+        (await service.listModelGroups()).single.members.single.accountId,
+        'devin-conversion-cleanup-failure',
+      );
+      expect(find.text('账号保存失败。请检查账号信息和安全存储状态。'), findsOneWidget);
+    },
+  );
+
+  testWidgets('adding Devin CLI requires an approved executable path', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-ui-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+    final gateway = _testGateway(service, devinCliAcpService: localCli);
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    final connectorButton = find.descendant(
+      of: connector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Approved Devin CLI');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+    tester
+        .widget<DropdownButtonFormField<AiGatewayAccountStatus>>(
+          find.byType(DropdownButtonFormField<AiGatewayAccountStatus>),
+        )
+        .onChanged!(AiGatewayAccountStatus.paused);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(localCli.loginAccounts.single.id, account.id);
+    expect(account.status, LlmAccountStatus.paused);
+    expect(
+      account.endpointConfig[DevinCliAcpLaunch.executablePathKey],
+      executable.resolveSymbolicLinksSync(),
+    );
+    expect(
+      (account.endpointConfig[DevinCliAcpLaunch.executableSha256Key] as String)
+          .length,
+      64,
+    );
+  });
+
+  testWidgets('failed Devin CLI account save removes its new login', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-failed-save-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).at(0);
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Unpersisted Devin');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+
+    preferences.failNextSet = true;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('changing an existing account to Devin CLI starts login', (
+    tester,
+  ) async {
+    final directory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('stroom-devin-edit-'),
+    ))!;
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final executable = File(
+      '${directory.path}${Platform.pathSeparator}${Platform.isWindows ? 'devin.exe' : 'devin'}',
+    );
+    await tester.runAsync(
+      () => executable.writeAsString('official CLI fixture'),
+    );
+    if (!Platform.isWindows) {
+      await tester.runAsync(
+        () async => Process.runSync('chmod', ['700', executable.path]),
+      );
+    }
+
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'existing-ollama-account',
+        connectorType: 'ollama',
+        authType: 'none',
+        displayName: 'Existing account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    final connector = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'devin-cli-agentic',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == '官方 Devin CLI 可执行文件绝对路径',
+      ),
+      executable.path,
+    );
+    await tester.tap(find.text('我已从 Devin 官方渠道安装并信任此可执行文件'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('保存'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(localCli.loginAccounts, hasLength(1));
+    expect(localCli.loginAccounts.single.id, 'existing-ollama-account');
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'devin-cli-agentic');
+    expect(saved.status, LlmAccountStatus.ready);
+  });
+
+  testWidgets('xAI OAuth model discovery can be retried from account editor', (
+    tester,
+  ) async {
+    var discoveryAttempts = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        discoveryAttempts++;
+        if (discoveryAttempts == 1) {
+          return ResponseBody.fromString(
+            '{"error":"temporarily unavailable"}',
+            503,
+          );
+        }
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'grok-3'},
+            ],
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+      dio: dio,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'xai-oauth-retry',
+        connectorType: 'xai-oauth',
+        authType: 'oauth',
+        displayName: 'xAI OAuth account',
+      ),
+      secret: jsonEncode({
+        'access_token': 'fixture-access-token',
+        'refresh_token': 'fixture-refresh-token',
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
+        'oauth_contract': 'xai-device-v1',
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号').last);
+    await tester.pumpAndSettle();
+
+    final refreshButton = find.widgetWithText(TextButton, '刷新模型目录');
+    expect(tester.widget<TextButton>(refreshButton).onPressed, isNotNull);
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(find.text('模型目录读取失败，请检查账号认证和连接设置。'), findsOneWidget);
+    expect(discoveryAttempts, 1);
+
+    await tester.ensureVisible(refreshButton);
+    await tester.pumpAndSettle();
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(discoveryAttempts, 2);
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.controller!.text, contains('grok-3'));
+  });
+
+  testWidgets(
+    'Devin account editor starts OAuth separately from token import',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final authorization = _RecordingOAuthAuthorization();
+      final gateway = _testGateway(service, oauthAuthorization: authorization);
+
+      await tester.pumpWidget(
+        MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+
+      final provider = gateway.providerCatalog.findProvider('devin')!;
+      expect(
+        provider.supportedAuthTypes,
+        containsAll({'oauth', 'session_token'}),
+      );
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      final connectorButton = find.descendant(
+        of: connectorDropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+        provider.id,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Devin OAuth account',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(authorization.authorizedAccounts, hasLength(1));
+      expect(authorization.authorizedAccounts.single.connectorType, 'devin');
+      expect(authorization.authorizedAccounts.single.authType, 'oauth');
+      expect(
+        await service.listAccounts(),
+        isEmpty,
+        reason: 'The account must not be persisted before OAuth completes.',
+      );
+    },
+  );
+
+  testWidgets('Kimi Code account uses the upstream device authorization flow', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
+    expect(provider.displayName, 'Kimi Code CLI');
+    expect(provider.supportedAuthTypes, {'oauth'});
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    final modelField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelField.readOnly, isTrue);
+    expect(modelField.controller!.text.split('\n'), [
+      'kimi-for-coding',
+      'kimi-for-coding-highspeed',
+    ]);
+    expect(find.text('订阅 OAuth').last, findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Kimi Code account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.deviceAuthorizationAccounts, hasLength(1));
+    expect(
+      oauthAuthorization.deviceAuthorizationAccounts.single.connectorType,
+      'kimi-coding',
+    );
+    expect(find.text('ABCD-EFGH'), findsOneWidget);
+    expect(find.text('https://www.kimi.com/code/verify'), findsOneWidget);
+    expect(
+      await service.listAccounts(),
+      isEmpty,
+      reason: 'Do not persist the account before authorization completes.',
+    );
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  test(
+    'Kilo chat-completions models support streaming group routing',
+    () async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'kilo-streaming-anonymous';
+      await service.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'kilocode',
+          authType: 'none',
+          displayName: 'Kilo anonymous',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'kilo-free',
+              upstreamModelId: 'openrouter/free',
+              displayName: 'Kilo free',
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: 'kilo-streaming-group',
+          displayName: 'Kilo streaming',
+          members: const [
+            LlmModelGroupMember(
+              accountId: accountId,
+              upstreamModelId: 'openrouter/free',
+              localModelId: 'kilo-free',
+            ),
+          ],
+        ),
+      );
+
+      final models = await _testGateway(service).modelDiscovery
+          .discoverGroupModels(
+            groupId: 'kilo-streaming-group',
+            localModelId: 'kilo-free',
+            requiredCapabilities: {'streaming'},
+          );
+
+      expect(models.map((model) => model.id), ['kilo-free']);
+      expect(models.single.upstreamModelId, 'openrouter/free');
+      expect(models.single.capabilities, isEmpty);
+    },
+  );
+
+  testWidgets('Kilo Code exposes OAuth, key, and anonymous free-only modes', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final provider = gateway.providerCatalog.findProvider('kilocode')!;
+    expect(provider.supportedAuthTypes, {'oauth', 'api_key', 'none'});
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    final authDropdown = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          _fieldLabel(widget.decoration) == '认证方式',
+    );
+    final authButton = find.descendant(
+      of: authDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(authButton)
+          .items!
+          .map((item) => item.value),
+      containsAll({'oauth', 'api_key', 'none'}),
+    );
+    expect(find.textContaining('多个独立连接'), findsOneWidget);
+
+    tester.widget<DropdownButtonFormField<String>>(authDropdown).onChanged!(
+      'none',
+    );
+    await tester.pumpAndSettle();
+    final modelField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelField.readOnly, isTrue);
+    expect(modelField.controller!.text, 'openrouter/free');
+    expect(find.textContaining('只允许 openrouter/free'), findsOneWidget);
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '账号名称',
+      ),
+      'Kilo anonymous free models',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final savedAnonymous = (await service.listAccounts()).single;
+    expect(savedAnonymous.connectorType, 'kilocode');
+    expect(savedAnonymous.authType, 'none');
+    expect(savedAnonymous.models.map((model) => model.upstreamModelId), [
+      'openrouter/free',
+    ]);
+    expect(await service.readCredential(savedAnonymous.id), isNull);
+    expect(oauthAuthorization.kiloDeviceAuthorizationAccounts, isEmpty);
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final secondConnector = find.byType(DropdownButtonFormField<String>).at(0);
+    final secondButton = find.descendant(
+      of: secondConnector,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(secondButton).onChanged!(provider.id);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '账号名称',
+      ),
+      'Kilo key account',
+    );
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.obscureText,
+      ),
+      'kilo-secret-api-key',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final savedKey = (await service.listAccounts()).singleWhere(
+      (account) => account.displayName == 'Kilo key account',
+    );
+    expect(savedKey.authType, 'api_key');
+    expect(await service.readCredential(savedKey.id), 'kilo-secret-api-key');
+    expect(savedKey.endpointConfig, isNot(contains('apiKey')));
+  });
+
+  testWidgets('Kilo Code OAuth launches its device-code authorization', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final provider = gateway.providerCatalog.findProvider('kilocode')!;
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byType(DropdownButtonFormField<String>).at(1),
+        )
+        .onChanged!('oauth');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '账号名称',
+      ),
+      'Kilo OAuth account',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.kiloDeviceAuthorizationAccounts, hasLength(1));
+    expect(find.text('KILO-1234'), findsOneWidget);
+    expect(find.text('https://app.kilo.ai/device-auth'), findsOneWidget);
+    expect(await service.listAccounts(), isEmpty);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+  });
+
+  testWidgets('Meta Muse OAuth is separately addable from its API key', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final museProvider = gateway.providerCatalog.findProvider('muse-code')!;
+    expect(museProvider.displayName, 'Meta Muse Code OAuth');
+    expect(museProvider.supportedAuthTypes, {'oauth'});
+    expect(gateway.providerCatalog.findProvider('meta')!.supportedAuthTypes, {
+      'api_key',
+    });
+    final dropdown = find.byType(DropdownButtonFormField<String>).at(0);
+    final button = find.descendant(
+      of: dropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(button).onChanged!('muse-code');
+    await tester.pumpAndSettle();
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+    await tester.enterText(find.byType(TextField).at(0), 'Muse account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(
+      oauthAuthorization.metaMuseDeviceAuthorizationAccounts,
+      hasLength(1),
+    );
+    expect(
+      oauthAuthorization
+          .metaMuseDeviceAuthorizationAccounts
+          .single
+          .connectorType,
+      'muse-code',
+    );
+    expect(find.text('META-1234'), findsOneWidget);
+    expect(find.text('https://www.meta.ai/device'), findsOneWidget);
+    expect(await service.listAccounts(), isEmpty);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  testWidgets('Muse OAuth model editor keeps account entitlements read-only', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'muse-entitlement-editor',
+        connectorType: 'muse-code',
+        authType: 'oauth',
+        displayName: 'Muse account',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'muse-entitled-model',
+            upstreamModelId: 'muse-spark-1.3',
+            displayName: 'Muse Spark',
+          ),
+        ],
+      ),
+      secret: jsonEncode({
+        'access_token': 'muse-minted-key',
+        'api_key': 'muse-minted-key',
+        'dca_token': 'dca:muse-device-token',
+        'email': 'muse@example.test',
+        'is_subs_active': true,
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final modelsField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '上游模型与能力',
+      ),
+    );
+    expect(modelsField.readOnly, isTrue);
+    expect(modelsField.controller!.text, 'muse-spark-1.3');
+  });
+
+  testWidgets('Grok Build and xAI OAuth modes are separate addable accounts', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    for (final (connectorId, displayName) in [
+      ('grok-cli', 'xAI Grok Build'),
+      ('xai-oauth', 'xAI API OAuth'),
+      ('github', 'GitHub Copilot'),
+    ]) {
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      final connector = gateway.providerCatalog.findProvider(connectorId)!;
+      expect(connector.displayName, displayName);
+      expect(connector.supportedAuthTypes, {'oauth'});
+      final dropdown = find.byType(DropdownButtonFormField<String>).at(0);
+      final button = find.descendant(
+        of: dropdown,
+        matching: find.byType(DropdownButton<String>),
+      );
+      tester.widget<DropdownButton<String>>(button).onChanged!(connectorId);
+      await tester.pumpAndSettle();
+      expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        '$connectorId account',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      if (connectorId == 'github') {
+        expect(
+          oauthAuthorization
+              .githubDeviceAuthorizationAccounts
+              .last
+              .connectorType,
+          connectorId,
+        );
+        expect(find.text('GITHUB-1234'), findsOneWidget);
+        expect(find.text('打开 GitHub Copilot'), findsOneWidget);
+      } else {
+        expect(
+          oauthAuthorization.xaiDeviceAuthorizationAccounts.last.connectorType,
+          connectorId,
+        );
+        expect(find.text('XAI-1234'), findsOneWidget);
+      }
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(await service.listAccounts(), isEmpty);
+    }
+  });
+
+  testWidgets('Kimi Code system back cancels device authorization', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final oauthAuthorization = _RecordingOAuthAuthorization();
+    final gateway = _testGateway(
+      service,
+      oauthAuthorization: oauthAuthorization,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final provider = gateway.providerCatalog.findProvider('kimi-coding')!;
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    tester.widget<DropdownButton<String>>(connectorButton).onChanged!(
+      provider.id,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Kimi Code account');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    // A system back event dismisses the authorization dialog.
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(oauthAuthorization.deviceAuthorization!.cancelled, isTrue);
+    expect(await service.listAccounts(), isEmpty);
+  });
+
+  test(
+    'Kimi Code tokens stay in secure storage and expose coding models',
+    () async {
+      final tokenResponse = Completer<ResponseBody>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path.endsWith('/device_authorization')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'device_code': 'fixture-device-code',
+                'user_code': 'ABCD-EFGH',
+                'verification_uri': 'https://www.kimi.com/code/verify',
+                'expires_in': 600,
+                'interval': 5,
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return tokenResponse.future;
+        });
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+      final gateway = _testGateway(service, oauthDio: dio);
+      final flow = await gateway.oauthAuthorization
+          .beginKimiCodeDeviceAuthorization(
+            AiGatewayAccount(
+              id: 'kimi-code-secure',
+              connectorType: 'kimi-coding',
+              authType: 'oauth',
+              displayName: 'Kimi Code',
+            ),
+          );
+
+      expect(await service.listAccounts(), isEmpty);
+      tokenResponse.complete(
+        ResponseBody.fromString(
+          jsonEncode({
+            'access_token': 'fixture-access-token',
+            'refresh_token': 'fixture-refresh-token',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+          }),
+          200,
+          headers: const {
+            'content-type': ['application/json'],
+          },
+        ),
+      );
+      final saved = await flow.completed;
+      final rawCredential = await service.readCredential(saved.id);
+      final storedCredential = jsonDecode(rawCredential!);
+      final account = (await service.listAccounts()).single;
+
+      expect(account.connectorType, 'kimi-coding');
+      expect(account.models.map((model) => model.upstreamModelId), [
+        'kimi-for-coding',
+        'kimi-for-coding-highspeed',
+      ]);
+      expect(
+        (await gateway.modelDiscovery.discoverModels(saved))
+            .map((model) => model.upstreamModelId),
+        ['kimi-for-coding', 'kimi-for-coding-highspeed'],
+      );
+      expect(storedCredential['access_token'], 'fixture-access-token');
+      expect(storedCredential['refresh_token'], 'fixture-refresh-token');
+      expect(storedCredential['device_id'], isNotEmpty);
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('fixture-access-token')),
+      );
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('fixture-refresh-token')),
+      );
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(saved),
+        isTrue,
+      );
+      expect(await service.listAccounts(), isEmpty);
+      expect(await service.readCredential(saved.id), isNull);
+    },
+  );
+
+  testWidgets('adds a Claude Setup Token account as a distinct auth mode', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final claudeProvider = _testGateway(service).providerCatalog
+        .findProvider('claude')!;
+    expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    await tester.ensureVisible(connectorDropdown);
+    final connectorButton = find.descendant(
+      of: connectorDropdown,
+      matching: find.byType(DropdownButton<String>),
+    );
+    final connectorWidget = tester.widget<DropdownButton<String>>(
+      connectorButton,
+    );
+    expect(
+      connectorWidget.items!.any((item) => item.value == claudeProvider.id),
+      isTrue,
+    );
+    final onConnectorSelected = connectorWidget.onChanged;
+    expect(onConnectorSelected, isNotNull);
+    // The Claude option exists in the interactive menu data, but Flutter's
+    // popup overlay does not expose its offscreen item text to the test finder.
+    // Invoke the same callback that selecting the item dispatches.
+    onConnectorSelected!(claudeProvider.id);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Setup Token').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).at(0), 'Claude setup');
+    await tester.enterText(find.byType(TextField).at(2), 'sk-ant-oat01-secret');
+    await tester.enterText(
+      find.byType(TextField).at(3),
+      'claude-sonnet-4-6,streaming',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(account.connectorType, 'claude');
+    expect(account.authType, 'setup_token');
+    expect(await service.readCredential(account.id), 'sk-ant-oat01-secret');
+    expect(
+      preferences.values.values.join(),
+      isNot(contains('sk-ant-oat01-secret')),
+    );
+  });
+
+  testWidgets('legacy AI Studio relay account can be explicitly reconfigured', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences()
+      ..values[LlmAccountMigrationService.accountsPreferenceKey] = jsonEncode({
+        'version': 1,
+        'items': [
+          {
+            'id': 'legacy-aistudio-relay-editor',
+            'connectorType': 'aistudio',
+            'authType': 'relay',
+            'displayName': 'Legacy AI Studio session',
+          },
+        ],
+      });
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('API Key').last, findsOneWidget);
+    expect(find.text('订阅 OAuth').last, findsOneWidget);
+    expect(find.text('旧版 AI Studio relay（已停用）').last, findsOneWidget);
+  });
+
+  testWidgets('failed account deletion does not run legacy config cleanup', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'delete-failure-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Delete failure account',
+      ),
+    );
+    var cleanupCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service),
+          onAccountDeleted: (_) async {
+            cleanupCalled = true;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(cleanupCalled, isFalse);
+    expect((await service.listAccounts()).single.id, 'delete-failure-account');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  testWidgets('failed Devin CLI account deletion retains its login', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-delete-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, isEmpty);
+    expect((await service.listAccounts()).single.id, 'devin-delete-failure');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  testWidgets('failed CLI cleanup after deletion restores the account', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-cleanup-failure',
+        connectorType: 'devin-cli-agentic',
+        authType: 'cli_session',
+        displayName: 'Devin CLI account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final localCli = _RecordingDevinCliAcpService()
+      ..logoutError = StateError('temporary local cleanup failure');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, devinCliAcpService: localCli),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(localCli.logoutAccounts, hasLength(1));
+    expect((await service.listAccounts()).single.id, 'devin-cleanup-failure');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  test(
+    'xAI OAuth account deletion revokes its discovered refresh endpoint',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requests.add(options);
+          if (options.uri.path == '/.well-known/openid-configuration') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'issuer': 'https://auth.x.ai',
+                'revocation_endpoint': 'https://auth.x.ai/oauth2/revoke',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString('', 200);
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'xai-oauth-revoke',
+          connectorType: 'xai-oauth',
+          authType: 'oauth',
+          displayName: 'xAI OAuth account',
+        ),
+        secret: jsonEncode({
+          'access_token': 'fixture-access-token',
+          'refresh_token': 'fixture-refresh-token',
+        }),
+      );
+      final gateway = _testGateway(service, oauthDio: dio);
+      final account = (await gateway.accountManagement.listAccounts()).single;
+
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+        isTrue,
+      );
+
+      expect(requests, hasLength(2));
+      expect(
+        requests.first.uri.toString(),
+        'https://auth.x.ai/.well-known/openid-configuration',
+      );
+      expect(requests.last.uri.toString(), 'https://auth.x.ai/oauth2/revoke');
+      expect(requests.last.data, {
+        'client_id': LlmOAuthTokenClient.xaiClientId,
+        'token': 'fixture-refresh-token',
+        'token_type_hint': 'refresh_token',
+      });
+      expect(await service.getAccount(account.id), isNull);
+    },
+  );
+
+  test('Tencent OAuth deletion succeeds without a revoke endpoint', () async {
+    for (final connectorType in [
+      'codebuddy-cn',
+      'codebuddy-intl',
+      'workbuddy',
+    ]) {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: '$connectorType-oauth-delete',
+          connectorType: connectorType,
+          authType: 'oauth',
+          displayName: '$connectorType account',
+        ),
+        secret: jsonEncode({
+          'access_token': 'access-token',
+          'refresh_token': 'refresh-token',
+        }),
+      );
+      final gateway = _testGateway(service);
+      final account = (await gateway.accountManagement.listAccounts()).single;
+
+      expect(
+        await gateway.oauthAuthorization.deleteAccountAndRevoke(account),
+        isTrue,
+      );
+      expect(await service.getAccount(account.id), isNull);
+      expect(await service.readCredential(account.id), isNull);
+    }
+  });
+
+  test(
+    'cancelling WorkBuddy model discovery removes its temporary account',
+    () async {
+      final discoveryStarted = Completer<void>();
+      final discoveryResponse = Completer<ResponseBody>();
+      final discoveryDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path == '/v3/config') {
+            discoveryStarted.complete();
+            return discoveryResponse.future;
+          }
+          throw StateError('Unexpected model-discovery request');
+        });
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+        dio: discoveryDio,
+      );
+      const originalCredential = '{"access_token":"existing-access"}';
+      final originalAccount = LlmAccount(
+        id: 'workbuddy-cancel-discovery',
+        connectorType: 'workbuddy',
+        authType: 'oauth',
+        displayName: 'Existing WorkBuddy',
+        status: LlmAccountStatus.ready,
+      );
+      await service.saveAccount(originalAccount, secret: originalCredential);
+      final oauthDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path.endsWith('/state')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'code': 0,
+                'data': {
+                  'state': 'device-state',
+                  'authUrl': 'https://www.workbuddy.ai/device',
+                },
+              }),
+              200,
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'accessToken': 'workbuddy-access',
+                'refreshToken': 'workbuddy-refresh',
+                'expiresIn': 3600,
+              },
+            }),
+            200,
+          );
+        });
+      final gateway = _testGateway(service, oauthDio: oauthDio);
+      final authorization = await gateway.oauthAuthorization
+          .beginTencentDeviceAuthorization(
+            AiGatewayAccount(
+              id: 'workbuddy-cancel-discovery',
+              connectorType: 'workbuddy',
+              authType: 'oauth',
+              displayName: 'WorkBuddy',
+            ),
+          );
+
+      await discoveryStarted.future;
+      authorization.cancel();
+      discoveryResponse.complete(
+        ResponseBody.fromString(
+          jsonEncode({
+            'data': {'models': []},
+          }),
+          200,
+        ),
+      );
+      await expectLater(
+        authorization.completed,
+        throwsA(isA<AiGatewayOAuthException>()),
+      );
+      final remainingAccount = (await service.listAccounts()).single;
+      expect(remainingAccount.id, originalAccount.id);
+      expect(remainingAccount.displayName, originalAccount.displayName);
+      expect(remainingAccount.status, originalAccount.status);
+      expect(remainingAccount.models, isEmpty);
+      expect(
+        await service.readCredential('workbuddy-cancel-discovery'),
+        originalCredential,
+      );
+    },
+  );
+
+  testWidgets('does not revoke OAuth while local account deletion fails', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'oauth-delete-failure',
+        connectorType: 'gemini',
+        authType: 'oauth',
+        displayName: 'Gemini OAuth account',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: jsonEncode({'refresh_token': 'still-valid-refresh-token'}),
+    );
+    var revocationCalls = 0;
+    final oauthDio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            revocationCalls++;
+            handler.resolve(Response(requestOptions: options, statusCode: 200));
+          },
+        ),
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, oauthDio: oauthDio),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(revocationCalls, 0);
+    expect((await service.listAccounts()).single.id, account.id);
+    expect(
+      await service.readCredential(account.id),
+      contains('still-valid-refresh-token'),
+    );
+    expect(find.text('账号删除失败。'), findsOneWidget);
+    expect(find.textContaining('OAuth 撤销失败'), findsNothing);
+  });
+
+  testWidgets('deletes a local OAuth account when provider revocation fails', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'oauth-revocation-failure',
+        connectorType: 'gemini',
+        authType: 'oauth',
+        displayName: 'Gemini OAuth account',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: jsonEncode({'access_token': 'access-without-refresh-token'}),
+    );
+    var cleanupCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service),
+          onAccountDeleted: (_) async {
+            cleanupCalled = true;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(await service.getAccount(account.id), isNull);
+    expect(await service.readCredential(account.id), isNull);
+    expect(cleanupCalled, isTrue);
+    expect(find.text('账号已删除，但 OAuth 撤销失败。请到提供商账户设置中撤销授权。'), findsOneWidget);
+  });
+
+  testWidgets('shows unknown quota and connection readiness as unknown', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'local-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Local endpoint',
+        status: LlmAccountStatus.unknown,
+        endpointConfig: {'baseUrl': 'https://example.test/v1'},
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Local endpoint'), findsOneWidget);
+    expect(find.text('连接状态未知'), findsOneWidget);
+    expect(find.text('额度未知'), findsOneWidget);
+  });
+
+  testWidgets(
+    'requires a Gemini client secret when changing an API-key account to OAuth',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'api-key-to-gemini-oauth',
+          connectorType: 'gemini',
+          authType: 'api_key',
+          displayName: 'Existing API-key account',
+        ),
+        secret: 'existing-api-key',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('订阅 OAuth').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == 'Google Cloud project ID',
+        ),
+        'my-cloud-project',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) ==
+                  'Google OAuth Desktop client ID',
+        ),
+        'desktop-client.apps.googleusercontent.com',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('请提供 Google OAuth Desktop client ID 和对应的 client secret。'),
+        findsOneWidget,
+      );
+      expect((await service.listAccounts()).single.authType, 'api_key');
+    },
+  );
+
+  testWidgets(
+    'requires reauthorization when changing a Gemini OAuth client secret',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'gemini-oauth-client-secret-change',
+          connectorType: 'gemini',
+          authType: 'oauth',
+          displayName: 'Gemini OAuth account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'clientId': 'desktop-client.apps.googleusercontent.com',
+            'googleCloudProjectId': 'my-cloud-project',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'old-gemini-access',
+          'refresh_token': 'old-gemini-refresh',
+          'client_id': 'desktop-client.apps.googleusercontent.com',
+          'client_secret': 'old-client-secret',
+        }),
+      );
+      final oauthAuthorization = _RecordingOAuthAuthorization();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(
+            gateway: _testGateway(
+              service,
+              oauthAuthorization: oauthAuthorization,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) == 'Google OAuth client secret',
+        ),
+        'new-client-secret',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(oauthAuthorization.configurations, hasLength(1));
+      expect(
+        oauthAuthorization.configurations.single['clientSecret'],
+        'new-client-secret',
+      );
+      final account = (await service.listAccounts()).single;
+      final credential =
+          jsonDecode((await service.readCredential(account.id))!) as Map;
+      expect(credential['client_secret'], 'old-client-secret');
+    },
+  );
+
+  testWidgets(
+    'requires reauthorization when changing an existing Gemini OAuth client ID',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'gemini-oauth-client-id-change',
+          connectorType: 'gemini',
+          authType: 'oauth',
+          displayName: 'Gemini OAuth account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'clientId': 'old-client.apps.googleusercontent.com',
+            'googleCloudProjectId': 'my-cloud-project',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'old-gemini-access',
+          'refresh_token': 'old-gemini-refresh',
+          'client_id': 'old-client.apps.googleusercontent.com',
+          'client_secret': 'old-client-secret',
+        }),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _fieldLabel(widget.decoration) ==
+                  'Google OAuth Desktop client ID',
+        ),
+        'new-client.apps.googleusercontent.com',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final unchanged = (await service.listAccounts()).single;
+      final unchangedCredential =
+          jsonDecode((await service.readCredential(unchanged.id))!) as Map;
+      expect(
+        unchanged.endpointConfig['clientId'],
+        'old-client.apps.googleusercontent.com',
+      );
+      expect(
+        unchangedCredential['client_id'],
+        'old-client.apps.googleusercontent.com',
+      );
+      expect(
+        find.text('请提供 Google OAuth Desktop client ID 和对应的 client secret。'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('shows connector remaining quota and named quota signals', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'reported-quota-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Reported quota account',
+        status: LlmAccountStatus.ready,
+      ),
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['remainingQuota'] = {
+      'state': 'reported',
+      'value': 250,
+      'unit': 'credits',
+      'source': 'test.connector',
+      'observedAt': DateTime.utc(2026, 10, 18).toIso8601String(),
+    };
+    accountRecord['quotaSignals'] = {
+      'dailyRemainingPercent': {
+        'state': 'reported',
+        'value': 75,
+        'unit': 'percent',
+        'source': 'test.daily',
+        'observedAt': DateTime.utc(2026, 10, 18).toIso8601String(),
+      },
+    };
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('剩余额度：250 credits'), findsOneWidget);
+    expect(find.text('每日额度剩余：75 percent'), findsOneWidget);
+    expect(find.text('额度未知'), findsNothing);
+  });
+
+  testWidgets(
+    'labels Bedrock static and default-chain credential sources accurately',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-static-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock static',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: '{"AccessKeyId":"AKID","SecretAccessKey":"safe-secret"}',
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-chain-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credential_chain',
+          displayName: 'Bedrock chain',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('授权来源：AWS Bedrock 用户提供的静态凭据'), findsOneWidget);
+      expect(find.text('授权来源：AWS 默认凭据链'), findsOneWidget);
+    },
+  );
+
+  testWidgets('labels Bedrock static access-key fields accurately', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AWS Bedrock').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('AWS Access + Secret Key（Session Token 可选）'),
+      findsWidgets,
+    );
+    expect(find.text('Amazon Bedrock API Key'), findsOneWidget);
+  });
+
+  testWidgets('clearing Vertex project ID removes the stored override', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'vertex-cleared-project',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Vertex account',
+        endpointConfig: const {
+          'projectId': 'stale-project',
+          'location': 'us-central1',
+        },
+      ),
+      secret: 'vertex-api-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(3), '');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig, isNot(contains('projectId')));
+    expect(await service.readCredential(saved.id), 'vertex-api-key');
+  });
+
+  testWidgets(
+    'saves Bedrock region and default credential chain without a secret',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Production Bedrock',
+      );
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS Bedrock').last);
+      await tester.pumpAndSettle();
+      final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+      await tester.ensureVisible(authDropdown);
+      await tester.tap(authDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS 默认凭据链').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'us-west-2');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'bedrock');
+      expect(account.authType, 'aws_credential_chain');
+      expect(account.endpointConfig['region'], 'us-west-2');
+      expect(account.credentialRef, isNull);
+      expect(credentials.values, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'Vertex account form stores project and location outside credentials',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Vertex AI').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'europe-west4');
+      await tester.enterText(find.byType(TextField).at(3), 'stroom-project');
+      await tester.enterText(
+        find.byType(TextField).at(4),
+        'vertex-key-for-test',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'vertex');
+      expect(account.endpointConfig['location'], 'europe-west4');
+      expect(account.endpointConfig.containsKey('region'), isFalse);
+      expect(account.endpointConfig['projectId'], 'stroom-project');
+      expect(account.credentialRef, isNotNull);
+      expect(credentials.values.values.single, 'vertex-key-for-test');
+      expect(
+        LlmNativeRequestBuilder()
+            .build(
+              account: account,
+              credential: 'vertex-key-for-test',
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+            )
+            .uri
+            .toString(),
+        'https://europe-west4-aiplatform.googleapis.com/v1/projects/stroom-project/locations/europe-west4/publishers/google/models/gemini-3.1-pro:generateContent',
+      );
+    },
+  );
+
+  testWidgets(
+    'Vertex AI Partners account form stores project and region securely',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Vertex partners');
+      final connectorDropdown = find
+          .byType(DropdownButtonFormField<String>)
+          .at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vertex AI Partners').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'us-central1');
+      await tester.enterText(find.byType(TextField).at(3), 'stroom-project');
+      await tester.enterText(find.byType(TextField).at(4), 'partner-key');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'vertex-partner');
+      expect(account.authType, 'api_key');
+      expect(account.endpointConfig['location'], 'us-central1');
+      expect(account.endpointConfig['projectId'], 'stroom-project');
+      expect(credentials.values.values.single, 'partner-key');
+    },
+  );
+
+  testWidgets('Vertex generic OAuth is excluded without a public flow', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth policy');
+    final connectorDropdown = find
+        .byType(DropdownButtonFormField<String>)
+        .at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Google Vertex AI').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Google OAuth Access Token'), findsNothing);
+    expect(
+      _testGateway(service).providerCatalog
+          .findProvider('vertex')!
+          .authTypeLimitations['oauth'],
+      contains('No public third-party OAuth inference flow'),
+    );
+  });
+
+  testWidgets('legacy Vertex OAuth edit requires supported reconfiguration', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'legacy-vertex-oauth',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Legacy Vertex OAuth',
+      ),
+      secret: 'legacy-vertex-oauth-token',
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['authType'] = 'oauth';
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      findsNothing,
+    );
+    expect(find.text('请选择受支持的认证方式后再保存此账号。'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('请选择受支持的认证方式后再保存此账号。'), findsWidgets);
+    expect((await service.listAccounts()).single.authType, 'oauth');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'legacy-vertex-oauth-token',
+    );
+
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('API Key').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && _fieldLabel(widget.decoration) == '凭据',
+      ),
+      'replacement-vertex-api-key',
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect((await service.listAccounts()).single.authType, 'api_key');
+    expect(
+      await service.readCredential('legacy-vertex-oauth'),
+      'replacement-vertex-api-key',
+    );
+  });
+
+  testWidgets('editing Vertex ignores non-string stored project fields', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'vertex-malformed-project',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Vertex malformed project',
+        endpointConfig: const {'projectId': 123, 'location': 'us-central1'},
+      ),
+      secret: 'vertex-api-key',
+    );
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map<String, dynamic>;
+    final accountRecord = Map<String, dynamic>.from(
+      (accountsEnvelope['items'] as List).single as Map,
+    );
+    accountRecord['endpointConfig'] = {
+      'projectId': 123,
+      'location': 42,
+      'region': 42,
+    };
+    accountsEnvelope['items'] = [accountRecord];
+    preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+        jsonEncode(accountsEnvelope);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final projectIdField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == 'Google Cloud 项目 ID',
+      ),
+    );
+    expect(projectIdField.controller?.text, isEmpty);
+    final regionField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            _fieldLabel(widget.decoration) == 'Vertex 区域',
+      ),
+    );
+    expect(regionField.controller?.text, 'us-central1');
+  });
+
+  testWidgets('saves an account with no authentication and no secret', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Local endpoint');
+    await tester.enterText(
+      find.byType(TextField).at(1),
+      'https://example.test/v1',
+    );
+    await tester.enterText(find.byType(TextField).at(3), 'local-model,vision');
+    final authDropdown = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<String> &&
+          _fieldLabel(widget.decoration) == '认证方式',
+    );
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('无认证').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(account.displayName, 'Local endpoint');
+    expect(account.authType, 'none');
+    expect(account.credentialRef, isNull);
+  });
+
+  testWidgets('account edits preserve unknown model capability metadata', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    const capabilities = <String, dynamic>{
+      'streaming': true,
+      'vendorMode': 'unknown',
+      'metadata': {'source': 'legacy-import'},
+    };
+    await service.saveAccount(
+      LlmAccount(
+        id: 'unknown-capability-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Unknown capability account',
+        models: [
+          LlmUpstreamModel(
+            id: 'unknown-capability-model',
+            upstreamModelId: 'unknown-capability-model',
+            displayName: 'Unknown capability model',
+            capabilities: capabilities,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).at(0),
+      'Renamed capability account',
+    );
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.displayName, 'Renamed capability account');
+    expect(saved.models.single.capabilities, capabilities);
+  });
+
+  testWidgets(
+    'editing an anchor upstream model preserves its stable group mapping',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'edited-anchor';
+      const localModelId = 'stable-local-model';
+      final groupId = stableLlmModelGroupId(accountId, localModelId);
+      await service.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Edited anchor',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: 'old-upstream-model',
+              displayName: 'Original model',
+              capabilities: {'streaming': true},
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Stable model',
+          legacyModelId: 'old-upstream-model',
+          legacyProviderName: 'Edited anchor',
+          members: const [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: localModelId,
+              upstreamModelId: 'old-upstream-model',
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(3),
+        'new-upstream-model,streaming',
+      );
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final savedAccount = (await service.listAccounts()).single;
+      final savedGroup = (await service.listModelGroups()).single;
+      expect(savedAccount.models.single.id, localModelId);
+      expect(savedAccount.models.single.upstreamModelId, 'new-upstream-model');
+      expect(savedGroup.id, groupId);
+      expect(savedGroup.members.single.localModelId, localModelId);
+      expect(savedGroup.members.single.upstreamModelId, 'new-upstream-model');
+      final selectorConfig = buildLlmModelGroupProviderConfigs(
+        accounts: [savedAccount],
+        groups: [savedGroup],
+      ).single;
+      expect(selectorConfig.id, groupId);
+      expect(selectorConfig.models.single.id, localModelId);
+      expect(selectorConfig.models.single.modelId, 'old-upstream-model');
+    },
+  );
+
+  testWidgets(
+    'replacing a deleted stable-group anchor keeps its encoded local model ID',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const localModelId = 'legacy-local-model';
+      final groupId = stableLlmModelGroupId(
+        'deleted-anchor-account',
+        localModelId,
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'replacement-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Replacement account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'replacement-model-record',
+              upstreamModelId: 'replacement-upstream-model',
+              displayName: 'Replacement model',
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Retained stable group',
+          legacyModelId: 'legacy-upstream-model',
+          legacyProviderName: 'Deleted account',
+          members: const [],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('模型组'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑模型组'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加成员'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加').last);
+      await tester.pumpAndSettle();
+      final replacementAlias = find.byKey(
+        const ValueKey('local_alias_replacement-account_0'),
+      );
+      expect(tester.widget<TextFormField>(replacementAlias).enabled, isFalse);
+
+      await tester.tap(find.text('添加成员').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加').last);
+      await tester.pumpAndSettle();
+
+      final duplicateAlias = find.byKey(
+        const ValueKey('local_alias_replacement-account_1'),
+      );
+      expect(tester.widget<TextFormField>(duplicateAlias).enabled, isTrue);
+      await tester.tap(find.byTooltip('移除成员'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final savedGroup = (await service.listModelGroups()).single;
+      expect(savedGroup.id, groupId);
+      expect(savedGroup.members.single.accountId, 'replacement-account');
+      expect(savedGroup.members.single.localModelId, localModelId);
+    },
+  );
+
+  testWidgets(
+    'editing an imported OCR endpoint switches back to base URL behavior',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'legacy-ocr-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Legacy OCR',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'baseUrl': 'https://legacy.example.test/ocr/custom?region=west',
+            'legacyOcrProviderConfigId': 'legacy-ocr-source',
+            'legacyOcrFullEndpoint': true,
+          },
+          models: const [
+            LlmUpstreamModel(
+              id: 'legacy-ocr-model',
+              upstreamModelId: 'vision-model',
+              displayName: 'Vision model',
+              capabilities: {'vision': true},
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://edited.example.test/v1',
+      );
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final savedAccount = (await service.listAccounts()).single;
+      expect(
+        savedAccount.endpointConfig.containsKey('legacyOcrFullEndpoint'),
+        isFalse,
+      );
+      final request = LlmNativeRequestBuilder().build(
+        account: savedAccount,
+        credential: null,
+        modelId: 'vision-model',
+        body: const {'model': 'vision-model', 'messages': []},
+      );
+      expect(
+        request.uri.toString(),
+        'https://edited.example.test/v1/chat/completions',
+      );
+    },
+  );
+
+  testWidgets('clearing an account endpoint removes stale endpoint aliases', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'cleared-endpoint-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Endpoint account',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {
+          'baseUrl': 'https://old.example.test/v1',
+          'host': 'https://old-host.example.test/v1',
+          'apiBase': 'https://stale.example.test/v1',
+        },
+        models: const [
+          LlmUpstreamModel(
+            id: 'cleared-endpoint-model',
+            upstreamModelId: 'clear-endpoint-model',
+            displayName: 'Clear endpoint model',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(1), '');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig, isNot(contains('baseUrl')));
+    expect(saved.endpointConfig, isNot(contains('host')));
+    expect(saved.endpointConfig, isNot(contains('apiBase')));
+  });
+
+  testWidgets(
+    'account policy hides group-only strategy and fallback controls',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'policy-editor-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Policy account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'policy-editor-model',
+              upstreamModelId: 'policy-model',
+              displayName: 'Policy model',
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: 'policy-editor-group',
+          displayName: 'Policy group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'policy-editor-account',
+              localModelId: 'policy-model',
+              upstreamModelId: 'policy-model',
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('额度与并发策略'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('并发上限'), findsOneWidget);
+      expect(find.text('同优先级选择'), findsNothing);
+      expect(find.text('跨账号回退范围'), findsNothing);
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('模型组'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('额度与回退策略'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('同优先级选择'), findsOneWidget);
+      expect(find.text('跨账号回退范围'), findsOneWidget);
+    },
+  );
+
+  testWidgets('changing a member priority preserves its edited local ID', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final account = LlmAccount(
+      id: 'priority-account',
+      connectorType: 'openai-compatibility',
+      authType: 'none',
+      displayName: 'Priority account',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'priority-upstream-model',
+          upstreamModelId: 'gpt-priority',
+          displayName: 'Priority model',
+        ),
+      ],
+    );
+    await service.saveAccount(account);
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: 'custom-priority-group',
+        displayName: 'Priority group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'priority-account',
+            localModelId: 'original-local-model',
+            upstreamModelId: 'gpt-priority',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑模型组'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'edited-local-model',
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('层级 1').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listModelGroups()).single;
+    expect(saved.members.single.localModelId, 'edited-local-model');
+    expect(saved.members.single.priorityTier, 1);
+  });
+
+  testWidgets('member selection follows the first duplicate upstream model', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'duplicate-upstream-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Duplicate upstream account',
+        models: const [
+          LlmUpstreamModel(
+            id: 'duplicate-record-a',
+            upstreamModelId: 'same-upstream-model',
+            displayName: 'Model record A',
+            capabilities: {'vision': false},
+          ),
+          LlmUpstreamModel(
+            id: 'duplicate-record-b',
+            upstreamModelId: 'same-upstream-model',
+            displayName: 'Model record B',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+    );
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: 'duplicate-upstream-group',
+        displayName: 'Duplicate upstream group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'duplicate-upstream-account',
+            localModelId: 'duplicate-local-model',
+            upstreamModelId: 'same-upstream-model',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加成员'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final modelDropdown = find.byType(DropdownButtonFormField<String>).last;
+    final modelButton = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: modelDropdown,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(modelButton.items?.map((item) => item.value).toList(), [
+      'duplicate-record-a',
+    ]);
+    await tester.tap(modelDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Model record A'), findsWidgets);
+    expect(find.text('Model record B'), findsNothing);
+    await tester.tap(find.text('Model record A').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listModelGroups()).single;
+    expect(saved.members.last.upstreamModelId, 'same-upstream-model');
+    final selectorConfig = buildLlmModelGroupProviderConfigs(
+      accounts: await service.listAccounts(),
+      groups: [saved],
+    ).single;
+    final capabilityMetadata =
+        selectorConfig
+                .models
+                .single
+                .legacyFields[kLlmModelCapabilitiesConfigField]
+            as Map;
+    expect(capabilityMetadata['vision'], isFalse);
+  });
+
+  testWidgets('explains and blocks mixed-protocol group members', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'claude-anchor',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Claude anchor',
+        models: const [
+          LlmUpstreamModel(
+            id: 'claude-model-record',
+            upstreamModelId: 'claude-sonnet',
+            displayName: 'Claude model',
+          ),
+        ],
+      ),
+      secret: 'claude-key',
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'openai-fallback',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'OpenAI fallback',
+        models: const [
+          LlmUpstreamModel(
+            id: 'openai-model-record',
+            upstreamModelId: 'gpt-model',
+            displayName: 'OpenAI model',
+          ),
+        ],
+      ),
+    );
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: stableLlmModelGroupId('claude-anchor', 'local-model'),
+        displayName: 'Chat model',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'claude-anchor',
+            localModelId: 'local-model',
+            upstreamModelId: 'claude-sonnet',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加成员'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OpenAI fallback').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('同一模型引用下的组成员必须使用相同聊天协议。'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '保存'))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('local alias edits immediately update protocol validation', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'claude-member',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Claude member',
+        models: const [
+          LlmUpstreamModel(
+            id: 'claude-record',
+            upstreamModelId: 'claude-model',
+            displayName: 'Claude model',
+          ),
+        ],
+      ),
+      secret: 'claude-key',
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'openai-member',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'OpenAI member',
+        models: const [
+          LlmUpstreamModel(
+            id: 'openai-record',
+            upstreamModelId: 'openai-model',
+            displayName: 'OpenAI model',
+          ),
+        ],
+      ),
+    );
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: 'alias-protocol-group',
+        displayName: 'Alias protocol group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'claude-member',
+            localModelId: 'claude-alias',
+            upstreamModelId: 'claude-model',
+          ),
+          LlmModelGroupMember(
+            accountId: 'openai-member',
+            localModelId: 'openai-alias',
+            upstreamModelId: 'openai-model',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型组'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑模型组'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('local_alias_openai-member_1')),
+      'claude-alias',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('同一模型引用下的组成员必须使用相同聊天协议。'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '保存').last)
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('shows Codex OAuth as supported for Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-oauth-account',
+        connectorType: 'codex',
+        authType: 'oauth',
+        displayName: 'Codex OAuth account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT 5 Codex',
+          ),
+        ],
+      ),
+      secret: jsonEncode({'access_token': 'codex-token'}),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Codex OAuth account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+  });
+
+  testWidgets('shows Devin accounts as supported by Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'devin-account',
+        connectorType: 'devin',
+        authType: 'session_token',
+        displayName: 'Devin account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'devin-model',
+            upstreamModelId: 'devin-chat',
+            displayName: 'Devin Chat',
+          ),
+        ],
+      ),
+      secret: 'devin-session',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Devin account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsNothing);
+    expect(find.text('该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。'), findsNothing);
+  });
+
+  testWidgets('keeps Codex API-key accounts out of Chat selectors', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-api-key-account',
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Legacy Codex API-key account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'codex-model',
+            upstreamModelId: 'gpt-5-codex',
+            displayName: 'GPT 5 Codex',
+          ),
+        ],
+      ),
+      secret: 'legacy-codex-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Legacy Codex API-key account'), findsOneWidget);
+    expect(find.text('ChatAdapter 暂不支持此连接器。'), findsOneWidget);
+  });
+
+  testWidgets('shows measured usage recorded by the routing state store', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'usage-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Usage account',
+      ),
+    );
+    final stateStore = LlmRoutingStateStore(preferences: preferences);
+    await stateStore.recordUsage(
+      LlmUsageEvent(
+        accountId: 'usage-account',
+        groupId: 'usage-group',
+        occurredAt: DateTime.now().toUtc(),
+        measurements: const [
+          LlmUsageMeasurement(unit: 'requests', value: 1, source: 'local'),
+          LlmUsageMeasurement(unit: 'tokens', value: 14, source: 'provider'),
+          LlmUsageMeasurement(unit: 'usd', value: 0.03, source: 'provider'),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('本地观测用量'), findsOneWidget);
+    expect(find.text('请求：1'), findsOneWidget);
+    expect(find.text('tokens：14'), findsOneWidget);
+    expect(find.text('USD：0.03'), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps accounts and groups visible when local usage state is malformed',
+    (tester) async {
+      final preferences = _MemoryPreferences();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'usage-state-account',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Usage state account',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'usage-state-model',
+              upstreamModelId: 'gpt-usage-state',
+              displayName: 'Usage state model',
+            ),
+          ],
+        ),
+      );
+      await service.saveModelGroup(
+        LlmModelGroup(
+          id: 'usage-state-group',
+          displayName: 'Usage state group',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'usage-state-account',
+              localModelId: 'usage-state-model',
+              upstreamModelId: 'gpt-usage-state',
+            ),
+          ],
+        ),
+      );
+      preferences.values[LlmRoutingStateStore.preferenceKey] = '{malformed';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Usage state account'), findsOneWidget);
+      expect(find.text('本地观测用量未知（路由记录无法读取）'), findsOneWidget);
+
+      await tester.tap(find.text('模型组').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Usage state group'), findsOneWidget);
+      expect(find.text('模型组本地累计用量：未知（路由记录无法读取）'), findsOneWidget);
+    },
+  );
+
+  testWidgets('shows account and group policy thresholds on their cards', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'group-usage-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Group usage account',
+        status: LlmAccountStatus.ready,
+        policy: LlmRoutingPolicy(
+          windows: {
+            LlmUsageWindow.fiveHour: LlmWindowPolicy(
+              reserveFloor: LlmLimitThreshold.fixed(5, unit: 'USD'),
+              usageCeiling: LlmLimitThreshold.fixed(50, unit: 'USD'),
+            ),
+            LlmUsageWindow.month: LlmWindowPolicy(
+              reserveFloor: LlmLimitThreshold.percentage(10),
+              usageCeiling: LlmLimitThreshold.percentage(80),
+            ),
+          },
+        ),
+        models: const [
+          LlmUpstreamModel(
+            id: 'group-usage-model',
+            upstreamModelId: 'vision-model',
+            displayName: 'Vision model',
+          ),
+        ],
+      ),
+    );
+    await service.saveModelGroup(
+      LlmModelGroup(
+        id: 'group-usage',
+        displayName: 'Group usage',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'group-usage-account',
+            localModelId: 'group-local-model',
+            upstreamModelId: 'vision-model',
+          ),
+        ],
+        policy: LlmRoutingPolicy(
+          windows: {
+            LlmUsageWindow.day: LlmWindowPolicy(
+              reserveFloor: LlmLimitThreshold.fixed(20, unit: 'tokens'),
+              usageCeiling: LlmLimitThreshold.fixed(100, unit: 'tokens'),
+            ),
+            LlmUsageWindow.week: LlmWindowPolicy(
+              reserveFloor: LlmLimitThreshold.percentage(15),
+              usageCeiling: LlmLimitThreshold.percentage(90),
+            ),
+          },
+        ),
+      ),
+    );
+    await LlmRoutingStateStore(preferences: preferences).recordUsage(
+      LlmUsageEvent(
+        accountId: 'group-usage-account',
+        groupId: 'group-usage',
+        occurredAt: DateTime.now().toUtc(),
+        measurements: const [
+          LlmUsageMeasurement(unit: 'requests', value: 1, source: 'local'),
+          LlmUsageMeasurement(unit: 'tokens', value: 14, source: 'provider'),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('5 小时窗口剩余额度保留线：5 USD'),
+      findsOneWidget,
+      reason: 'account-card policy floors must be visible',
+    );
+    expect(find.text('5 小时窗口使用上限：50 USD'), findsOneWidget);
+    expect(find.text('月窗口剩余额度保留线：10%'), findsOneWidget);
+    expect(find.text('月窗口使用上限：80%'), findsOneWidget);
+    await tester.tap(find.text('模型组'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('模型组本地累计用量：请求 1 · tokens 14'), findsOneWidget);
+    expect(find.text('日窗口剩余额度保留线：20 tokens'), findsOneWidget);
+    expect(find.text('日窗口使用上限：100 tokens'), findsOneWidget);
+    expect(find.text('周窗口剩余额度保留线：15%'), findsOneWidget);
+    expect(find.text('周窗口使用上限：90%'), findsOneWidget);
+  });
+
+  testWidgets('refreshes displayed usage when routing diagnostics change', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'usage-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Usage account',
+      ),
+    );
+    final stateStore = LlmRoutingStateStore(preferences: preferences);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('暂无本地记录（最近 62 天）'), findsOneWidget);
+
+    await stateStore.recordUsage(
+      LlmUsageEvent(
+        accountId: 'usage-account',
+        groupId: 'usage-group',
+        occurredAt: DateTime.now().toUtc(),
+        measurements: const [
+          LlmUsageMeasurement(unit: 'requests', value: 1, source: 'local'),
+          LlmUsageMeasurement(unit: 'tokens', value: 8, source: 'provider'),
+        ],
+      ),
+    );
+    LlmChatRouteDiagnostics.record(
+      groupId: 'usage-group',
+      localModelId: 'usage-model',
+      decisions: const [],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('tokens：8'), findsOneWidget);
+    expect(find.text('暂无本地记录（最近 62 天）'), findsNothing);
+  });
+
+  testWidgets('account cards distinguish provider and supported auth source', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-oauth-account',
+        connectorType: 'codex',
+        authType: 'oauth',
+        displayName: 'Work subscription',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: 'oauth-secret-that-must-not-render',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('认证方式：订阅 OAuth'), findsOneWidget);
+    expect(find.text('授权来源：OpenAI Codex OAuth'), findsOneWidget);
+    expect(
+      find.textContaining('oauth-secret-that-must-not-render'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('account cards show a safe recent routing error', (tester) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'failed-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Failed account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'failed-model',
+            upstreamModelId: 'gpt-test',
+            displayName: 'GPT test',
+          ),
+        ],
+      ),
+      secret: 'provider-response-with-secret',
+    );
+    final group = LlmModelGroup(
+      id: 'failed-group',
+      displayName: 'Failed group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'failed-account',
+          upstreamModelId: 'gpt-test',
+          localModelId: 'gpt-local',
+        ),
+      ],
+    );
+    await service.saveModelGroup(group);
+    LlmChatRouteDiagnostics.record(
+      groupId: group.id,
+      localModelId: 'gpt-local',
+      decisions: const [
+        AiGatewayRouteDecision(
+          subjectId: 'failed-account',
+          reason: 'request_authentication',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('最近错误：上游认证失败'), findsOneWidget);
+    expect(find.textContaining('provider-response-with-secret'), findsNothing);
+  });
+}
+
+LlmChatRoutingRuntime _testGateway(
+  LlmAccountConnectorService service, {
+  Dio? oauthDio,
+  AiGatewayOAuthAuthorization? oauthAuthorization,
+  DevinCliAcpService? devinCliAcpService,
+}) => LlmChatRoutingRuntime(
+  accountService: service,
+  routingService: LlmRoutingService(accountService: service),
+  oauthDio: oauthDio,
+  oauthAuthorization: oauthAuthorization,
+  devinCliAcpService: devinCliAcpService,
+);
+
+class _RecordingDevinCliAcpService extends DevinCliAcpService {
+  final loginAccounts = <AiGatewayAccount>[];
+  final logoutAccounts = <AiGatewayAccount>[];
+  Object? logoutError;
+
+  @override
+  Future<void> login(AiGatewayAccount account) async {
+    loginAccounts.add(account);
+  }
+
+  @override
+  Future<void> logout(AiGatewayAccount account) async {
+    logoutAccounts.add(account);
+    if (logoutError != null) throw logoutError!;
+  }
+}
+
+class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
+  final configurations = <Map<String, String>>[];
+  final authorizedAccounts = <AiGatewayAccount>[];
+  final deviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final xaiDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final metaMuseDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final tencentDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final githubDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  final kiloDeviceAuthorizationAccounts = <AiGatewayAccount>[];
+  _PendingOAuthDeviceAuthorization? deviceAuthorization;
+
+  @override
+  Future<AiGatewayAccount> authorize(
+    AiGatewayAccount account, {
+    Map<String, String> configuration = const {},
+    Future<bool> Function(
+      Uri authorizationUri,
+      Uri callbackUri,
+      Future<void> cancelSignal,
+    )?
+    openInAppAuthorization,
+  }) async {
+    configurations.add(configuration);
+    authorizedAccounts.add(account);
+    return account;
+  }
+
+  @override
+  Future<void> revoke(AiGatewayAccount account) async {}
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKimiCodeDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    deviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization();
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginKiloDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    kiloDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://app.kilo.ai/device-auth'),
+      userCode: 'KILO-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginXaiDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    xaiDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://x.ai/activate'),
+      userCode: 'XAI-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginMetaMuseDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    metaMuseDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://www.meta.ai/device'),
+      userCode: 'META-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginTencentDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    tencentDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://www.workbuddy.ai/device'),
+      userCode: 'TENCENT-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthDeviceAuthorization> beginGithubDeviceAuthorization(
+    AiGatewayAccount account,
+  ) async {
+    githubDeviceAuthorizationAccounts.add(account);
+    return deviceAuthorization = _PendingOAuthDeviceAuthorization(
+      verificationUri: Uri.parse('https://github.com/login/device'),
+      userCode: 'GITHUB-1234',
+    );
+  }
+
+  @override
+  Future<AiGatewayOAuthCursorAuthorization> beginCursorAuthorization(
+    AiGatewayAccount account,
+  ) async => throw UnsupportedError(
+    'Cursor authorization is not configured in this test.',
+  );
+
+  @override
+  Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
+}
+
+class _PendingOAuthDeviceAuthorization
+    implements AiGatewayOAuthDeviceAuthorization {
+  final Uri _verificationUri;
+  final String _userCode;
+  final _completion = Completer<AiGatewayAccount>();
+  var cancelled = false;
+
+  _PendingOAuthDeviceAuthorization({Uri? verificationUri, String? userCode})
+    : _verificationUri =
+          verificationUri ?? Uri.parse('https://www.kimi.com/code/verify'),
+      _userCode = userCode ?? 'ABCD-EFGH';
+
+  @override
+  Uri get verificationUri => _verificationUri;
+
+  @override
+  Uri get verificationUriComplete => verificationUri;
+
+  @override
+  String get userCode => _userCode;
+
+  @override
+  Future<AiGatewayAccount> get completed => _completion.future;
+
+  @override
+  void cancel() {
+    cancelled = true;
+    if (!_completion.isCompleted) {
+      _completion.completeError(const AiGatewayOAuthException());
+    }
+  }
+}
+
+class _FunctionalAdapter implements HttpClientAdapter {
+  final Future<ResponseBody> Function(RequestOptions options) onFetch;
+
+  _FunctionalAdapter(this.onFetch);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) => onFetch(options);
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _MemoryPreferences implements LlmAccountPreferences {
+  final Map<String, String> values = {};
+  bool failNextSet = false;
+
+  @override
+  Future<String?> getString(String key) async => values[key];
+
+  @override
+  Future<bool> remove(String key) async => values.remove(key) != null;
+
+  @override
+  Future<bool> setString(String key, String value) async {
+    if (failNextSet) {
+      failNextSet = false;
+      throw StateError('transient preference write failure');
+    }
+    values[key] = value;
+    return true;
+  }
+}
+
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String value) async {
+    values[reference] = value;
+  }
+}

@@ -487,6 +487,10 @@
   "chatAutoContinuePrompt": "完了していない場合は続行します。",
   "chatSearchCurrent": "この会話を検索...",
   "chatSearchAll": "すべての会話を検索...",
+  "chatSearchCurrentMode": "現在の会話",
+  "chatSearchAllMode": "すべての会話",
+  "chatSearchRetry": "検索を再試行",
+  "chatSearchError": "検索に失敗しました",
   "searchPrevious": "前回の試合",
   "searchNext": "次の試合",
   "searchClose": "検索を閉じる",
@@ -2781,8 +2785,12 @@
   "bgTaskOcrRequestSizeExceeded": "OCRリクエストのJSONサイズは{encodedBytes}バイトで、設定された上限{budgetBytes}バイトを超えています。",
   "@bgTaskOcrRequestSizeExceeded": {
     "placeholders": {
-      "encodedBytes": {"type": "int"},
-      "budgetBytes": {"type": "int"}
+      "encodedBytes": {
+        "type": "int"
+      },
+      "budgetBytes": {
+        "type": "int"
+      }
     }
   },
   "bgTaskOcrError": "OCR が失敗しました: {details}",
@@ -7177,12 +7185,1563 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "保存された温度が 0～2 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。",
-  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "@ocrSamplingTemperatureOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR temperature."
+  },
   "ocrSamplingTopPOutOfRange": "保存された top-P が 0～1 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。",
-  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "@ocrSamplingTopPOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR top-P value."
+  },
   "ocrSamplingSliderRepairRequired": "範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "@ocrSamplingSliderRepairRequired": {
+    "description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."
+  },
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。"
-
+  "providerResponsesEndpointHelp": "このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。",
+  "llmAccountLabel": "アカウント",
+  "llmAccountForThisRequest": "このリクエストで使用するアカウント",
+  "llmAccountUseModelGroup": "モデルグループのルーティングを使用",
+  "llmAccountManagementTitle": "LLM アカウントとモデルグループ",
+  "llmAccountAdd": "アカウントを追加",
+  "llmAccountEmpty": "LLM アカウントはまだありません。",
+  "llmAccountEditTitleAdd": "LLM アカウントを追加",
+  "llmAccountEditTitleEdit": "LLM アカウントを編集",
+  "traeAuthorizationTitle": "Trae SOLO に接続",
+  "traeAuthorizationLoadError": "ログインページを読み込めませんでした。キャンセルして再試行してください。",
+  "llmOcrAccountSyncFailed": "OCR アカウントを同期できませんでした。アカウント管理の設定を確認してください。",
+  "llmOcrAccountMigrationFailed": "OCR アカウントを移行できませんでした。元の設定は保持されています。",
+  "llmAccountsTab": "アカウント",
+  "llmModelGroupsTab": "モデルグループ",
+  "llmAccountsSummary": "各アカウントは認証情報、モデル機能、利用枠、同時実行制限を個別に保存します。不明な利用枠は不明のまま表示します。",
+  "llmModelGroupsSummary": "安定したモデルグループは Stroom のモデル名をアカウントと上流モデルに対応付けます。フォールバックはグループ内に限られます。",
+  "llmAccountName": "アカウント名",
+  "llmConnectorLabel": "コネクター",
+  "llmProviderPresetLabel": "プロバイダー設定",
+  "llmAuthenticationMethodLabel": "認証方式",
+  "llmDefaultApiProtocolLabel": "既定の API プロトコル",
+  "llmConnectionStatusLabel": "接続状態",
+  "llmConfigureModelLabel": "設定するモデル",
+  "llmModelApiProtocolLabel": "モデル API プロトコル",
+  "llmUpstreamModelsCapabilitiesLabel": "上流モデルと機能",
+  "llmModelGroupNameLabel": "モデルグループ名",
+  "llmStableModelIdLabel": "Stroom の安定モデル ID",
+  "llmPriorityTierLabel": "優先度",
+  "llmUpstreamModelLabel": "上流モデル",
+  "llmSamePrioritySelectionLabel": "同じ優先度のアカウント選択",
+  "llmFallbackScopeLabel": "アカウント間フォールバック範囲",
+  "llmConcurrencyLimitLabel": "同時実行上限",
+  "llmWindowModeLabel": "ウィンドウモード",
+  "llmCalendarTimezoneLabel": "カレンダーのタイムゾーン",
+  "llmValueLabel": "値",
+  "llmTypeLabel": "種類",
+  "llmRemainingQuotaFloorLabel": "残り利用枠の下限",
+  "llmWindowUsageCeilingLabel": "ウィンドウ使用量の上限",
+  "llmImportZedCredentials": "Zed から API 認証情報をインポート",
+  "llmAddModelGroupTooltip": "モデルグループを追加",
+  "llmNoModelGroups": "モデルグループはまだありません。",
+  "llmAccountPolicies": "アカウントポリシー",
+  "llmQuotaConcurrencyPolicy": "利用枠と同時実行ポリシー",
+  "llmAccountAuthSource": "認証元：{source}",
+  "llmAccountRecentError": "最近のエラー：{error}",
+  "llmNoRecord": "記録なし",
+  "llmConnectorUnavailableForChat": "このコネクターは Chat で使用できません。",
+  "llmAccountUnavailableInSelectors": "このアカウントのモデルは Chat または Task Flow の選択肢に表示されません。",
+  "llmModelsCapabilitiesHeading": "モデルと機能",
+  "llmNoModelsConfigured": "モデルが設定されていません",
+  "llmUsageQuotaHeading": "使用量と利用枠",
+  "llmQuotaUnknown": "利用枠不明",
+  "llmQuotaLimitsHeading": "利用枠の制限",
+  "llmLocalObservedUsageHeading": "ローカルで観測した使用量",
+  "llmUsageHistoryDisclaimer": "過去 62 日間のローカル統計です。プロバイダーの残高を示すものではありません。",
+  "llmLastRouteHeading": "最後のルーティング",
+  "llmMembersHeading": "メンバー",
+  "llmNoRoutableMembers": "ルーティング可能なアカウントメンバーがありません",
+  "llmLegacyMemberRequired": "既存会話のモデル参照とローカル ID を保つため、このメンバーを残す必要があります。",
+  "llmAccountGroupLoadError": "アカウントまたはモデルグループを読み込めませんでした。",
+  "llmRetryLoad": "再試行",
+  "llmGroupFallbackWithinMembers": "保存されたグループでは、メンバー内のみフォールバックできます。",
+  "llmMixedGroupProtocolError": "同じモデル参照のメンバーは同じチャットプロトコルを使う必要があります。",
+  "llmAddMember": "メンバーを追加",
+  "llmNoGroupMembers": "このモデルグループにメンバーはいません。",
+  "llmStableModelGroupHelp": "ローカルモデル ID は既存会話との互換性を保ちます。フォールバックはこのグループ内に限られます。",
+  "llmSignInProvider": "{provider} にログイン",
+  "llmOAuthInstructions": "{provider} の認証ページを開いてコードを入力してください。認証後、Stroom がアカウントを保存します。",
+  "llmOpenProviderAuthorization": "{provider} を開く",
+  "llmAuthorizationSource": "認証元：{source}",
+  "llmAccountDeleteFailed": "アカウントを削除できませんでした。",
+  "llmAccountDeleteCleanupFailed": "アカウントは削除されましたが、古い設定を整理できませんでした。",
+  "llmSaveBeforeModelRefresh": "モデルカタログを更新する前に、アカウントと変更内容を保存してください。",
+  "llmRefreshModelCatalog": "モデルカタログを更新",
+  "llmReauthorize": "再認証",
+  "llmSave": "保存",
+  "llmCancel": "キャンセル",
+  "llmDelete": "削除",
+  "llmEdit": "編集",
+  "llmContinueKeychainScan": "確認を続ける",
+  "llmImportCredentialsConfirmTitle": "{provider} の認証情報をインポートしますか？",
+  "llmImportThisAccount": "このアカウントをインポート",
+  "llmImportedAccounts": "プロバイダーアカウントを {count} 件安全にインポートしました。",
+  "llmSamePriorityStrategySummary": "同じ優先度のポリシー：{strategy}",
+  "llmKeepLegacyGroup": "以前の会話のためにモデルグループを保持",
+  "llmGroupUsageSummary": "グループ使用量：{usage}",
+  "llmModelGroupSettings": "モデルグループの設定",
+  "llmAddModelGroupMemberTitle": "モデルグループメンバーを追加",
+  "llmSavePolicy": "ポリシーを保存",
+  "llmOpenferenceCatalogNote": "利用可能なモデルは Openference のプランによって異なります。オフラインのカタログは利用権限を示しません。",
+  "llmTestLocalCli": "ローカル {cli} CLI をテスト",
+  "llmCheckLocalCodexCli": "ローカル Codex CLI のログインを確認",
+  "llmCliReady": "{cli} CLI はインストール済みで使用できます。",
+  "llmCodexCliReady": "Codex CLI にログインし、使用できる状態です。",
+  "llmCheckZedKeychain": "Zed のキーチェーンを確認しますか？",
+  "llmRoutingPolicyTitle": "{target} のルーティングポリシー",
+  "llmSupportedAuthRequired": "このアカウントを保存する前に、対応する認証方式を選択してください。",
+  "llmTraeCallbackPrivacy": "サインインコールバックはこの端末でのみ受信し、安全な認証情報ストレージに保存します。コールバック URL や閲覧履歴は保存しません。",
+  "llmCloudflareAccountIdLabel": "Cloudflare アカウント ID",
+  "llmCloudflareAccountIdHint": "Cloudflare ダッシュボード右側で Account ID を確認してください。",
+  "llmDevinExecutablePathLabel": "Devin 公式 CLI 実行ファイルのパス",
+  "llmDevinExecutablePathHelp": "公式のインストール先から Devin 実行ファイルの完全なパスをコピーしてください。",
+  "llmExecutableIntegrityHint": "Stroom はこのファイルの SHA-256 を記録し、変更後は起動を拒否します。",
+  "llmDevinReauthTitle": "Devin 公式 CLI に再ログイン",
+  "llmDevinReauthSubtitle": "このアカウントの独立した CLI ログインを再認証します。",
+  "llmKeepOAuthClientSecretHelp": "プラットフォームの安全なストレージにのみ保存します。既存の OAuth クライアントシークレットを保持するには空欄にします。",
+  "llmPublicOauthClientSecretHelp": "プラットフォームの安全なストレージにのみ保存します。公開クライアントは空欄にできます。",
+  "llmGitlabApplicationsHint": "GitLab ユーザー設定 → Applications",
+  "llmAzureDeploymentIdHelp": "デプロイ ID はこのアカウントの一意な上流モデル ID として使用されます。",
+  "llmAzureApiVersionHelp": "既定値は Azure モデルカタログの設定に従います。",
+  "llmAmazonQRegionLabel": "Amazon Q Developer のリージョン",
+  "llmQwenCloudRegionLabel": "Qwen Cloud リージョン ID",
+  "llmQwenCloudRegionHelp": "API キーはリージョンに紐づきます。対応：ap-southeast-1、cn-beijing、eu-central-1、cn-hongkong、ap-northeast-1、us-east-1。",
+  "llmGoogleCloudProjectLabel": "Google Cloud プロジェクト ID",
+  "llmModelCapabilitiesInputHint": "1 行につき 1 つ：モデル ID,streaming,vision,tools",
+  "llmGoogleOAuthPrerequisites": "この接続では Google Generative Language API OAuth を使用します。自分で管理する Google Cloud プロジェクト、Generative Language API の有効化、設定済みの Desktop OAuth クライアントが必要です。リクエストはそのプロジェクトに課金され、Code Assist や AI Studio のウェブログインは使用しません。",
+  "llmGitlabOAuthPrerequisites": "GitLab Duo OAuth には、コールバック http://localhost:20128/callback と ai_features read_user 権限を設定した GitLab アプリが必要です。client ID と、アプリの種類に応じて client secret を入力してください。トークンは安全に保存され、対応時に更新されます。PAT も別途選択できます。",
+  "llmAmazonQOAuthPrerequisites": "refresh_token を含む AWS Builder ID OAuth 認証情報 JSON をインポートします。access_token、clientId、clientSecret は任意です。クライアント情報がない場合、Stroom は AWS OIDC でクライアントを登録してトークンを更新します。トークンは安全に保存し、ブラウザー Cookie は読み取りません。対応リージョン：us-east-1、eu-central-1。",
+  "llmTraeTokenSecurity": "SOLO は固定の Trae エンドポイントを使用し、Cloud-IDE-JWT のみを送信します。インポートしたトークンは約 14 日で期限切れとなり、再入力が必要です。",
+  "llmAccountUsageUsedLabel": "使用済み",
+  "@llmAccountUsageUsedLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageRemainingLabel": "残り",
+  "@llmAccountUsageRemainingLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageTotalLabel": "合計",
+  "@llmAccountUsageTotalLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountRemainingQuotaLabel": "残りの割り当て:",
+  "@llmAccountRemainingQuotaLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountMetricUnitUnknown": "単位不明",
+  "@llmAccountMetricUnitUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilitySupported": "対応",
+  "@llmAccountCapabilitySupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnsupported": "非対応",
+  "@llmAccountCapabilityUnsupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnknown": "不明",
+  "@llmAccountCapabilityUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountQuotaReserveThreshold": "{window} の残りクォータの下限: {threshold}",
+  "@llmAccountQuotaReserveThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUsageCeilingThreshold": "{window} の使用上限: {threshold}",
+  "@llmAccountUsageCeilingThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccountWithOAuth": "「{account}」を削除し、OAuth 認証を取り消して、モデルグループからこのアカウントを削除しますか？",
+  "@llmConfirmDeleteAccountWithOAuth": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccount": "「{account}」を削除し、モデルグループからこのアカウントを削除しますか？",
+  "@llmConfirmDeleteAccount": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteModelGroup": "「{group}」のルーティング設定を削除しますか？既存の会話のモデル参照は変更されません。",
+  "@llmConfirmDeleteModelGroup": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportAccountSource": "ローカルのキーチェーンから「{account}」を Stroom の {provider} API アカウントにインポートします。",
+  "@llmKeychainImportAccountSource": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportExistingAccountNotice": "Stroom アカウントのキーを更新し、名前、モデル、ルーティング設定は保持します。",
+  "@llmKeychainImportExistingAccountNotice": {
+    "description": "LLM account management UI text."
+  },
+  "llmKeychainImportSecurityNote": "確認後、Stroom は認証情報を再読み込みして検証します。キーが画面に表示されることはありません。",
+  "@llmKeychainImportSecurityNote": {
+    "description": "LLM account management UI text."
+  },
+  "llmProviderAuthorizationFailed": "{provider} の認証に失敗しました。もう一度ログインしてください。",
+  "@llmProviderAuthorizationFailed": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountConcurrencySummary": "アカウントの同時実行数: {value}",
+  "@llmAccountConcurrencySummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountGroupUsageSummary": "モデルグループのローカル使用量: {usage}",
+  "@llmAccountGroupUsageSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "usage": {
+        "type": "String"
+      }
+    }
+  },
+  "llmPriorityTierValue": "優先度 {tier}",
+  "@llmPriorityTierValue": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "tier": {
+        "type": "int"
+      }
+    }
+  },
+  "llmGroupMemberSummary": "{upstream} · 優先度 {priority} · ローカル ID {localId}",
+  "@llmGroupMemberSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "upstream": {
+        "type": "String"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "localId": {
+        "type": "String"
+      }
+    }
+  },
+  "llmNoAccountCanProcessModel": "{model} を処理できるアカウントがありません。",
+  "@llmNoAccountCanProcessModel": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "llmOAuthLimitationSaveMessage": "{limitation}\nこのアカウントを保存する前に、対応している認証方法を選択してください。",
+  "@llmOAuthLimitationSaveMessage": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "limitation": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderEnterpriseCredentials": "{provider} が提供するエンタープライズ認証情報",
+  "@llmProviderEnterpriseCredentials": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderSessionToken": "{provider} が提供するセッショントークン",
+  "@llmProviderSessionToken": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderCredential": "{provider} が提供する認証情報",
+  "@llmProviderCredential": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUiAccountSaving": "アカウントの保存に失敗しました。アカウント情報と安全な保管状況を確認してください。",
+  "@llmAccountUiAccountSaving": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountDeletion": "アカウントの削除に失敗しました。",
+  "@llmAccountUiAccountDeletion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccount": "アカウントは削除されましたが、古い構成のクリーンアップに失敗しました。",
+  "@llmAccountUiTheAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountWas": "アカウントは削除されましたが、OAuth の取り消しに失敗しました。プロバイダーのアカウント設定に移動して、認証を取り消してください。",
+  "@llmAccountUiTheAccountWas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckZed": "ゼッドのキーホルダーをチェックしてみませんか？",
+  "@llmAccountUiCheckZed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMacOSMay": "macOS は、インポート可能なマニフェストを生成するときに、Stroom が一致するキーチェーン エントリをチェックできるようにするかどうかを項目ごとに尋ねる場合があります。",
+  "@llmAccountUiMacOSMay": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisStep": "このステップではアカウントは保存されません。後でインポートするアカウントを 1 つずつ確認する必要があります。",
+  "@llmAccountUiThisStep": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepChecking": "チェックし続けてください",
+  "@llmAccountUiKeepChecking": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnableTo": "システム キーチェーンを読み取れません。システムのキーチェーンのアクセス許可を確認して、再試行してください。",
+  "@llmAccountUiUnableTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoReadable": "読み取り可能な Zed OpenAI、Anthropic、Google、Mistral、または xAI 資格情報が見つかりません。",
+  "@llmAccountUiNoReadable": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiProviderText": "プロバイダー",
+  "@llmAccountUiProviderText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomWill": "Stroom は、確認後に資格情報を再読み込みして検証します。キーはインターフェイスに表示されません。",
+  "@llmAccountUiStroomWill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportThis": "このアカウントをインポートする",
+  "@llmAccountUiImportThis": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsNot": "資格情報がインポートされていません。キーチェーン項目が変更されたか、アクセスが拒否されたか、安全なストレージが利用できない可能性があります。",
+  "@llmAccountUiCredentialsNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseAdd": "まずアカウントにモデルを追加してから、モデル グループを作成してください。",
+  "@llmAccountUiPleaseAdd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModel": "モデル グループの保存に失敗しました。会員アカウントに該当の上流モデルが存在することをご確認ください。",
+  "@llmAccountUiTheModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroup": "モデルグループの削除に失敗しました。",
+  "@llmAccountUiModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLLMAccount": "LLM アカウントとモデル グループ",
+  "@llmAccountUiLLMAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupText": "モデルグループ",
+  "@llmAccountUiModelGroupText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachAccount": "各アカウントは、認証情報、モデル機能、クォータ、同時実行戦略を個別に保存します。不明な金額は不明のままです。",
+  "@llmAccountUiEachAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportAPI": "Zed から API 認証情報をインポートする",
+  "@llmAccountUiImportAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRouting": "ルーティング ポリシーの保存に失敗しました。",
+  "@llmAccountUiTheRouting": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStableModel": "安定したモデル グループは、レガシー セッション モデル ID をオプションのアカウントおよびアップストリーム モデルにマップします。メンバーはこのグループ内でのみロールバックできます。",
+  "@llmAccountUiStableModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddModel": "モデルグループの追加",
+  "@llmAccountUiAddModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCode": "キミコードの認証に失敗しました。再度ログインしてください。",
+  "@llmAccountUiKimiCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginTo": "キミコードCLIにログイン",
+  "@llmAccountUiLoginTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenThe": "キミ認証ページを開いて、以下のコードを入力します。認証が完了すると、Stroom は自動的にアカウントを保存します。",
+  "@llmAccountUiOpenThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKimi": "君を開いて",
+  "@llmAccountUiOpenKimi": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCode": "Kilo コードの認証に失敗しました。もう一度ログインしてください。",
+  "@llmAccountUiKiloCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginToKilo": "キロコードにログイン",
+  "@llmAccountUiLoginToKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheKilo": "Kilo コードの確認ページを開いてコードを入力します。認証が完了すると、Stroom は自動的にアカウントを保存します。",
+  "@llmAccountUiOpenTheKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKilo": "オープンキロコード",
+  "@llmAccountUiOpenKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuse": "Meta Muse の認証に失敗しました。もう一度ログインしてください。",
+  "@llmAccountUiMetaMuse": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginMeta": "メタミューズコードへのログイン",
+  "@llmAccountUiLoginMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheMeta": "メタ検証ページを開き、以下のコードを入力します。認証が完了すると、Stroom は自動的にアカウントを保存します。",
+  "@llmAccountUiOpenTheMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenMeta": "オープンメタ",
+  "@llmAccountUiOpenMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountOr": "アカウントまたはモデルグループを読み取ることができません。",
+  "@llmAccountUiTheAccountOr": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAnd": "クォータと同時実行戦略",
+  "@llmAccountUiQuotaAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAvailableModels": "利用可能なモデルは Openference アカウント プランによって異なります。オフライン モデル カタログは承認を意味しません。",
+  "@llmAccountUiAvailableModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoRecord": "記録なし",
+  "@llmAccountUiNoRecord": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoes": "ChatAdapter は現在、このコネクタをサポートしていません。",
+  "@llmAccountUiChatAdapterDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAccount": "このアカウントのモデル グループは、チャットおよびタスク フロー モデル セレクターには表示されません。",
+  "@llmAccountUiThisAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAnd": "モデルと機能",
+  "@llmAccountUiModelsAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservation": "現地観測利用",
+  "@llmAccountUiLocalObservation": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoLocal": "ローカル記録なし (過去 62 日間)",
+  "@llmAccountUiNoLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservationUsage": "ローカル監視の使用法が不明 (ルーティング レコードを読み取れない)",
+  "@llmAccountUiLocalObservationUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalStatistics": "過去 62 日間のローカル統計は、アカウント残高を表すものではありません。",
+  "@llmAccountUiLocalStatistics": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndFallback": "クォータとフォールバック戦略",
+  "@llmAccountUiQuotaAndFallback": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepOld": "古いセッションモデルグループを保持する",
+  "@llmAccountUiKeepOld": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDeleteModel": "モデルグループの削除",
+  "@llmAccountUiDeleteModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocal": "モデルグループのローカル累積使用量: 不明",
+  "@llmAccountUiModelGroupLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocalCumulative": "モデル グループのローカル累積使用量: 不明 (ルーティング レコードを読み取ることができません)",
+  "@llmAccountUiModelGroupLocalCumulative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCorresponding": "古いセッション モデル参照の対応するメンバーとローカル参照 ID を保持する必要があります。",
+  "@llmAccountUiTheCorresponding": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThereAre": "ルーティング可能なアカウント メンバーがいません",
+  "@llmAccountUiThereAre": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHoursText": "5時間",
+  "@llmAccountUiHoursText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyText": "毎日",
+  "@llmAccountUiDailyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyText": "毎週",
+  "@llmAccountUiWeeklyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyText": "毎月",
+  "@llmAccountUiMonthlyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMainWindow": "メインウィンドウ残高",
+  "@llmAccountUiMainWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRemaining": "サブウィンドウの残量",
+  "@llmAccountUiTheRemaining": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyQuota": "1 日あたりの割り当ての残り",
+  "@llmAccountUiDailyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyQuota": "毎週の割り当てが残っています",
+  "@llmAccountUiWeeklyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyQuota": "毎月の割り当ての残り",
+  "@llmAccountUiMonthlyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeReview": "コードレビューの割り当てが残っています",
+  "@llmAccountUiCodeReview": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestText": "リクエスト",
+  "@llmAccountUiRequestText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityUnknown": "能力不明",
+  "@llmAccountUiAbilityUnknown": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatus": "接続状態が不明",
+  "@llmAccountUiConnectionStatus": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReadyText": "準備完了",
+  "@llmAccountUiReadyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSuspendedText": "一時停止中",
+  "@llmAccountUiSuspendedText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReAuthentication": "再認証が必要です",
+  "@llmAccountUiReAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConnection": "接続ステータスは不明です。ルートはまだリクエストを試行できます。リクエストの結果に従ってステータスを更新してください。",
+  "@llmAccountUiTheConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountsCan": "アカウントはモデル グループ ルーティングに参加できます。",
+  "@llmAccountUiAccountsCan": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountHas": "アカウントは停止されており、ルーティングには参加しません。",
+  "@llmAccountUiTheAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountNeeds": "アカウントはルーティングに参加する前に再認証する必要があります。",
+  "@llmAccountUiTheAccountNeeds": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteCloud": "Cloud-IDE-JWT を貼り付けます",
+  "@llmAccountUiPasteCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeDevice": "Kilo コードデバイス OAuth",
+  "@llmAccountUiKiloCodeDevice": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousFree": "匿名（無料モデルのみ）",
+  "@llmAccountUiAnonymousFree": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderAdministrator": "Qoder 管理者が OAuth を構成する",
+  "@llmAccountUiQoderAdministrator": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyDomestic": "CodeBuddy 国内デバイス OAuth",
+  "@llmAccountUiCodeBuddyDomestic": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyInternational": "CodeBuddy インターナショナル デバイス OAuth",
+  "@llmAccountUiCodeBuddyInternational": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWorkBuddyCLI": "WorkBuddy CLI デバイス OAuth",
+  "@llmAccountUiWorkBuddyCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyOAuth": "レガシー OAuth (サポートされていません)",
+  "@llmAccountUiLegacyOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubscribeTo": "OAuth に登録する",
+  "@llmAccountUiSubscribeTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleService": "Googleサービスアカウント",
+  "@llmAccountUiGoogleService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSAccess": "AWS アクセス + 秘密キー (セッション トークンはオプション)",
+  "@llmAccountUiAWSAccess": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSDefault": "AWS のデフォルトの認証情報チェーン",
+  "@llmAccountUiAWSDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSessionToken": "セッショントークン",
+  "@llmAccountUiSessionToken": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevin": "公式 Devin CLI 独立ログイン",
+  "@llmAccountUiOfficialDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAI": "レガシー AI Studio リレー (販売終了)",
+  "@llmAccountUiLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoCertification": "認証なし",
+  "@llmAccountUiNoCertification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenVerification": "認証ページを開く",
+  "@llmAccountUiOpenVerification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUserProvided": "ユーザー提供のアップストリーム API キー",
+  "@llmAccountUiUserProvided": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBedrock": "AWS Bedrock ユーザーが指定した静的認証情報",
+  "@llmAccountUiAWSBedrock": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomDevin": "このアカウント用に個別に作成された Stroom Devin CLI ログイン構成",
+  "@llmAccountUiStroomDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacy": "従来の AI Studio リレーは廃止されました。代わりに API キーまたはサポートされている OAuth を使用してください。",
+  "@llmAccountUiTheLegacy": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNativeCompatible": "ネイティブ互換エンドポイント、認証情報なし",
+  "@llmAccountUiNativeCompatible": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamAuthentication": "アップストリーム認証に失敗しました",
+  "@llmAccountUiUpstreamAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInsufficientUpstream": "上流の割り当てが不十分です",
+  "@llmAccountUiInsufficientUpstream": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequests": "アップストリームリクエストは制限されています",
+  "@llmAccountUiUpstreamRequests": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamConnection": "アップストリーム接続に失敗しました",
+  "@llmAccountUiUpstreamConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamService": "上流サービスエラー",
+  "@llmAccountUiUpstreamService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRejects": "アップストリームはリクエストを拒否します",
+  "@llmAccountUiUpstreamRejects": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestCanceled": "リクエストがキャンセルされました",
+  "@llmAccountUiRequestCanceled": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequest": "アップストリームリクエストが失敗しました",
+  "@llmAccountUiUpstreamRequest": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSameConnector": "同じコネクタアカウント",
+  "@llmAccountUiSameConnector": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCurrentModel": "現行モデル群",
+  "@llmAccountUiCurrentModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeastUsed": "最も使用されていない",
+  "@llmAccountUiLeastUsed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPollingText": "投票",
+  "@llmAccountUiPollingText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeHigher": "残高が多いものを優先する",
+  "@llmAccountUiPrioritizeHigher": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeConsumption": "残高の少ないものを優先的に消費する",
+  "@llmAccountUiPrioritizeConsumption": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddLLM": "LLMアカウントを追加",
+  "@llmAccountUiAddLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEditLLM": "LLM アカウントを編集する",
+  "@llmAccountUiEditLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceProvider": "サービスプロバイダーのデフォルト",
+  "@llmAccountUiServiceProvider": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCustomOpenAI": "カスタム OpenAI 互換エンドポイント",
+  "@llmAccountUiCustomOpenAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogIn": "Stroom内でTrae SOLOにログインします",
+  "@llmAccountUiLogIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginCallbacks": "ログイン コールバックはローカルでのみ受信され、安全な資格情報ストアに書き込まれます。コールバック アドレスや閲覧履歴は保存されません。",
+  "@llmAccountUiLoginCallbacks": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoesNot": "ChatAdapter は現在、このコネクタをサポートしていません。保存後、アカウントのモデル グループはチャットおよびタスク フロー モデル セレクターに表示されません。",
+  "@llmAccountUiChatAdapterDoesNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuthenticationMethod": "認証方式",
+  "@llmAccountUiAuthenticationMethod": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFindThe": "Cloudflareダッシュボードの右側でアカウントIDを見つけます。",
+  "@llmAccountUiFindThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAPIKeys": "API キーは複数の独立した接続として追加し、モデル グループを通じてポーリングできます。匿名モードでは、確認済みの無料モデルのみが表示および呼び出されます。アカウントディレクトリは使用されません。",
+  "@llmAccountUiAPIKeys": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachCline": "各 Cline API キーは、独立したアカウントとして保存する必要があります。モデル カタログは、Cline または ClinePass によって個別に更新されます。カタログ自体は、アカウントにサブスクリプションの承認があることを意味するものではありません。",
+  "@llmAccountUiEachCline": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyLaunch": "公式の devin CLI のみを起動してください。ログイン設定は、このアカウントとは関係なく Stroom アプリケーション ディレクトリに保存されます。ホストの Devin ログインまたは API キーは読み取られません。",
+  "@llmAccountUiOnlyLaunch": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseThe": "ネイティブ Codex CLI を使用します。まずターミナルで codex ログインを実行してください。 Stroom は CLI ログイン データを読み取ったり保存したりしません。",
+  "@llmAccountUiUseThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseTheNative": "ネイティブ ZCode アプリサーバーと GLM コーディング プランを使用します。必要に応じて、まず公式 ZCode アプリにログインしてください。 Stroom は ZCode ログイン データを読み取ったり保存したりしません。",
+  "@llmAccountUiUseTheNative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevinCLI": "公式の Devin CLI 実行可能ファイルの絶対パス",
+  "@llmAccountUiOfficialDevinCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCopyThe": "公式の Devin インストール場所から devin 実行可能ファイルへのフルパスをコピーします。",
+  "@llmAccountUiCopyThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRetrustCurrent": "現在の CLI 実行可能ファイルを再信頼し、SHA-256 を更新します",
+  "@llmAccountUiRetrustCurrent": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiIHave": "Devin 公式チャネルからこの実行可能ファイルをインストールして信頼しました",
+  "@llmAccountUiIHave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomFixes": "Stroom は現在のファイルの SHA-256 を修正します。ファイルが変更されると起動を拒否します。",
+  "@llmAccountUiStroomFixes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogBack": "公式 Devin CLI に再度ログインします。",
+  "@llmAccountUiLogBack": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReauthenticateThe": "このアカウントのスタンドアロン CLI ログイン設定を再認証します。",
+  "@llmAccountUiReauthenticateThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseSelect": "このアカウントを保存する前に、サポートされている認証方法を選択してください。",
+  "@llmAccountUiPleaseSelect": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacyAI": "従来の AI Studio Web セッション接続は廃止されました。 API キーまたはサポートされている OAuth を選択し、再認証してください。",
+  "@llmAccountUiTheLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderOAuth": "Qoder OAuth では、サービス管理者が完全な OAuth 認証、トークン、ユーザー情報 URL、およびクライアント資格情報を提供する必要があります。承認後にプラットフォームの安全なストレージに保存されるのは、DashScope API キーと機密性の高い OAuth 資格情報のみです。ブラウザのクッキーは使用されません。リフレッシュ許可はアップストリームで定義されていません。認証情報の有効期限が切れた場合は、再認証してください。",
+  "@llmAccountUiQoderOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubmitTo": "プラットフォームの安全なストレージにのみ送信します。既存の OAuth クライアント シークレットを保持するには、空白のままにします。",
+  "@llmAccountUiSubmitTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterThe": "pt- で始まる Qoder Personal Access Token を入力します。ネイティブ qodercli を通じて呼び出されます。テキスト チャットのみがサポートされ、発信者ツールはサポートされません。応答はバッファされて返されます。1 回のリクエストは最大 45 秒です。",
+  "@llmAccountUiEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitLabUser": "GitLab ユーザー設定 → アプリケーション",
+  "@llmAccountUiGitLabUser": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlySaved": "プラットフォームの安全なストレージにのみ保存されます。パブリック クライアントの場合は空白のままにすることができます。",
+  "@llmAccountUiOnlySaved": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyStored": "プラットフォームの安全なストレージにのみ保存されます。",
+  "@llmAccountUiOnlyStored": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitHubEnterprise": "GitHub Enterprise Cloud または Server では Copilot を有効にし、デバイス OAuth を許可する必要があります。 HTTPS インスタンス アドレスを使用します。 OAuth アプリケーションのクライアント ID は管理者が指定することも、空白のままにしてパブリック クライアント ID を使用することもできます。",
+  "@llmAccountUiGitHubEnterprise": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiClineUses": "Cline uses fixed service endpoints",
+  "@llmAccountUiClineUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHorde": "AI Horde uses fixed HTTPS Chat endpoint",
+  "@llmAccountUiAIHorde": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUncloseAIUses": "UncloseAI は、固定された OpenAI Chat Completions エンドポイントを使用します",
+  "@llmAccountUiUncloseAIUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeUses": "Kilo Code uses fixed service endpoints",
+  "@llmAccountUiKiloCodeUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedService": "固定サービスエンドポイント",
+  "@llmAccountUiFixedService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEndpointAddress": "エンドポイント アドレス (コネクタで必要な場合は入力)",
+  "@llmAccountUiEndpointAddress": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterAzure": "Azure OpenAI リソースまたは Azure AI Foundry ホストを入力します。デプロイメントとバージョンは個別に構成されます。",
+  "@llmAccountUiEnterAzure": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlank": "このアカウント タイプの公式モデル カタログと API エンドポイントを使用する場合は、空白のままにします。",
+  "@llmAccountUiLeaveBlank": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPS": "Fixed HTTPS API endpoint using Command Code.",
+  "@llmAccountUiFixedHTTPS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSEndpoint": "Kilo Code モデル ゲートウェイを使用する HTTPS エンドポイントを修正しました。",
+  "@llmAccountUiFixedHTTPSEndpoint": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSChat": "Cline を使用した HTTPS チャット完了エンドポイントを修正しました。",
+  "@llmAccountUiFixedHTTPSChat": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoAPI": "API キーは必要ありません。オプションのキーは識別のみに使用されます。",
+  "@llmAccountUiNoAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeS": "AI Horde の匿名キーまたは優先 API キーは、固定チャット サービス エンドポイントにのみ送信されます。",
+  "@llmAccountUiAIHordeS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSOLOUses": "SOLO uses a fixed Trae service endpoint; only send Cloud-IDE-JWT to that endpoint.貼り付けたトークンは、約 14 日後に再入力する必要があります。",
+  "@llmAccountUiSOLOUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDeployment": "デプロイメント ID は、アカウントの一意のアップストリーム モデル ID として使用されます。",
+  "@llmAccountUiTheDeployment": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDefault": "デフォルト値は、Azure モデル カタログに従って構成されます。",
+  "@llmAccountUiTheDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAmazonQ": "Amazon Q Developer Region",
+  "@llmAccountUiAmazonQ": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSRegion": "AWS リージョン",
+  "@llmAccountUiAWSRegion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexArea": "頂点エリア",
+  "@llmAccountUiVertexArea": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQwenCloud": "Qwen Cloud リージョン ID",
+  "@llmAccountUiQwenCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleCloud": "Google Cloud プロジェクト ID",
+  "@llmAccountUiGoogleCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThePartner": "The partner model requires a project ID;サービス アカウントは、JSON の project_id から自動的に読み取ることができます。",
+  "@llmAccountUiThePartner": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCanBe": "サービス アカウント JSON の project_id を使用するには、空白のままにすることができます。",
+  "@llmAccountUiCanBe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBuilder": "AWS Builder ID OAuth Credentials JSON",
+  "@llmAccountUiAWSBuilder": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAuthentication": "この認証方法では、資格情報を入力する必要はありません。",
+  "@llmAccountUiThisAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSCredentials": "AWS認証情報JSON",
+  "@llmAccountUiAWSCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceAccount": "サービスアカウントJSON",
+  "@llmAccountUiServiceAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeAPI": "AI Horde API Key (optional priority)",
+  "@llmAccountUiAIHordeAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsText": "資格情報",
+  "@llmAccountUiCredentialsText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteThe": "JWT 自体、または完全な「Cloud-IDE-JWT <token>」リクエスト ヘッダー値を貼り付けます。 Import tokens are not automatically refreshed;アプリ内 Trae ログインの認証情報は、有効期限が切れると自動的に更新されます。",
+  "@llmAccountUiPasteThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGetThe": "ユーザー API キー (crsr_… または grok_…) をcursor.com/dashboard/api から取得します。 Cursor IDE login will not be read.",
+  "@llmAccountUiGetThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheOptional": "オプションの AI Horde API キーは、キューの優先度 (称賛) を高めるだけであり、モデルの権限は増加しません。匿名モードを使用する場合は、「認証なし」を選択します。",
+  "@llmAccountUiTheOptional": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUsingThe": "実行環境での AWS デフォルト認証情報チェーンの使用",
+  "@llmAccountUiUsingThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSavedIn": "Saved in platform secure storage",
+  "@llmAccountUiSavedIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankTo": "現在のセキュリティ認証情報を保持するには空白のままにします",
+  "@llmAccountUiLeaveBlankTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDefaultAPI": "デフォルトのAPIプロトコル",
+  "@llmAccountUiDefaultAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatusText": "接続状態",
+  "@llmAccountUiConnectionStatusText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelTo": "構成するモデル",
+  "@llmAccountUiModelTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelAPI": "モデルAPIプロトコル",
+  "@llmAccountUiModelAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInheritAccount": "アカウントのデフォルト契約を継承する",
+  "@llmAccountUiInheritAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamModels": "上流のモデルと機能",
+  "@llmAccountUiUpstreamModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnePer": "1 行に 1 つ: モデル ID、ストリーミング、ビジョン、ツール",
+  "@llmAccountUiOnePer": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelID": "モデル ID とコンテキストの長さは固定カタログから取得されます。他の機能は不明のままです。",
+  "@llmAccountUiModelID": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousMode": "匿名モードでは、openrouter/free のみが許可されます。アカウントを接続すると、アカウント ディレクトリ内のモデルを使用できるようになります。",
+  "@llmAccountUiAnonymousMode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsCome": "モデルは Kilo Code ディレクトリから取得されます。 API キーとデバイス OAuth は、独自に保存された認証情報を使用します。",
+  "@llmAccountUiModelsCome": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAndCapabilities": "モデルと機能は上流のディレクトリから取得されます。上記でモデルごとに、サポートすることが宣言されている API プロトコルを選択します。",
+  "@llmAccountUiModelsAndCapabilities": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiACPDoes": "ACP は安定したモデル カタログを提供しません。公式 CLI の現在のデフォルト モデルを使用します。",
+  "@llmAccountUiACPDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeCLI": "Kim Code CLI は、検証済みのコーディング プラン モデル ディレクトリのみを開きます。",
+  "@llmAccountUiKimiCodeCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGrokBuild": "Grok Build は、検証済みのサブスクリプション モデルのカタログのみを開きます。",
+  "@llmAccountUiGrokBuild": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiXAIOAuth": "xAI OAuth は、アカウントが API から取得したモデル ディレクトリのみを開きます。",
+  "@llmAccountUiXAIOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuseOAuth": "Meta Muse OAuth は、サブスクリプション アカウントによって API から取得されたモデル ディレクトリのみを開きます。",
+  "@llmAccountUiMetaMuseOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsComeFrom": "モデルは Cline の Chat Completions カタログから取得されています。利用可能かどうかは、対応するアカウントとサブスクリプションによって決まります。",
+  "@llmAccountUiModelsComeFrom": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAbility": "能力は明示的に宣言されています。これを明示的に無効にするには、vision=false を使用し、入力しない場合は不明のままにしておきます。",
+  "@llmAccountUiTheAbility": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRefreshModel": "モデルディレクトリを更新する",
+  "@llmAccountUiRefreshModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTestThe": "ローカルの Auggie CLI をテストする",
+  "@llmAccountUiTestThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckLocal": "ローカルの Codex CLI ログイン ステータスを確認する",
+  "@llmAccountUiCheckLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelDirectory": "モデル ディレクトリは、アカウントと変更を保存した後に更新できます。",
+  "@llmAccountUiTheModelDirectory": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLI": "Auggie CLI モデル リストはカタログを返しませんでした。固定モデルのカタログは保持されます。",
+  "@llmAccountUiAuggieCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAI": "Vertex AI パートナーには、有効な Google Cloud プロジェクトと権限のあるサービス アカウントが必要です。 Express API キーは Gemini のみをサポートします。",
+  "@llmAccountUiVertexAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedTo": "モデルディレクトリの読み込みに失敗しました。アカウント認証と接続設定を確認してください。",
+  "@llmAccountUiFailedTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLIIs": "Auggie CLI がインストールされ、実行されています。",
+  "@llmAccountUiAuggieCLIIs": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodexCLI": "Codex CLI はログインしており、実行する準備ができています。",
+  "@llmAccountUiCodexCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAIPartners": "Vertex AI パートナーには有効なプロジェクト ID が必要です。サービス アカウントは JSON から読み取ることができ、API キーはプロジェクトにバインドされている必要があります。",
+  "@llmAccountUiVertexAIPartners": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedToSave": "アカウントの保存に失敗しました。接続設定を確認して、もう一度お試しください。",
+  "@llmAccountUiFailedToSave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTraeThe": "Trae ログインが完了していません。もう一度試すか、Cloud-IDE-JWT を使用して手動でインポートしてください。",
+  "@llmAccountUiTraeThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnter": "アカウント名を入力してください。",
+  "@llmAccountUiPleaseEnter": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterThe": "crsr_ で始まるカーソル ユーザー API キーを入力してください。",
+  "@llmAccountUiPleaseEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYour": "GitLab Duo OAuth クライアント ID を入力してください。",
+  "@llmAccountUiPleaseEnterYour": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterA": "有効な HTTPS Qoder OAuth 管理エンドポイントを入力してください。",
+  "@llmAccountUiPleaseEnterA": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterQODER": "QODER_OAUTH_CLIENT_ID とクライアント シークレットを入力してください。",
+  "@llmAccountUiPleaseEnterQODER": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValid": "有効な Azure HTTPS リソース ホスト、デプロイメント ID、および API バージョンを入力してください。",
+  "@llmAccountUiPleaseEnterAValid": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidCloudflare": "有効なCloudflareアカウントIDを入力してください。",
+  "@llmAccountUiPleaseEnterAValidCloudflare": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCloudflareWorkers": "Cloudflare Workers AI は、検証済みの固定モデルのカタログのみを提供します。",
+  "@llmAccountUiCloudflareWorkers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeAccounts": "Kimi Code アカウントでは、検証済みのコーディング プラン モデルのみを使用できます。",
+  "@llmAccountUiKimiCodeAccounts": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseRefresh": "まずモデル ディレクトリを更新し、supportedApiProtocols でプロトコルを選択してください。",
+  "@llmAccountUiPleaseRefresh": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityValues": "能力値は true または false のみです。",
+  "@llmAccountUiAbilityValues": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCommandCode": "コマンド コード モデルの機能は、上流のディレクトリによってのみ宣言できます。",
+  "@llmAccountUiCommandCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidGitHub": "有効な GitHub Enterprise HTTPS インスタンスのアドレスを入力してください。",
+  "@llmAccountUiPleaseEnterAValidGitHub": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseFill": "公式の Devin CLI 実行可能ファイルへのフルパスを入力してください。",
+  "@llmAccountUiPleaseFill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseConfirm": "この実行可能ファイルが Devin 公式インストール チャネルからのものであることを確認してください。",
+  "@llmAccountUiPleaseConfirm": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheSelected": "選択された CLI パスは無効であるか、実行可能ではありません。",
+  "@llmAccountUiTheSelected": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterTheAmazon": "AWS Builder ID 更新トークンを含む Amazon Q 認証情報 JSON を入力してください。",
+  "@llmAccountUiPleaseEnterTheAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidAmazon": "有効な Amazon Q OAuth 認証情報 JSON とサポートされているリージョンを入力してください。",
+  "@llmAccountUiPleaseEnterAValidAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAIStudio": "従来の AI Studio Web セッション接続は廃止されました。代わりに API キーまたはサポートされている OAuth を使用してください。",
+  "@llmAccountUiLegacyAIStudio": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseProvide": "Google OAuth デスクトップ クライアント ID と対応するクライアント シークレットを入力してください。",
+  "@llmAccountUiPleaseProvide": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYourCredentials": "資格情報を入力してください。",
+  "@llmAccountUiPleaseEnterYourCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupName": "モデルグループ名",
+  "@llmAccountUiModelGroupName": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountAnd": "アカウントと上流モデル",
+  "@llmAccountUiAccountAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelGroup": "現在、モデル グループにはメンバーがいません。",
+  "@llmAccountUiTheModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalReferences": "ローカル参照は、既存のセッション モデル ID との互換性のために使用されます。アカウント メンバーは、この安定したグループ内の選択にのみ参加します。",
+  "@llmAccountUiLocalReferences": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGroupMembers": "同じモデル参照の下にあるグループ メンバーは、同じチャット プロトコルを使用する必要があります。",
+  "@llmAccountUiGroupMembers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountHas": "アカウントが削除されました",
+  "@llmAccountUiAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOldSession": "古いセッション参照が必要なメンバー",
+  "@llmAccountUiOldSession": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemoveMember": "メンバーの削除",
+  "@llmAccountUiRemoveMember": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalModel": "ローカルモデル参照ID",
+  "@llmAccountUiLocalModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSamePriority": "同一優先選択",
+  "@llmAccountUiSamePriority": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCrossAccount": "クロスアカウントロールバック範囲",
+  "@llmAccountUiCrossAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConcurrencyLimit": "同時実行制限",
+  "@llmAccountUiConcurrencyLimit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankToIndicate": "制限がないことを示す場合は空白のままにします。アカウントとモデル グループは個別に設定されます。",
+  "@llmAccountUiLeaveBlankToIndicate": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRollingWindow": "ローリングウィンドウ",
+  "@llmAccountUiRollingWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarWindow": "カレンダーウィンドウ",
+  "@llmAccountUiCalendarWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarTime": "カレンダーのタイムゾーン",
+  "@llmAccountUiCalendarTime": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiForExample": "例: アジア/台北または UTC",
+  "@llmAccountUiForExample": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemainingCredit": "残りのクレジットライン",
+  "@llmAccountUiRemainingCredit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWindowUsage": "ウィンドウの使用制限",
+  "@llmAccountUiWindowUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedValue": "固定値",
+  "@llmAccountUiFixedValue": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPercentageText": "パーセンテージ",
+  "@llmAccountUiPercentageText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnitText": "単位",
+  "@llmAccountUiUnitText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConcurrency": "同時実行の上限は正の整数であるか、制限がないことを示すために空白のままにする必要があります。",
+  "@llmAccountUiTheConcurrency": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCalendar": "カレンダー ウィンドウにタイムゾーンを入力する必要があります。",
+  "@llmAccountUiTheCalendar": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndUsage": "クォータと使用制限は負であってはなりません。パーセンテージは 100 を超えることはできません。",
+  "@llmAccountUiQuotaAndUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHourWindow": "5時間枠",
+  "@llmAccountUiHourWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDayWindow": "日枠",
+  "@llmAccountUiDayWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyWindow": "毎週のウィンドウ",
+  "@llmAccountUiWeeklyWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthWindow": "月のウィンドウ",
+  "@llmAccountUiMonthWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmImportStoppedAfterLegacySyncFailure": "{count} 個のアカウントをインポートしましたが、旧設定の同期に失敗しました。",
+  "@llmImportStoppedAfterLegacySyncFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmImportStoppedAfterCredentialFailure": "{count} 個のアカウントをインポートしました。キーチェーン項目の変更、アクセス拒否、または安全なストレージが利用できないため、残りの認証情報はインポートされませんでした。",
+  "@llmImportStoppedAfterCredentialFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmRequestUsedAccount": "今回使用したアカウント",
+  "@llmRequestUsedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmLastAttemptedAccount": "最後に試したアカウント",
+  "@llmLastAttemptedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmRouteDecisionSessionAffinity": "この会話で最後に成功したアカウントを引き続き使用する",
+  "@llmRouteDecisionSessionAffinity": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSessionAffinityPersistenceFailed": "今回のアカウントの連続性は保存できませんでした",
+  "@llmRouteDecisionSessionAffinityPersistenceFailed": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionExplicitAccountSelection": "ユーザーが選択したアカウントに従ってルーティングする",
+  "@llmRouteDecisionExplicitAccountSelection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSelectedAccountOutsideGroup": "選択したアカウントは現在のモデルグループに属していません",
+  "@llmRouteDecisionSelectedAccountOutsideGroup": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConversationIdInvalid": "ダイアログIDが無効です。セッションアフィニティは使用されていません。",
+  "@llmRouteDecisionConversationIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupMissing": "このモデルの安定したモデルグループが見つかりません",
+  "@llmRouteDecisionModelGroupMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupAmbiguous": "このモデルは複数のモデルグループに関連付けられています",
+  "@llmRouteDecisionModelGroupAmbiguous": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectorProtocolIncompatible": "コネクタプロトコルはこのチャットモデルには適用されません",
+  "@llmRouteDecisionConnectorProtocolIncompatible": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectionUnknown": "接続状態が不明です",
+  "@llmRouteDecisionConnectionUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountMissing": "アカウントは削除されました",
+  "@llmRouteDecisionAccountMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountIdInvalid": "アカウントIDが無効です",
+  "@llmRouteDecisionAccountIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountUnavailable": "アカウントが一時停止されているか、再認証が必要です",
+  "@llmRouteDecisionAccountUnavailable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelMappingMismatch": "アカウントが選択されたモデルにマッピングされていません",
+  "@llmRouteDecisionModelMappingMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelNotMapped": "アカウントに対応する上流モデルが見つかりません",
+  "@llmRouteDecisionModelNotMapped": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCapabilityMismatch": "アカウントモデルはこのリクエストに必要な機能をサポートしていません",
+  "@llmRouteDecisionCapabilityMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionFallbackScope": "ロールバック範囲では、このコネクタへの切り替えは許可されていません",
+  "@llmRouteDecisionFallbackScope": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCooldown": "アカウントはまだ障害のクールダウン期間中です",
+  "@llmRouteDecisionCooldown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConcurrencyLimit": "アカウントまたはモデルグループが同時実行数の上限に達しています",
+  "@llmRouteDecisionConcurrencyLimit": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceUnknownOrIncomparable": "限度額が不明であるか、測定単位を比較できません",
+  "@llmRouteDecisionBalanceUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceAtOrBelowReserve": "残高がリザーブラインに達しているか、それを下回っています",
+  "@llmRouteDecisionBalanceAtOrBelowReserve": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnknown": "使用量が不明なため、制限を判断できません",
+  "@llmRouteDecisionUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveBalanceUnknown": "残りの限度額が不明なため、リザーブラインを判断できません",
+  "@llmRouteDecisionReserveBalanceUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUnitUnknownOrIncomparable": "リザーブラインの測定単位が不明であるか、比較できません",
+  "@llmRouteDecisionReserveUnitUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknownOrIncomparable": "限度額の総額が不明であるか、比較できません",
+  "@llmRouteDecisionReserveTotalUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknown": "限度額の総量が不明なため、リザーブラインを計算できません",
+  "@llmRouteDecisionReserveTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUsageEstimateUnknown": "リクエスト使用量の見積もりが不明なため、リザーブラインを判断できません",
+  "@llmRouteDecisionReserveUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveInFlightUsageUnknown": "進行中のリクエストの使用量が不明なため、リザーブラインを判断できません",
+  "@llmRouteDecisionReserveInFlightUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloorReached": "残りの限度額がリザーブラインを下回っています",
+  "@llmRouteDecisionReserveFloorReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingReached": "使用上限に達しました",
+  "@llmRouteDecisionUsageCeilingReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingTotalUnknown": "使用総額が不明なため、上限を判断できません",
+  "@llmRouteDecisionUsageCeilingTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnitMismatch": "使用量の測定単位が一致しません",
+  "@llmRouteDecisionUsageUnitMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageSourceMismatch": "使用量と限度額のデータソースが一致しません",
+  "@llmRouteDecisionUsageSourceMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageInFlightUnknown": "進行中のリクエストの使用量が不明なため、上限を判断できません",
+  "@llmRouteDecisionUsageInFlightUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageEstimateUnknown": "リクエスト使用量の見積もりが不明なため、上限を判断できません",
+  "@llmRouteDecisionUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionInvalidWindowTimezone": "限度額ウィンドウのタイムゾーン設定が無効です",
+  "@llmRouteDecisionInvalidWindowTimezone": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloor": "残りの限度額がリザーブラインを下回っています",
+  "@llmRouteDecisionReserveFloor": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeiling": "使用上限に達しました",
+  "@llmRouteDecisionUsageCeiling": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestAuthentication": "上流が認証を拒否しました",
+  "@llmRouteDecisionRequestAuthentication": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestQuotaExhausted": "上流から限度額が使い果たされたとの報告あり",
+  "@llmRouteDecisionRequestQuotaExhausted": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestRateLimited": "上流のレート制限",
+  "@llmRouteDecisionRequestRateLimited": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestConnection": "上流への接続に失敗しました",
+  "@llmRouteDecisionRequestConnection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestServer": "アップストリームサービスエラー",
+  "@llmRouteDecisionRequestServer": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestInvalidRequest": "アップストリームがリクエストパラメータを拒否しました",
+  "@llmRouteDecisionRequestInvalidRequest": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestCancelled": "リクエストがキャンセルされました",
+  "@llmRouteDecisionRequestCancelled": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestOther": "アップストリームリクエストが失敗しました",
+  "@llmRouteDecisionRequestOther": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  }
 }

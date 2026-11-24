@@ -7,6 +7,1643 @@ import 'app_localizations.dart';
 
 /// The translations for Portuguese (`pt`).
 class AppLocalizationsPt extends AppLocalizations {
+
+  @override
+  String get llmAccountLabel => 'Conta';
+
+  @override
+  String get llmAccountForThisRequest => 'Conta para esta solicitação';
+
+  @override
+  String get llmAccountUseModelGroup => 'Usar roteamento do grupo de modelos';
+
+  @override
+  String get llmAccountManagementTitle => 'Contas LLM e grupos de modelos';
+
+  @override
+  String get llmAccountAdd => 'Adicionar conta';
+
+  @override
+  String get llmAccountEmpty => 'Ainda não há contas LLM.';
+
+  @override
+  String get llmAccountEditTitleAdd => 'Adicionar conta LLM';
+
+  @override
+  String get llmAccountEditTitleEdit => 'Editar conta LLM';
+
+  @override
+  String get traeAuthorizationTitle => 'Conectar ao Trae SOLO';
+
+  @override
+  String get traeAuthorizationLoadError =>
+      'Não foi possível carregar a página de login. Cancele e tente novamente.';
+
+  @override
+  String get llmOcrAccountSyncFailed =>
+      'Falha ao sincronizar as contas de OCR. Verifique as configurações no gerenciamento de contas.';
+
+  @override
+  String get llmOcrAccountMigrationFailed =>
+      'Falha ao migrar as contas de OCR. A configuração original foi mantida.';
+
+  @override
+  String get llmAccountsTab => 'Contas';
+
+  @override
+  String get llmModelGroupsTab => 'Grupos de modelos';
+
+  @override
+  String get llmAccountsSummary =>
+      'Cada conta armazena suas próprias credenciais, capacidades do modelo, cota e limites de simultaneidade. Cotas desconhecidas continuam desconhecidas.';
+
+  @override
+  String get llmModelGroupsSummary =>
+      'Grupos estáveis associam nomes de modelos Stroom a contas e modelos upstream. O fallback permanece dentro do grupo.';
+
+  @override
+  String get llmAccountName => 'Nome da conta';
+
+  @override
+  String get llmConnectorLabel => 'Conector';
+
+  @override
+  String get llmProviderPresetLabel => 'Predefinição do provedor';
+
+  @override
+  String get llmAuthenticationMethodLabel => 'Método de autenticação';
+
+  @override
+  String get llmDefaultApiProtocolLabel => 'Protocolo de API padrão';
+
+  @override
+  String get llmConnectionStatusLabel => 'Estado da conexão';
+
+  @override
+  String get llmConfigureModelLabel => 'Modelo a configurar';
+
+  @override
+  String get llmModelApiProtocolLabel => 'Protocolo de API do modelo';
+
+  @override
+  String get llmUpstreamModelsCapabilitiesLabel =>
+      'Modelos upstream e capacidades';
+
+  @override
+  String get llmModelGroupNameLabel => 'Nome do grupo de modelos';
+
+  @override
+  String get llmStableModelIdLabel => 'ID estável do modelo Stroom';
+
+  @override
+  String get llmPriorityTierLabel => 'Nível de prioridade';
+
+  @override
+  String get llmUpstreamModelLabel => 'Modelo upstream';
+
+  @override
+  String get llmSamePrioritySelectionLabel =>
+      'Seleção entre contas com a mesma prioridade';
+
+  @override
+  String get llmFallbackScopeLabel => 'Escopo de fallback entre contas';
+
+  @override
+  String get llmConcurrencyLimitLabel => 'Limite de simultaneidade';
+
+  @override
+  String get llmWindowModeLabel => 'Modo de janela';
+
+  @override
+  String get llmCalendarTimezoneLabel => 'Fuso horário do calendário';
+
+  @override
+  String get llmValueLabel => 'Valor';
+
+  @override
+  String get llmTypeLabel => 'Tipo';
+
+  @override
+  String get llmRemainingQuotaFloorLabel => 'Cota restante mínima';
+
+  @override
+  String get llmWindowUsageCeilingLabel => 'Limite de uso da janela';
+
+  @override
+  String get llmImportZedCredentials => 'Importar credenciais de API do Zed';
+
+  @override
+  String get llmAddModelGroupTooltip => 'Adicionar grupo de modelos';
+
+  @override
+  String get llmNoModelGroups => 'Ainda não há grupos de modelos.';
+
+  @override
+  String get llmAccountPolicies => 'Políticas da conta';
+
+  @override
+  String get llmQuotaConcurrencyPolicy => 'Política de cota e simultaneidade';
+
+  @override
+  String llmAccountAuthSource(Object source) {
+    return 'Origem da autenticação: $source';
+  }
+
+  @override
+  String llmAccountRecentError(Object error) {
+    return 'Erro recente: $error';
+  }
+
+  @override
+  String get llmNoRecord => 'Sem registro';
+
+  @override
+  String get llmConnectorUnavailableForChat =>
+      'Este conector não é compatível com o Chat.';
+
+  @override
+  String get llmAccountUnavailableInSelectors =>
+      'Os modelos desta conta não aparecerão nos seletores do Chat nem do Task Flow.';
+
+  @override
+  String get llmModelsCapabilitiesHeading => 'Modelos e capacidades';
+
+  @override
+  String get llmNoModelsConfigured => 'Nenhum modelo configurado';
+
+  @override
+  String get llmUsageQuotaHeading => 'Uso e cota';
+
+  @override
+  String get llmQuotaUnknown => 'Cota desconhecida';
+
+  @override
+  String get llmQuotaLimitsHeading => 'Limites de cota';
+
+  @override
+  String get llmLocalObservedUsageHeading => 'Uso observado localmente';
+
+  @override
+  String get llmUsageHistoryDisclaimer =>
+      'Estatísticas locais dos últimos 62 dias; não representam o saldo do provedor.';
+
+  @override
+  String get llmLastRouteHeading => 'Último roteamento';
+
+  @override
+  String get llmMembersHeading => 'Membros';
+
+  @override
+  String get llmNoRoutableMembers => 'Nenhum membro de conta roteável';
+
+  @override
+  String get llmLegacyMemberRequired =>
+      'É necessário manter um membro para preservar a referência de modelo das conversas antigas e o ID local.';
+
+  @override
+  String get llmAccountGroupLoadError =>
+      'Não foi possível carregar a conta ou o grupo de modelos.';
+
+  @override
+  String get llmRetryLoad => 'Tentar novamente';
+
+  @override
+  String get llmGroupFallbackWithinMembers =>
+      'O grupo salvo permite fallback somente entre seus membros.';
+
+  @override
+  String get llmMixedGroupProtocolError =>
+      'Todos os membros de uma mesma referência de modelo devem usar o mesmo protocolo de chat.';
+
+  @override
+  String get llmAddMember => 'Adicionar membro';
+
+  @override
+  String get llmNoGroupMembers => 'Este grupo de modelos não tem membros.';
+
+  @override
+  String get llmStableModelGroupHelp =>
+      'O ID local mantém a compatibilidade com conversas existentes. O fallback permanece neste grupo estável.';
+
+  @override
+  String llmSignInProvider(Object provider) {
+    return 'Entrar em $provider';
+  }
+
+  @override
+  String llmOAuthInstructions(Object provider) {
+    return 'Abra a autorização de $provider e informe o código. O Stroom salva a conta após a autorização.';
+  }
+
+  @override
+  String llmOpenProviderAuthorization(Object provider) {
+    return 'Abrir $provider';
+  }
+
+  @override
+  String llmAuthorizationSource(Object source) {
+    return 'Origem da autorização: $source';
+  }
+
+  @override
+  String get llmAccountDeleteFailed => 'Falha ao excluir a conta.';
+
+  @override
+  String get llmAccountDeleteCleanupFailed =>
+      'A conta foi excluída, mas não foi possível limpar a configuração antiga.';
+
+  @override
+  String get llmSaveBeforeModelRefresh =>
+      'Salve a conta e as alterações antes de atualizar o catálogo de modelos.';
+
+  @override
+  String get llmRefreshModelCatalog => 'Atualizar catálogo de modelos';
+
+  @override
+  String get llmReauthorize => 'Reautorizar';
+
+  @override
+  String get llmSave => 'Salvar';
+
+  @override
+  String get llmCancel => 'Cancelar';
+
+  @override
+  String get llmDelete => 'Excluir';
+
+  @override
+  String get llmEdit => 'Editar';
+
+  @override
+  String get llmContinueKeychainScan => 'Continuar verificação';
+
+  @override
+  String llmImportCredentialsConfirmTitle(Object provider) {
+    return 'Importar credenciais de $provider?';
+  }
+
+  @override
+  String get llmImportThisAccount => 'Importar esta conta';
+
+  @override
+  String llmImportedAccounts(Object count) {
+    return '$count contas de provedores foram importadas com segurança.';
+  }
+
+  @override
+  String llmSamePriorityStrategySummary(Object strategy) {
+    return 'Política de mesma prioridade: $strategy';
+  }
+
+  @override
+  String get llmKeepLegacyGroup =>
+      'Manter o grupo de modelos para conversas antigas';
+
+  @override
+  String llmGroupUsageSummary(Object usage) {
+    return 'Uso do grupo: $usage';
+  }
+
+  @override
+  String get llmModelGroupSettings => 'Configurações do grupo de modelos';
+
+  @override
+  String get llmAddModelGroupMemberTitle =>
+      'Adicionar membro ao grupo de modelos';
+
+  @override
+  String get llmSavePolicy => 'Salvar política';
+
+  @override
+  String get llmOpenferenceCatalogNote =>
+      'Os modelos disponíveis dependem do plano Openference. Um catálogo offline não concede acesso.';
+
+  @override
+  String llmTestLocalCli(Object cli) {
+    return 'Testar CLI local do $cli';
+  }
+
+  @override
+  String get llmCheckLocalCodexCli => 'Verificar login local do Codex CLI';
+
+  @override
+  String llmCliReady(Object cli) {
+    return 'A CLI do $cli está instalada e pronta.';
+  }
+
+  @override
+  String get llmCodexCliReady => 'O Codex CLI está conectado e pronto.';
+
+  @override
+  String get llmCheckZedKeychain => 'Verificar as chaves do Zed?';
+
+  @override
+  String llmRoutingPolicyTitle(Object target) {
+    return 'Política de roteamento para $target';
+  }
+
+  @override
+  String get llmSupportedAuthRequired =>
+      'Escolha um método de autenticação compatível antes de salvar esta conta.';
+
+  @override
+  String get llmTraeCallbackPrivacy =>
+      'O retorno do login é recebido somente neste dispositivo e salvo no armazenamento seguro. A URL e o histórico não são salvos.';
+
+  @override
+  String get llmCloudflareAccountIdLabel => 'ID da conta Cloudflare';
+
+  @override
+  String get llmCloudflareAccountIdHint =>
+      'Encontre o ID da conta no lado direito do painel Cloudflare.';
+
+  @override
+  String get llmDevinExecutablePathLabel =>
+      'Caminho do executável oficial do Devin CLI';
+
+  @override
+  String get llmDevinExecutablePathHelp =>
+      'Copie o caminho completo do executável Devin do local oficial de instalação.';
+
+  @override
+  String get llmExecutableIntegrityHint =>
+      'O Stroom registra o SHA-256 deste arquivo e recusará iniciá-lo se ele mudar.';
+
+  @override
+  String get llmDevinReauthTitle => 'Entrar novamente no Devin CLI oficial';
+
+  @override
+  String get llmDevinReauthSubtitle =>
+      'Reautentique o login CLI separado desta conta.';
+
+  @override
+  String get llmKeepOAuthClientSecretHelp =>
+      'Armazenado apenas no armazenamento seguro da plataforma; deixe vazio para manter o segredo OAuth atual.';
+
+  @override
+  String get llmPublicOauthClientSecretHelp =>
+      'Armazenado apenas no armazenamento seguro da plataforma; clientes públicos podem deixar vazio.';
+
+  @override
+  String get llmGitlabApplicationsHint =>
+      'Configurações do usuário GitLab → Applications';
+
+  @override
+  String get llmAzureDeploymentIdHelp =>
+      'O ID de implantação é usado como ID único do modelo upstream desta conta.';
+
+  @override
+  String get llmAzureApiVersionHelp =>
+      'O padrão segue a configuração do catálogo de modelos Azure.';
+
+  @override
+  String get llmAmazonQRegionLabel => 'Região do Amazon Q Developer';
+
+  @override
+  String get llmQwenCloudRegionLabel => 'ID de região do Qwen Cloud';
+
+  @override
+  String get llmQwenCloudRegionHelp =>
+      'A chave de API está vinculada a uma região. Compatíveis: ap-southeast-1, cn-beijing, eu-central-1, cn-hongkong, ap-northeast-1, us-east-1.';
+
+  @override
+  String get llmGoogleCloudProjectLabel => 'ID do projeto do Google Cloud';
+
+  @override
+  String get llmModelCapabilitiesInputHint =>
+      'Um por linha: ID do modelo,streaming,vision,tools';
+
+  @override
+  String get llmGoogleOAuthPrerequisites =>
+      'Esta conexão usa OAuth da Google Generative Language API. Exige um projeto Google Cloud que você administra, a API Generative Language habilitada e um cliente OAuth Desktop configurado. As solicitações são cobradas nesse projeto; não usa Code Assist nem o login web do AI Studio.';
+
+  @override
+  String get llmGitlabOAuthPrerequisites =>
+      'O OAuth do GitLab Duo requer um aplicativo GitLab registrado com callback http://localhost:20128/callback e permissão ai_features read_user. Informe o client ID e, conforme o tipo do aplicativo, o client secret. Os tokens são salvos com segurança e atualizados quando compatível. Um PAT pode ser escolhido separadamente.';
+
+  @override
+  String get llmAmazonQOAuthPrerequisites =>
+      'Importe JSON OAuth do AWS Builder ID com refresh_token; access_token, clientId e clientSecret são opcionais. Se faltarem credenciais do cliente, o Stroom registra um cliente via AWS OIDC para atualizar o token. Os tokens são armazenados com segurança; cookies do navegador não são lidos. Regiões compatíveis: us-east-1 e eu-central-1.';
+
+  @override
+  String get llmTraeTokenSecurity =>
+      'SOLO usa o endpoint fixo da Trae e envia somente o Cloud-IDE-JWT para ele. Tokens importados expiram após cerca de 14 dias e precisam ser inseridos novamente.';
+
+  @override
+  String get llmAccountUsageUsedLabel => 'Usado';
+
+  @override
+  String get llmAccountUsageRemainingLabel => 'Restante';
+
+  @override
+  String get llmAccountUsageTotalLabel => 'Total';
+
+  @override
+  String get llmAccountRemainingQuotaLabel => 'Cota restante:';
+
+  @override
+  String get llmAccountMetricUnitUnknown => 'Unidade desconhecida';
+
+  @override
+  String get llmAccountCapabilitySupported => 'Compatível';
+
+  @override
+  String get llmAccountCapabilityUnsupported => 'Incompatível';
+
+  @override
+  String get llmAccountCapabilityUnknown => 'Desconhecido';
+
+  @override
+  String llmAccountQuotaReserveThreshold(String window, String threshold) {
+    return 'Reserva de cota restante para $window: $threshold';
+  }
+
+  @override
+  String llmAccountUsageCeilingThreshold(String window, String threshold) {
+    return 'Limite de uso para $window: $threshold';
+  }
+
+  @override
+  String llmConfirmDeleteAccountWithOAuth(String account) {
+    return 'Excluir “$account”, revogar a autorização OAuth e remover a conta dos grupos de modelos?';
+  }
+
+  @override
+  String llmConfirmDeleteAccount(String account) {
+    return 'Excluir “$account” e remover a conta dos grupos de modelos?';
+  }
+
+  @override
+  String llmConfirmDeleteModelGroup(String group) {
+    return 'Excluir o roteamento de “$group”? As referências de modelo das conversas existentes não serão alteradas.';
+  }
+
+  @override
+  String llmKeychainImportAccountSource(String account, String provider) {
+    return 'Importar “$account” do chaveiro local para uma conta de API Stroom de $provider.';
+  }
+
+  @override
+  String get llmKeychainImportExistingAccountNotice =>
+      'Isso atualiza a chave da conta Stroom e mantém o nome, os modelos e as configurações de roteamento.';
+
+  @override
+  String get llmKeychainImportSecurityNote =>
+      'Após a confirmação, o Stroom relê e verifica a credencial. A chave nunca é exibida na interface.';
+
+  @override
+  String llmProviderAuthorizationFailed(String provider) {
+    return 'A autorização de $provider falhou. Inicie o login novamente.';
+  }
+
+  @override
+  String llmAccountConcurrencySummary(String value) {
+    return 'Concorrência da conta: $value';
+  }
+
+  @override
+  String llmAccountGroupUsageSummary(String usage) {
+    return 'Uso local do grupo de modelos: $usage';
+  }
+
+  @override
+  String llmPriorityTierValue(int tier) {
+    return 'Nível $tier';
+  }
+
+  @override
+  String llmGroupMemberSummary(String upstream, int priority, String localId) {
+    return '$upstream · Prioridade $priority · ID local $localId';
+  }
+
+  @override
+  String llmNoAccountCanProcessModel(String model) {
+    return 'Nenhuma conta pode processar $model.';
+  }
+
+  @override
+  String llmOAuthLimitationSaveMessage(String limitation) {
+    return '$limitation\nSelecione um método de autenticação compatível antes de salvar esta conta.';
+  }
+
+  @override
+  String llmProviderEnterpriseCredentials(String provider) {
+    return 'Credenciais empresariais fornecidas por $provider';
+  }
+
+  @override
+  String llmProviderSessionToken(String provider) {
+    return 'Token de sessão fornecido por $provider';
+  }
+
+  @override
+  String llmProviderCredential(String provider) {
+    return 'Credenciais fornecidas por $provider';
+  }
+
+  @override
+  String get llmAccountUiAccountSaving =>
+      'Falha ao salvar a conta. Verifique as informações da sua conta e o status do armazenamento seguro.';
+
+  @override
+  String get llmAccountUiAccountDeletion => 'Falha na exclusão da conta.';
+
+  @override
+  String get llmAccountUiTheAccount =>
+      'A conta foi excluída, mas a limpeza da configuração antiga falhou.';
+
+  @override
+  String get llmAccountUiTheAccountWas =>
+      'A conta foi excluída, mas a revogação do OAuth falhou. Acesse as configurações da conta do provedor para revogar a autorização.';
+
+  @override
+  String get llmAccountUiCheckZed => 'Verifique o chaveiro Zed?';
+
+  @override
+  String get llmAccountUiMacOSMay =>
+      'O macOS pode perguntar, item por item, se permite que o Stroom verifique entradas de chaves correspondentes ao gerar um manifesto importável.';
+
+  @override
+  String get llmAccountUiThisStep =>
+      'Esta etapa não salvará a conta; você ainda precisará confirmar as contas que deseja importar, uma por uma, posteriormente.';
+
+  @override
+  String get llmAccountUiKeepChecking => 'Continue verificando';
+
+  @override
+  String get llmAccountUiUnableTo =>
+      'Não é possível ler as chaves do sistema. Verifique as permissões de acesso às chaves do sistema e tente novamente.';
+
+  @override
+  String get llmAccountUiNoReadable =>
+      'Nenhuma credencial legível de Zed OpenAI, Anthropic, Google, Mistral ou xAI foi encontrada.';
+
+  @override
+  String get llmAccountUiProviderText => 'provedor';
+
+  @override
+  String get llmAccountUiStroomWill =>
+      'Stroom irá reler e verificar a credencial após a confirmação. A chave não será exibida na interface.';
+
+  @override
+  String get llmAccountUiImportThis => 'Importar esta conta';
+
+  @override
+  String get llmAccountUiCredentialsNot =>
+      'Credenciais não importadas. O item das chaves pode ter sido alterado, o acesso foi negado ou o armazenamento seguro não está disponível.';
+
+  @override
+  String get llmAccountUiPleaseAdd =>
+      'Adicione modelos à sua conta primeiro e depois crie um grupo de modelos.';
+
+  @override
+  String get llmAccountUiTheModel =>
+      'O grupo de modelos não conseguiu salvar. Confirme se o modelo upstream correspondente existe na conta do membro.';
+
+  @override
+  String get llmAccountUiModelGroup => 'Falha na exclusão do grupo de modelos.';
+
+  @override
+  String get llmAccountUiLLMAccount => 'Conta LLM e grupo de modelos';
+
+  @override
+  String get llmAccountUiModelGroupText => 'grupo de modelos';
+
+  @override
+  String get llmAccountUiEachAccount =>
+      'Cada conta salva independentemente credenciais, recursos de modelo, cotas e estratégias de simultaneidade. A quantidade desconhecida permanece desconhecida.';
+
+  @override
+  String get llmAccountUiImportAPI => 'Importe credenciais de API do Zed';
+
+  @override
+  String get llmAccountUiTheRouting =>
+      'A política de roteamento não foi salva.';
+
+  @override
+  String get llmAccountUiStableModel =>
+      'Grupos de modelos estáveis mapeiam IDs de modelos de sessão legados para contas opcionais e modelos upstream. Os membros só podem reverter dentro deste grupo.';
+
+  @override
+  String get llmAccountUiAddModel => 'Adicionar grupo de modelos';
+
+  @override
+  String get llmAccountUiKimiCode =>
+      'A autorização do Kimi Code falhou. Tente fazer login novamente.';
+
+  @override
+  String get llmAccountUiLoginTo => 'Faça login na CLI do Kimi Code';
+
+  @override
+  String get llmAccountUiOpenThe =>
+      'Abra a página de verificação Kimi e digite o código abaixo. Após a conclusão da autorização, o Stroom salvará automaticamente a conta.';
+
+  @override
+  String get llmAccountUiOpenKimi => 'Abra Kimi';
+
+  @override
+  String get llmAccountUiKiloCode =>
+      'A autorização do Kilo Code falhou, tente fazer login novamente.';
+
+  @override
+  String get llmAccountUiLoginToKilo => 'Faça login no código do quilo';
+
+  @override
+  String get llmAccountUiOpenTheKilo =>
+      'Abra a página de verificação do Kilo Code e insira o código. Após a conclusão da autorização, o Stroom salvará automaticamente a conta.';
+
+  @override
+  String get llmAccountUiOpenKilo => 'Abra o código do quilo';
+
+  @override
+  String get llmAccountUiMetaMuse =>
+      'A autorização do Meta Muse falhou, tente fazer login novamente.';
+
+  @override
+  String get llmAccountUiLoginMeta => 'Código Meta Muse de Login';
+
+  @override
+  String get llmAccountUiOpenTheMeta =>
+      'Abra a página de verificação Meta e insira o código abaixo. Após a conclusão da autorização, o Stroom salvará automaticamente a conta.';
+
+  @override
+  String get llmAccountUiOpenMeta => 'Abrir meta';
+
+  @override
+  String get llmAccountUiTheAccountOr =>
+      'A conta ou grupo de modelos não pode ser lido.';
+
+  @override
+  String get llmAccountUiQuotaAnd => 'Estratégia de cotas e simultaneidade';
+
+  @override
+  String get llmAccountUiAvailableModels =>
+      'Os modelos disponíveis dependem do plano de conta Openference; o catálogo de modelos offline não implica autorização.';
+
+  @override
+  String get llmAccountUiNoRecord => 'Sem registro';
+
+  @override
+  String get llmAccountUiChatAdapterDoes =>
+      'ChatAdapter atualmente não oferece suporte a este conector.';
+
+  @override
+  String get llmAccountUiThisAccount =>
+      'O grupo de modelos desta conta não aparecerá nos seletores de modelo de chat e fluxo de tarefas.';
+
+  @override
+  String get llmAccountUiModelsAnd => 'Modelos e Capacidades';
+
+  @override
+  String get llmAccountUiLocalObservation => 'Uso de observação local';
+
+  @override
+  String get llmAccountUiNoLocal => 'Nenhum registro local (últimos 62 dias)';
+
+  @override
+  String get llmAccountUiLocalObservationUsage =>
+      'O uso da observação local é desconhecido (o registro de rota não pode ser lido)';
+
+  @override
+  String get llmAccountUiLocalStatistics =>
+      'As estatísticas locais dos últimos 62 dias não representam o saldo da conta.';
+
+  @override
+  String get llmAccountUiQuotaAndFallback => 'Estratégia de cota e fallback';
+
+  @override
+  String get llmAccountUiKeepOld =>
+      'Manter o antigo grupo de modelos de sessão';
+
+  @override
+  String get llmAccountUiDeleteModel => 'Excluir grupo de modelos';
+
+  @override
+  String get llmAccountUiModelGroupLocal =>
+      'Uso cumulativo local do grupo de modelos: desconhecido';
+
+  @override
+  String get llmAccountUiModelGroupLocalCumulative =>
+      'Uso cumulativo local do grupo de modelos: desconhecido (o registro de roteamento não pode ser lido)';
+
+  @override
+  String get llmAccountUiTheCorresponding =>
+      'Os membros correspondentes e os IDs de referência locais das referências antigas do modelo de sessão precisam ser retidos.';
+
+  @override
+  String get llmAccountUiThereAre => 'Não há membros da conta roteáveis';
+
+  @override
+  String get llmAccountUiHoursText => '5 horas';
+
+  @override
+  String get llmAccountUiDailyText => 'diariamente';
+
+  @override
+  String get llmAccountUiWeeklyText => 'semanalmente';
+
+  @override
+  String get llmAccountUiMonthlyText => 'mensalmente';
+
+  @override
+  String get llmAccountUiMainWindow => 'Saldo restante da janela principal';
+
+  @override
+  String get llmAccountUiTheRemaining => 'A quantidade restante da subjanela';
+
+  @override
+  String get llmAccountUiDailyQuota => 'Cota diária restante';
+
+  @override
+  String get llmAccountUiWeeklyQuota => 'Cota semanal restante';
+
+  @override
+  String get llmAccountUiMonthlyQuota => 'Cota mensal restante';
+
+  @override
+  String get llmAccountUiCodeReview => 'Cota de revisão de código restante';
+
+  @override
+  String get llmAccountUiRequestText => 'Solicitação';
+
+  @override
+  String get llmAccountUiAbilityUnknown => 'Habilidade desconhecida';
+
+  @override
+  String get llmAccountUiConnectionStatus => 'Status da conexão desconhecido';
+
+  @override
+  String get llmAccountUiReadyText => 'pronto';
+
+  @override
+  String get llmAccountUiSuspendedText => 'Suspenso';
+
+  @override
+  String get llmAccountUiReAuthentication => 'Reautenticação necessária';
+
+  @override
+  String get llmAccountUiTheConnection =>
+      'O status da conexão é desconhecido; a rota ainda pode tentar solicitar, atualize o status de acordo com o resultado da solicitação.';
+
+  @override
+  String get llmAccountUiAccountsCan =>
+      'As contas podem participar do roteamento do grupo de modelos.';
+
+  @override
+  String get llmAccountUiTheAccountHas =>
+      'A conta foi suspensa e não participará do roteamento.';
+
+  @override
+  String get llmAccountUiTheAccountNeeds =>
+      'A conta precisa ser autenticada novamente antes de poder participar do roteamento.';
+
+  @override
+  String get llmAccountUiPasteCloud => 'Colar Cloud-IDE-JWT';
+
+  @override
+  String get llmAccountUiKiloCodeDevice => 'Dispositivo de código quilo OAuth';
+
+  @override
+  String get llmAccountUiAnonymousFree => 'Anônimo (somente modelos gratuitos)';
+
+  @override
+  String get llmAccountUiQoderAdministrator =>
+      'Administrador Qoder configura OAuth';
+
+  @override
+  String get llmAccountUiCodeBuddyDomestic =>
+      'OAuth de dispositivo doméstico CodeBuddy';
+
+  @override
+  String get llmAccountUiCodeBuddyInternational =>
+      'CodeBuddy Dispositivo Internacional OAuth';
+
+  @override
+  String get llmAccountUiWorkBuddyCLI => 'Dispositivo CLI WorkBuddy OAuth';
+
+  @override
+  String get llmAccountUiLegacyOAuth => 'OAuth legado (não compatível)';
+
+  @override
+  String get llmAccountUiSubscribeTo => 'Assine o OAuth';
+
+  @override
+  String get llmAccountUiGoogleService => 'Conta de serviço do Google';
+
+  @override
+  String get llmAccountUiAWSAccess =>
+      'Acesso AWS + chave secreta (token de sessão opcional)';
+
+  @override
+  String get llmAccountUiAWSDefault => 'Cadeia de credenciais padrão da AWS';
+
+  @override
+  String get llmAccountUiSessionToken => 'token de sessão';
+
+  @override
+  String get llmAccountUiOfficialDevin =>
+      'Login independente oficial do Devin CLI';
+
+  @override
+  String get llmAccountUiLegacyAI =>
+      'Retransmissão legada do AI Studio (descontinuado)';
+
+  @override
+  String get llmAccountUiNoCertification => 'Sem certificação';
+
+  @override
+  String get llmAccountUiOpenVerification => 'Abrir página de verificação';
+
+  @override
+  String get llmAccountUiUserProvided =>
+      'Chave de API upstream fornecida pelo usuário';
+
+  @override
+  String get llmAccountUiAWSBedrock =>
+      'Credenciais estáticas fornecidas pelo usuário do AWS Bedrock';
+
+  @override
+  String get llmAccountUiStroomDevin =>
+      'Configuração de login Stroom Devin CLI criada separadamente para esta conta';
+
+  @override
+  String get llmAccountUiTheLegacy =>
+      'A retransmissão herdada do AI Studio foi descontinuada; use a chave de API ou o OAuth compatível.';
+
+  @override
+  String get llmAccountUiNativeCompatible =>
+      'Endpoint compatível nativo, sem credenciais';
+
+  @override
+  String get llmAccountUiUpstreamAuthentication =>
+      'Falha na autenticação upstream';
+
+  @override
+  String get llmAccountUiInsufficientUpstream => 'Cota upstream insuficiente';
+
+  @override
+  String get llmAccountUiUpstreamRequests =>
+      'As solicitações upstream são limitadas';
+
+  @override
+  String get llmAccountUiUpstreamConnection => 'Falha na conexão upstream';
+
+  @override
+  String get llmAccountUiUpstreamService => 'Erro de serviço upstream';
+
+  @override
+  String get llmAccountUiUpstreamRejects => 'Upstream rejeita solicitação';
+
+  @override
+  String get llmAccountUiRequestCanceled => 'Solicitação cancelada';
+
+  @override
+  String get llmAccountUiUpstreamRequest => 'Falha na solicitação upstream';
+
+  @override
+  String get llmAccountUiSameConnector => 'Mesma conta de conector';
+
+  @override
+  String get llmAccountUiCurrentModel => 'Grupo de modelos atual';
+
+  @override
+  String get llmAccountUiLeastUsed => 'menos usado';
+
+  @override
+  String get llmAccountUiPollingText => 'votação';
+
+  @override
+  String get llmAccountUiPrioritizeHigher => 'Priorize saldos mais altos';
+
+  @override
+  String get llmAccountUiPrioritizeConsumption =>
+      'Priorize o consumo de saldos mais baixos';
+
+  @override
+  String get llmAccountUiAddLLM => 'Adicionar conta LLM';
+
+  @override
+  String get llmAccountUiEditLLM => 'Editar conta LLM';
+
+  @override
+  String get llmAccountUiServiceProvider => 'Padrão do provedor de serviços';
+
+  @override
+  String get llmAccountUiCustomOpenAI =>
+      'Endpoint personalizado compatível com OpenAI';
+
+  @override
+  String get llmAccountUiLogIn => 'Faça login no Trae SOLO no Stroom';
+
+  @override
+  String get llmAccountUiLoginCallbacks =>
+      'Os retornos de chamada de login são recebidos apenas localmente e gravados no armazenamento de credenciais seguro; nenhum endereço de retorno de chamada ou histórico de navegação é salvo.';
+
+  @override
+  String get llmAccountUiChatAdapterDoesNot =>
+      'Atualmente, o ChatAdapter não oferece suporte a esse conector; após salvar, o grupo de modelos da conta não aparecerá nos seletores de modelos de chat e fluxo de tarefas.';
+
+  @override
+  String get llmAccountUiAuthenticationMethod => 'Método de autenticação';
+
+  @override
+  String get llmAccountUiFindThe =>
+      'Encontre o ID da conta no lado direito do painel Cloudflare.';
+
+  @override
+  String get llmAccountUiAPIKeys =>
+      'As chaves de API podem ser adicionadas como múltiplas conexões independentes e pesquisadas por meio de grupos de modelos. O modo anônimo apenas exibe e liga para modelos gratuitos confirmados; o diretório da conta não é usado.';
+
+  @override
+  String get llmAccountUiEachCline =>
+      'Cada chave API Cline precisa ser salva como uma conta independente. O catálogo de modelos é atualizado separadamente pelo Cline ou ClinePass; o catálogo em si não significa que a conta tenha autorização de assinatura.';
+
+  @override
+  String get llmAccountUiOnlyLaunch =>
+      'Inicie apenas o devin CLI oficial. A configuração de login é salva no diretório do aplicativo Stroom independente desta conta; o login do host Devin ou a chave API não serão lidos.';
+
+  @override
+  String get llmAccountUiUseThe =>
+      'Use a CLI nativa do Codex. Execute primeiro o login do codex no terminal; Stroom não lê nem salva dados de login da CLI.';
+
+  @override
+  String get llmAccountUiUseTheNative =>
+      'Use o servidor de aplicativos ZCode nativo e o plano de codificação GLM. Faça login no aplicativo ZCode oficial primeiro, se necessário; Stroom não lê nem salva dados de login do ZCode.';
+
+  @override
+  String get llmAccountUiOfficialDevinCLI =>
+      'Caminho absoluto executável oficial do Devin CLI';
+
+  @override
+  String get llmAccountUiCopyThe =>
+      'Copie o caminho completo para o arquivo executável devin do local oficial de instalação do Devin.';
+
+  @override
+  String get llmAccountUiRetrustCurrent =>
+      'Confie novamente no executável CLI atual e atualize o SHA-256';
+
+  @override
+  String get llmAccountUiIHave =>
+      'Eu instalei e confiei neste executável dos canais oficiais do Devin';
+
+  @override
+  String get llmAccountUiStroomFixes =>
+      'Stroom corrige o SHA-256 do arquivo atual; se recusa a iniciar se o arquivo for alterado.';
+
+  @override
+  String get llmAccountUiLogBack => 'Faça login novamente no Devin CLI oficial';
+
+  @override
+  String get llmAccountUiReauthenticateThe =>
+      'Autentique novamente a configuração de login da CLI independente para esta conta.';
+
+  @override
+  String get llmAccountUiPleaseSelect =>
+      'Selecione um método de autenticação compatível antes de salvar esta conta.';
+
+  @override
+  String get llmAccountUiTheLegacyAI =>
+      'A conexão herdada da sessão da Web do AI Studio foi descontinuada. Selecione uma chave de API ou um OAuth compatível e autorize novamente.';
+
+  @override
+  String get llmAccountUiQoderOAuth =>
+      'O Qoder OAuth exige que o administrador do serviço forneça a autorização OAuth completa, o token, o URL de informações do usuário e as credenciais do cliente. Somente a chave API do DashScope e as credenciais OAuth confidenciais são salvas no armazenamento seguro da plataforma após autorização; cookies do navegador não são usados. A concessão de atualização não está definida no upstream; autorize novamente se as credenciais expirarem.';
+
+  @override
+  String get llmAccountUiSubmitTo =>
+      'Envie apenas para armazenamento seguro da plataforma; deixe em branco para preservar o segredo do cliente OAuth existente.';
+
+  @override
+  String get llmAccountUiEnterThe =>
+      'Insira o token de acesso pessoal Qoder começando com pt-. Chamado através do qodercli nativo; apenas o chat de texto é suportado, as ferramentas de chamada não são suportadas, as respostas serão armazenadas em buffer e retornadas, com um máximo de 45 segundos para uma única solicitação.';
+
+  @override
+  String get llmAccountUiGitLabUser =>
+      'Configurações do usuário GitLab → Aplicativos';
+
+  @override
+  String get llmAccountUiOnlySaved =>
+      'Salvo apenas no armazenamento seguro da plataforma; pode ser deixado em branco para clientes públicos.';
+
+  @override
+  String get llmAccountUiOnlyStored =>
+      'Armazenado apenas no armazenamento seguro da plataforma.';
+
+  @override
+  String get llmAccountUiGitHubEnterprise =>
+      'GitHub Enterprise Cloud ou Server deve ter o Copilot habilitado e permitir o OAuth do dispositivo. Use o endereço da instância HTTPS; o ID do cliente do aplicativo OAuth pode ser fornecido pelo administrador ou deixado em branco para usar o ID do cliente público.';
+
+  @override
+  String get llmAccountUiClineUses => 'Cline usa terminais de serviço fixos';
+
+  @override
+  String get llmAccountUiAIHorde =>
+      'AI Horde usa endpoint de bate-papo HTTPS fixo';
+
+  @override
+  String get llmAccountUiUncloseAIUses =>
+      'UncloseAI usa endpoint fixo de conclusão do OpenAI Chat';
+
+  @override
+  String get llmAccountUiKiloCodeUses =>
+      'Kilo Code usa endpoints de serviço fixos';
+
+  @override
+  String get llmAccountUiFixedService => 'Terminal de serviço fixo';
+
+  @override
+  String get llmAccountUiEndpointAddress =>
+      'Endereço do terminal (preencha se exigido pelo conector)';
+
+  @override
+  String get llmAccountUiEnterAzure =>
+      'Insira o recurso Azure OpenAI ou o host Azure AI Foundry; implantação e versão são configuradas separadamente.';
+
+  @override
+  String get llmAccountUiLeaveBlank =>
+      'Deixe em branco para usar o catálogo de modelos oficial e os endpoints de API para esse tipo de conta.';
+
+  @override
+  String get llmAccountUiFixedHTTPS =>
+      'Endpoint da API HTTPS corrigido usando código de comando.';
+
+  @override
+  String get llmAccountUiFixedHTTPSEndpoint =>
+      'Endpoint HTTPS corrigido usando gateway do modelo Kilo Code.';
+
+  @override
+  String get llmAccountUiFixedHTTPSChat =>
+      'Endpoint de conclusão de bate-papo HTTPS corrigido usando Cline.';
+
+  @override
+  String get llmAccountUiNoAPI =>
+      'Nenhuma chave de API é necessária; a chave opcional é usada apenas para identificação.';
+
+  @override
+  String get llmAccountUiAIHordeS =>
+      'A chave anônima ou chave de API prioritária do AI Horde é enviada apenas para seu terminal de serviço de chat fixo.';
+
+  @override
+  String get llmAccountUiSOLOUses =>
+      'SOLO usa um endpoint de serviço Trae fixo; envie apenas Cloud-IDE-JWT para esse endpoint. Os tokens colados precisarão ser inseridos novamente aproximadamente 14 dias depois.';
+
+  @override
+  String get llmAccountUiTheDeployment =>
+      'O ID de implantação será usado como o ID do modelo upstream exclusivo da conta.';
+
+  @override
+  String get llmAccountUiTheDefault =>
+      'O valor padrão é configurado de acordo com o catálogo de modelos do Azure.';
+
+  @override
+  String get llmAccountUiAmazonQ => 'Região do desenvolvedor Amazon Q';
+
+  @override
+  String get llmAccountUiAWSRegion => 'Região AWS';
+
+  @override
+  String get llmAccountUiVertexArea => 'Área do vértice';
+
+  @override
+  String get llmAccountUiQwenCloud => 'ID da região do Qwen Cloud';
+
+  @override
+  String get llmAccountUiGoogleCloud => 'ID do projeto do Google Cloud';
+
+  @override
+  String get llmAccountUiThePartner =>
+      'O modelo de parceiro requer um ID de projeto; a conta de serviço pode ser lida automaticamente no project_id do JSON.';
+
+  @override
+  String get llmAccountUiCanBe =>
+      'Pode ser deixado em branco para usar o project_id do JSON da conta de serviço.';
+
+  @override
+  String get llmAccountUiAWSBuilder => 'AWS Builder ID Credenciais OAuth JSON';
+
+  @override
+  String get llmAccountUiThisAuthentication =>
+      'Este método de autenticação não requer a inserção de credenciais';
+
+  @override
+  String get llmAccountUiAWSCredentials => 'Credenciais AWS JSON';
+
+  @override
+  String get llmAccountUiServiceAccount => 'Conta de serviço JSON';
+
+  @override
+  String get llmAccountUiAIHordeAPI =>
+      'Chave API Horde AI (prioridade opcional)';
+
+  @override
+  String get llmAccountUiCredentialsText => 'Credenciais';
+
+  @override
+  String get llmAccountUiPasteThe =>
+      'Cole o próprio JWT ou o valor completo do cabeçalho da solicitação “Cloud-IDE-JWT <token>”. Os tokens de importação não são atualizados automaticamente; as credenciais para logins no aplicativo Trae são atualizadas automaticamente quando expiram.';
+
+  @override
+  String get llmAccountUiGetThe =>
+      'Obtenha a chave de API do usuário (crsr_… ou grok_…) em cursor.com/dashboard/api. O login do Cursor IDE não será lido.';
+
+  @override
+  String get llmAccountUiTheOptional =>
+      'A chave de API opcional AI Horde apenas aumenta a prioridade de fila (parabéns) e não aumenta as permissões do modelo. Selecione \"Sem autenticação\" para usar o modo anônimo.';
+
+  @override
+  String get llmAccountUiUsingThe =>
+      'Usando a cadeia de credenciais padrão da AWS para o ambiente de execução';
+
+  @override
+  String get llmAccountUiSavedIn =>
+      'Salvo no armazenamento seguro da plataforma';
+
+  @override
+  String get llmAccountUiLeaveBlankTo =>
+      'Deixe em branco para manter as credenciais de segurança atuais';
+
+  @override
+  String get llmAccountUiDefaultAPI => 'Protocolo API padrão';
+
+  @override
+  String get llmAccountUiConnectionStatusText => 'status da conexão';
+
+  @override
+  String get llmAccountUiModelTo => 'modelo para configurar';
+
+  @override
+  String get llmAccountUiModelAPI => 'Protocolo API do modelo';
+
+  @override
+  String get llmAccountUiInheritAccount => 'Herdar contrato padrão da conta';
+
+  @override
+  String get llmAccountUiUpstreamModels => 'Modelos e capacidades upstream';
+
+  @override
+  String get llmAccountUiOnePer =>
+      'Um por linha: ID do modelo, streaming, visão, ferramentas';
+
+  @override
+  String get llmAccountUiModelID =>
+      'O ID do modelo e o comprimento do contexto vêm de um catálogo fixo; outras capacidades permanecem desconhecidas.';
+
+  @override
+  String get llmAccountUiAnonymousMode =>
+      'O modo anônimo permite apenas openrouter/free. Depois de conectar a conta, você pode usar os modelos no diretório da conta.';
+
+  @override
+  String get llmAccountUiModelsCome =>
+      'Os modelos vêm do diretório Kilo Code; A chave de API e o dispositivo OAuth usam suas próprias credenciais salvas.';
+
+  @override
+  String get llmAccountUiModelsAndCapabilities =>
+      'Modelos e capacidades vêm do diretório upstream; acima para cada modelo, selecione os protocolos API que ele declara oferecer suporte.';
+
+  @override
+  String get llmAccountUiACPDoes =>
+      'ACP não fornece um catálogo de modelos estável; use o modelo padrão atual da CLI oficial.';
+
+  @override
+  String get llmAccountUiKimiCodeCLI =>
+      'Kimi Code CLI abre apenas o diretório do modelo do plano de codificação verificado.';
+
+  @override
+  String get llmAccountUiGrokBuild =>
+      'Grok Build abre apenas catálogos de modelos de assinatura verificados.';
+
+  @override
+  String get llmAccountUiXAIOAuth =>
+      'xAI OAuth abre apenas o diretório do modelo obtido pela conta da API.';
+
+  @override
+  String get llmAccountUiMetaMuseOAuth =>
+      'Meta Muse OAuth abre apenas o diretório de modelo obtido pela conta de assinatura da API.';
+
+  @override
+  String get llmAccountUiModelsComeFrom =>
+      'Os modelos vêm do catálogo Chat Completions da Cline; a disponibilidade é determinada pela conta e assinatura correspondentes.';
+
+  @override
+  String get llmAccountUiTheAbility =>
+      'A habilidade é explicitamente declarada; use vision=false para desativá-lo explicitamente e deixe-o desconhecido se não for preenchido.';
+
+  @override
+  String get llmAccountUiRefreshModel => 'Atualizar diretório de modelo';
+
+  @override
+  String get llmAccountUiTestThe => 'Teste a CLI local do Auggie';
+
+  @override
+  String get llmAccountUiCheckLocal =>
+      'Verifique o status de login local do Codex CLI';
+
+  @override
+  String get llmAccountUiTheModelDirectory =>
+      'O diretório do modelo pode ser atualizado após salvar a conta e as modificações.';
+
+  @override
+  String get llmAccountUiAuggieCLI =>
+      'A lista de modelos Auggie CLI não retornou o catálogo; catálogo de modelo fixo mantido.';
+
+  @override
+  String get llmAccountUiVertexAI =>
+      'O Vertex AI Partners requer um projeto válido do Google Cloud e uma conta de serviço com permissões; A chave de API expressa oferece suporte apenas ao Gemini.';
+
+  @override
+  String get llmAccountUiFailedTo =>
+      'Falha ao ler o diretório do modelo, verifique a autenticação da conta e as configurações de conexão.';
+
+  @override
+  String get llmAccountUiAuggieCLIIs =>
+      'Auggie CLI está instalado e funcionando.';
+
+  @override
+  String get llmAccountUiCodexCLI =>
+      'Codex CLI está logado e pronto para ser executado.';
+
+  @override
+  String get llmAccountUiVertexAIPartners =>
+      'O Vertex AI Partners exige um ID de projeto válido; a conta de serviço pode ser lida em JSON e a chave de API deve estar vinculada ao projeto.';
+
+  @override
+  String get llmAccountUiFailedToSave =>
+      'Falha ao salvar a conta. Verifique as configurações de conexão e tente novamente.';
+
+  @override
+  String get llmAccountUiTraeThe =>
+      'Trae O login não foi concluído, tente novamente ou use Cloud-IDE-JWT para importar manualmente.';
+
+  @override
+  String get llmAccountUiPleaseEnter => 'Insira um nome de conta.';
+
+  @override
+  String get llmAccountUiPleaseEnterThe =>
+      'Insira a chave de API do usuário do cursor começando com crsr_.';
+
+  @override
+  String get llmAccountUiPleaseEnterYour =>
+      'Insira seu ID de cliente GitLab Duo OAuth.';
+
+  @override
+  String get llmAccountUiPleaseEnterA =>
+      'Insira um endpoint de administração HTTPS Qoder OAuth válido.';
+
+  @override
+  String get llmAccountUiPleaseEnterQODER =>
+      'Insira QODER_OAUTH_CLIENT_ID e o segredo do cliente.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValid =>
+      'Insira um host de recurso HTTPS do Azure válido, uma ID de implantação e uma versão da API.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidCloudflare =>
+      'Insira um ID de conta Cloudflare válido.';
+
+  @override
+  String get llmAccountUiCloudflareWorkers =>
+      'Cloudflare Workers AI fornece apenas um catálogo de modelos fixos verificados.';
+
+  @override
+  String get llmAccountUiKimiCodeAccounts =>
+      'As contas do Kimi Code só podem usar modelos verificados do Plano de Codificação.';
+
+  @override
+  String get llmAccountUiPleaseRefresh =>
+      'Atualize o diretório do modelo primeiro e selecione o protocolo em seus SupportApiProtocols.';
+
+  @override
+  String get llmAccountUiAbilityValues =>
+      'Os valores de habilidade só podem ser verdadeiros ou falsos.';
+
+  @override
+  String get llmAccountUiCommandCode =>
+      'Os recursos do modelo de código de comando só podem ser declarados por diretórios upstream.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidGitHub =>
+      'Insira um endereço de instância HTTPS válido do GitHub Enterprise.';
+
+  @override
+  String get llmAccountUiPleaseFill =>
+      'Preencha o caminho completo para o executável oficial do Devin CLI.';
+
+  @override
+  String get llmAccountUiPleaseConfirm =>
+      'Confirme se este arquivo executável vem do canal de instalação oficial do Devin.';
+
+  @override
+  String get llmAccountUiTheSelected =>
+      'O caminho CLI selecionado é inválido ou não é executável.';
+
+  @override
+  String get llmAccountUiPleaseEnterTheAmazon =>
+      'Insira o JSON das credenciais do Amazon Q que contém o token de atualização do ID do AWS Builder.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidAmazon =>
+      'Insira um JSON de credenciais OAuth válido do Amazon Q e uma região compatível.';
+
+  @override
+  String get llmAccountUiLegacyAIStudio =>
+      'As conexões de sessão da Web legadas do AI Studio foram descontinuadas. Em vez disso, use a chave de API ou o OAuth compatível.';
+
+  @override
+  String get llmAccountUiPleaseProvide =>
+      'Forneça o ID do cliente Google OAuth Desktop e o segredo do cliente correspondente.';
+
+  @override
+  String get llmAccountUiPleaseEnterYourCredentials =>
+      'Por favor, insira suas credenciais.';
+
+  @override
+  String get llmAccountUiModelGroupName => 'Nome do grupo de modelos';
+
+  @override
+  String get llmAccountUiAccountAnd => 'Modelo de conta e upstream';
+
+  @override
+  String get llmAccountUiTheModelGroup =>
+      'O grupo modelo atualmente não tem membros.';
+
+  @override
+  String get llmAccountUiLocalReferences =>
+      'As referências locais são usadas para compatibilidade com IDs de modelo de sessão existentes; os membros da conta só participarão da seleção dentro deste grupo estável.';
+
+  @override
+  String get llmAccountUiGroupMembers =>
+      'Os membros do grupo sob a mesma referência de modelo devem usar o mesmo protocolo de chat.';
+
+  @override
+  String get llmAccountUiAccountHas => 'A conta foi excluída';
+
+  @override
+  String get llmAccountUiOldSession =>
+      'Membro necessário para referência de sessão antiga';
+
+  @override
+  String get llmAccountUiRemoveMember => 'Remover membro';
+
+  @override
+  String get llmAccountUiLocalModel => 'ID de referência do modelo local';
+
+  @override
+  String get llmAccountUiSamePriority => 'Mesma seleção de prioridade';
+
+  @override
+  String get llmAccountUiCrossAccount => 'Intervalo de reversão entre contas';
+
+  @override
+  String get llmAccountUiConcurrencyLimit => 'Limite de simultaneidade';
+
+  @override
+  String get llmAccountUiLeaveBlankToIndicate =>
+      'Deixe em branco para indicar que não há restrição; a conta e o grupo de modelos são configurados separadamente.';
+
+  @override
+  String get llmAccountUiRollingWindow => 'janela rolante';
+
+  @override
+  String get llmAccountUiCalendarWindow => 'janela do calendário';
+
+  @override
+  String get llmAccountUiCalendarTime => 'fuso horário do calendário';
+
+  @override
+  String get llmAccountUiForExample => 'Por exemplo Ásia/Taipei ou UTC';
+
+  @override
+  String get llmAccountUiRemainingCredit => 'Linha de crédito restante';
+
+  @override
+  String get llmAccountUiWindowUsage => 'Limite de uso da janela';
+
+  @override
+  String get llmAccountUiFixedValue => 'valor fixo';
+
+  @override
+  String get llmAccountUiPercentageText => 'Porcentagem';
+
+  @override
+  String get llmAccountUiUnitText => 'unidade';
+
+  @override
+  String get llmAccountUiTheConcurrency =>
+      'O limite superior de simultaneidade deve ser um número inteiro positivo ou deixado em branco para indicar que não há limite.';
+
+  @override
+  String get llmAccountUiTheCalendar =>
+      'A janela do calendário precisa ser preenchida com o fuso horário.';
+
+  @override
+  String get llmAccountUiQuotaAndUsage =>
+      'A cota e o limite de uso devem ser não negativos; a porcentagem não pode exceder 100.';
+
+  @override
+  String get llmAccountUiHourWindow => 'Janela de 5 horas';
+
+  @override
+  String get llmAccountUiDayWindow => 'janela do dia';
+
+  @override
+  String get llmAccountUiWeeklyWindow => 'janela semanal';
+
+  @override
+  String get llmAccountUiMonthWindow => 'janela do mês';
+
+  @override
+  String llmImportStoppedAfterLegacySyncFailure(int count) {
+    return '$count conta(s) importada(s), mas a sincronização da configuração antiga falhou.';
+  }
+
+  @override
+  String llmImportStoppedAfterCredentialFailure(int count) {
+    return '$count conta(s) importada(s). As credenciais restantes não foram importadas porque o item do chaveiro mudou, o acesso foi negado ou o armazenamento seguro está indisponível.';
+  }
+
+  @override
+  String get llmRequestUsedAccount => 'Conta usada nesta solicitação';
+
+  @override
+  String get llmLastAttemptedAccount => 'Última conta tentada';
+
+  @override
+  String get llmRouteDecisionSessionAffinity =>
+      'Usar a conta mais recente que teve sucesso nesta conversa';
+
+  @override
+  String get llmRouteDecisionSessionAffinityPersistenceFailed =>
+      'Não foi possível salvar a continuidade desta conta';
+
+  @override
+  String get llmRouteDecisionExplicitAccountSelection =>
+      'Roteamento de acordo com a conta selecionada pelo usuário';
+
+  @override
+  String get llmRouteDecisionSelectedAccountOutsideGroup =>
+      'A conta selecionada não pertence ao grupo de modelos atual';
+
+  @override
+  String get llmRouteDecisionConversationIdInvalid =>
+      'O identificador da conversa é inválido e a afinidade de sessão não foi usada';
+
+  @override
+  String get llmRouteDecisionModelGroupMissing =>
+      'Nenhum grupo de modelos estável foi encontrado para este modelo';
+
+  @override
+  String get llmRouteDecisionModelGroupAmbiguous =>
+      'Este modelo está associado a vários grupos de modelos ao mesmo tempo';
+
+  @override
+  String get llmRouteDecisionConnectorProtocolIncompatible =>
+      'O protocolo do conector não é aplicável a este modelo de chat';
+
+  @override
+  String get llmRouteDecisionConnectionUnknown =>
+      'Status da conexão desconhecido';
+
+  @override
+  String get llmRouteDecisionAccountMissing => 'A conta foi excluída';
+
+  @override
+  String get llmRouteDecisionAccountIdInvalid =>
+      'Identificador de conta inválido';
+
+  @override
+  String get llmRouteDecisionAccountUnavailable =>
+      'A conta foi suspensa ou precisa ser autenticada novamente';
+
+  @override
+  String get llmRouteDecisionModelMappingMismatch =>
+      'A conta não está mapeada para o modelo selecionado';
+
+  @override
+  String get llmRouteDecisionModelNotMapped =>
+      'Não foi encontrado o modelo upstream correspondente na conta';
+
+  @override
+  String get llmRouteDecisionCapabilityMismatch =>
+      'O modelo da conta não oferece suporte aos recursos necessários para esta solicitação';
+
+  @override
+  String get llmRouteDecisionFallbackScope =>
+      'O escopo de reversão não permite a troca para este conector';
+
+  @override
+  String get llmRouteDecisionCooldown =>
+      'A conta ainda está no período de espera após falha';
+
+  @override
+  String get llmRouteDecisionConcurrencyLimit =>
+      'A conta ou o grupo de modelos atingiu o limite máximo de concorrência';
+
+  @override
+  String get llmRouteDecisionBalanceUnknownOrIncomparable =>
+      'Limite desconhecido ou unidades de medida não comparáveis';
+
+  @override
+  String get llmRouteDecisionBalanceAtOrBelowReserve =>
+      'O saldo atingiu ou está abaixo do limite de reserva';
+
+  @override
+  String get llmRouteDecisionUsageUnknown =>
+      'O uso é desconhecido, portanto, não é possível determinar o limite';
+
+  @override
+  String get llmRouteDecisionReserveBalanceUnknown =>
+      'O limite restante é desconhecido, portanto, não é possível determinar o limite de reserva';
+
+  @override
+  String get llmRouteDecisionReserveUnitUnknownOrIncomparable =>
+      'A unidade de medida do limite de reserva é desconhecida ou não pode ser comparada';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknownOrIncomparable =>
+      'O limite total é desconhecido ou não pode ser comparado';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknown =>
+      'O limite total é desconhecido e não é possível calcular a linha de reserva';
+
+  @override
+  String get llmRouteDecisionReserveUsageEstimateUnknown =>
+      'A estimativa de uso da solicitação é desconhecida, portanto, não é possível determinar o limite de reserva';
+
+  @override
+  String get llmRouteDecisionReserveInFlightUsageUnknown =>
+      'O uso da solicitação em andamento é desconhecido, portanto, não é possível determinar o limite de reserva';
+
+  @override
+  String get llmRouteDecisionReserveFloorReached =>
+      'O limite restante está abaixo do limite de reserva';
+
+  @override
+  String get llmRouteDecisionUsageCeilingReached =>
+      'O limite de uso foi atingido';
+
+  @override
+  String get llmRouteDecisionUsageCeilingTotalUnknown =>
+      'O valor total de uso é desconhecido, portanto, não é possível determinar o limite máximo';
+
+  @override
+  String get llmRouteDecisionUsageUnitMismatch =>
+      'A unidade de medida do uso não corresponde';
+
+  @override
+  String get llmRouteDecisionUsageSourceMismatch =>
+      'A quantidade utilizada não corresponde à fonte dos dados do limite';
+
+  @override
+  String get llmRouteDecisionUsageInFlightUnknown =>
+      'O uso da solicitação em andamento é desconhecido, portanto, não é possível determinar o limite máximo';
+
+  @override
+  String get llmRouteDecisionUsageEstimateUnknown =>
+      'A estimativa do uso da solicitação é desconhecida, portanto, não é possível determinar o limite máximo';
+
+  @override
+  String get llmRouteDecisionInvalidWindowTimezone =>
+      'A configuração do fuso horário da janela de limite é inválida';
+
+  @override
+  String get llmRouteDecisionReserveFloor =>
+      'O limite restante está abaixo do limite de reserva';
+
+  @override
+  String get llmRouteDecisionUsageCeiling => 'O limite de uso foi atingido';
+
+  @override
+  String get llmRouteDecisionRequestAuthentication =>
+      'O sistema upstream recusou a autenticação';
+
+  @override
+  String get llmRouteDecisionRequestQuotaExhausted =>
+      'O sistema upstream informou que o limite foi esgotado';
+
+  @override
+  String get llmRouteDecisionRequestRateLimited =>
+      'Limitação de fluxo upstream';
+
+  @override
+  String get llmRouteDecisionRequestConnection =>
+      'Falha na conexão com o servidor upstream';
+
+  @override
+  String get llmRouteDecisionRequestServer => 'Erro no serviço upstream';
+
+  @override
+  String get llmRouteDecisionRequestInvalidRequest =>
+      'O upstream rejeitou os parâmetros da solicitação';
+
+  @override
+  String get llmRouteDecisionRequestCancelled => 'Solicitação cancelada';
+
+  @override
+  String get llmRouteDecisionRequestOther =>
+      'Falha na solicitação do sistema superior';
+
   AppLocalizationsPt([String locale = 'pt']) : super(locale);
 
   @override
@@ -1684,6 +3321,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get chatSearchAll => 'Pesquisar em todas as conversas...';
+
+  @override
+  String get chatSearchCurrentMode => 'Conversa atual';
+
+  @override
+  String get chatSearchAllMode => 'Todas as conversas';
+
+  @override
+  String get chatSearchRetry => 'Tentar pesquisar novamente';
+
+  @override
+  String get chatSearchError => 'Falha na pesquisa';
 
   @override
   String get searchPrevious => 'Resultado anterior';
@@ -13952,6 +15601,18 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get chatSearchAll => 'Pesquisar em todas as conversas...';
+
+  @override
+  String get chatSearchCurrentMode => 'Conversa atual';
+
+  @override
+  String get chatSearchAllMode => 'Todas as conversas';
+
+  @override
+  String get chatSearchRetry => 'Tentar pesquisar novamente';
+
+  @override
+  String get chatSearchError => 'Falha na pesquisa';
 
   @override
   String get searchPrevious => 'Resultado anterior';

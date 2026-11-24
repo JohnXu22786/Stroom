@@ -153,6 +153,53 @@ class WebFileStore {
     }
   }
 
+  /// Atomically writes and removes a set of records in the IndexedDB file
+  /// store. Conversation metadata and message rows use this to commit one
+  /// repository operation as a unit.
+  static Future<void> writeBatch(
+    Map<String, Uint8List> writes, {
+    Iterable<String> deletes = const [],
+    void Function()? beforeCommit,
+  }) async {
+    if (_testMode) {
+      beforeCommit?.call();
+      final next = Map<String, Uint8List>.from(_inMemoryStore);
+      for (final key in deletes) {
+        next.remove(key);
+      }
+      for (final entry in writes.entries) {
+        next[entry.key] = Uint8List.fromList(entry.value);
+      }
+      _inMemoryStore
+        ..clear()
+        ..addAll(next);
+      return;
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final completed = txn.completed;
+    try {
+      final store = txn.objectStore('files');
+      for (final key in deletes) {
+        await store.delete(key);
+      }
+      for (final entry in writes.entries) {
+        await store.put(entry.value, entry.key);
+      }
+      beforeCommit?.call();
+      await completed;
+    } catch (_) {
+      try {
+        txn.abort();
+      } catch (_) {}
+      try {
+        await completed;
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
   static bool _isAttachmentKey(String key) =>
       key.startsWith(_attachmentPrefix) ||
       key.startsWith(_editedAttachmentPrefix);

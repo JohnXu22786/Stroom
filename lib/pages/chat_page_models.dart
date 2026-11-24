@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -39,30 +40,31 @@ extension _ChatPageModelsExt on _ChatPageState {
 
   void _navigateToProviderConfig() {
     final entriesState = ref.read(providerEntriesProvider);
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry != null) {
       Navigator.of(context, rootNavigator: true)
           .push(
-        MaterialPageRoute(
-          builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
-        ),
-      )
+            MaterialPageRoute(
+              builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
+            ),
+          )
           .then((_) async {
-        if (!mounted) return;
-        // 供应商页面的模型列表可能与这里共享拖动排序（model_order），
-        // 返回时必须先重新加载保存的顺序，再按新顺序重算选中索引。
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          if (!mounted) return;
-          setState(
-            () => _savedModelOrder = prefs.getStringList('model_order'),
-          );
-        } catch (e) {
-          debugPrint('_navigateToProviderConfig reload order failed: $e');
-        }
-        if (mounted) _configureAdapter();
-      });
+            if (!mounted) return;
+            // 供应商页面的模型列表可能与这里共享拖动排序（model_order），
+            // 返回时必须先重新加载保存的顺序，再按新顺序重算选中索引。
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              if (!mounted) return;
+              setState(
+                () => _savedModelOrder = prefs.getStringList('model_order'),
+              );
+            } catch (e) {
+              debugPrint('_navigateToProviderConfig reload order failed: $e');
+            }
+            if (mounted) _configureAdapter();
+          });
     }
   }
 
@@ -118,13 +120,21 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final model = models[modelIdx];
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
-    setState(() => _selectedModelIndex = idx);
+    setState(() {
+      _selectedModelIndex = idx;
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
+    });
     // Persist the choice for THIS conversation so the user's switch survives
     // re-entry, without affecting other conversations. 同时记录绝对身份
     // （模型ID + 供应商名）：显示名重命名后该记录仍能解析回同一模型。
     final convId = ref.read(activeConversationIdProvider);
     if (convId != null) {
-      ref.read(conversationsProvider.notifier).updateLastUsedModel(
+      ref
+          .read(conversationsProvider.notifier)
+          .updateLastUsedModel(
             convId,
             selectedName,
             modelId: model.modelId,
@@ -141,6 +151,85 @@ extension _ChatPageModelsExt on _ChatPageState {
         debugPrint('_onModelSelectionChanged save index failed: $e');
       }
     });
+  }
+
+  Future<void> _chooseAccountOverride() async {
+    final conversationId = ref.read(activeConversationIdProvider);
+    final entriesState = ref.read(providerEntriesProvider);
+    final assistant = _assistantForConversation(conversationId);
+    final selectedModelIdentity = _adapter.routedModelIdentityForAssistant(
+      assistant,
+      entriesState,
+    );
+    if (selectedModelIdentity == null) return;
+    final accounts = await _adapter.routedAccountChoicesForAssistant(
+      assistant,
+      entriesState,
+    );
+    if (!mounted ||
+        accounts.isEmpty ||
+        ref.read(activeConversationIdProvider) != conversationId ||
+        _effectiveRoutedModelIdentity(conversationId) !=
+            selectedModelIdentity) {
+      return;
+    }
+    final selectedAccountId = await showChatAccountOverrideDialog(
+      context: context,
+      accounts: accounts
+          .map(
+            (account) => ChatAccountOverrideChoice(
+              id: account.id,
+              displayName: account.displayName,
+              connectorType: account.connectorType,
+            ),
+          )
+          .toList(growable: false),
+      selectedAccountId: _nextRequestAccountId,
+    );
+    if (selectedAccountId == null ||
+        !mounted ||
+        ref.read(activeConversationIdProvider) != conversationId ||
+        _effectiveRoutedModelIdentity(conversationId) !=
+            selectedModelIdentity) {
+      return;
+    }
+    final selectedAccount = accounts
+        .where((account) => account.id == selectedAccountId)
+        .firstOrNull;
+    setState(() {
+      _nextRequestAccountId = selectedAccount?.id;
+      _nextRequestAccountName = selectedAccount?.displayName;
+      _nextRequestAccountConversationId = selectedAccount == null
+          ? null
+          : conversationId;
+      _nextRequestAccountModelIdentity = selectedAccount == null
+          ? null
+          : selectedModelIdentity;
+    });
+  }
+
+  Assistant? _assistantForConversation(String? conversationId) {
+    final conversation = conversationId == null
+        ? null
+        : ref
+              .read(conversationsProvider)
+              .where((item) => item.id == conversationId)
+              .firstOrNull;
+    return resolveAssistantForSend(
+      conversationAssistantId: conversation?.assistantId,
+      sessionAssistant: ref.read(selectedAssistantProvider),
+      assistants: ref.read(assistantProvider),
+    );
+  }
+
+  (String, String, String)? _effectiveRoutedModelIdentity(
+    String? conversationId,
+  ) {
+    final entriesState = ref.read(providerEntriesProvider);
+    return _adapter.routedModelIdentityForAssistant(
+      _assistantForConversation(conversationId),
+      entriesState,
+    );
   }
 
   /// Called when models are reordered by drag-and-drop in the model panel.
@@ -178,7 +267,13 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final model = resolved;
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
-    setState(() => _selectedModelIndex = displayIdx);
+    setState(() {
+      _selectedModelIndex = displayIdx;
+      _nextRequestAccountId = null;
+      _nextRequestAccountName = null;
+      _nextRequestAccountConversationId = null;
+      _nextRequestAccountModelIdentity = null;
+    });
     // Restore per-model settings for this model
     SharedPreferences.getInstance().then((prefs) {
       try {
@@ -262,9 +357,9 @@ extension _ChatPageModelsExt on _ChatPageState {
     final convId = ref.read(activeConversationIdProvider);
     final conv = convId != null
         ? ref
-            .read(conversationsProvider)
-            .where((c) => c.id == convId)
-            .firstOrNull
+              .read(conversationsProvider)
+              .where((c) => c.id == convId)
+              .firstOrNull
         : null;
 
     // 1. Per-conversation model record (user choice or seeded assistant
@@ -322,12 +417,11 @@ extension _ChatPageModelsExt on _ChatPageState {
 
     final allSettings = _loadPerModelSettingsMap(prefs);
     final modelSettings = allSettings[modelName];
-    if (modelSettings
-        case {
-          'reasoningEnabled': bool re,
-          'reasoningEffort': String refEff,
-          'reasoningParamValues': Map<String, dynamic> rpv,
-        }) {
+    if (modelSettings case {
+      'reasoningEnabled': bool re,
+      'reasoningEffort': String refEff,
+      'reasoningParamValues': Map<String, dynamic> rpv,
+    }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
       // Restore reasoning effort enabled state (with default false)
       final bool ree =
@@ -365,38 +459,41 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEnabledProvider.notifier).state =
           reasoningToggle?.enabled ?? reasoningValues.isNotEmpty;
       ref.read(reasoningEffortEnabledProvider.notifier).state = effortEnabled;
-      ref.read(reasoningEffortProvider.notifier).state = effortParam != null &&
+      ref.read(reasoningEffortProvider.notifier).state =
+          effortParam != null &&
               (reasoningValues[effortParam.paramName]?.isNotEmpty ?? false)
           ? reasoningValues[effortParam.paramName]!
           : 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = reasoningValues;
     }
-    final savedCustomValues =
-        modelSettings is Map ? modelSettings['customParamValues'] : null;
-    ref.read(customParamValuesProvider.notifier).state =
-        savedCustomValues is Map
-            ? savedCustomValues.map(
-                (key, value) => MapEntry(key.toString(), value.toString()),
-              )
-            : _adapter.customParams.fold<Map<String, String>>(
-                <String, String>{},
-                (values, param) {
-                  final name = param.paramName;
-                  if (name.trim().isEmpty) return values;
-                  final value = param.type == 'json'
-                      ? param.defaultValue
-                      : param.options.isNotEmpty
-                          ? param.options.first
-                          : param.optionOrder.isEmpty &&
-                                  param.defaultValue.trim().isNotEmpty
-                              ? param.defaultValue
-                              : param.type == 'boolean'
-                                  ? 'true'
-                                  : '';
-                  if (value.isNotEmpty) values[name] = value;
-                  return values;
-                },
-              );
+    final savedCustomValues = modelSettings is Map
+        ? modelSettings['customParamValues']
+        : null;
+    ref
+        .read(customParamValuesProvider.notifier)
+        .state = savedCustomValues is Map
+        ? savedCustomValues.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          )
+        : _adapter.customParams.fold<Map<String, String>>(<String, String>{}, (
+            values,
+            param,
+          ) {
+            final name = param.paramName;
+            if (name.trim().isEmpty) return values;
+            final value = param.type == 'json'
+                ? param.defaultValue
+                : param.options.isNotEmpty
+                ? param.options.first
+                : param.optionOrder.isEmpty &&
+                      param.defaultValue.trim().isNotEmpty
+                ? param.defaultValue
+                : param.type == 'boolean'
+                ? 'true'
+                : '';
+            if (value.isNotEmpty) values[name] = value;
+            return values;
+          });
 
     // Heal sessions where the effort toggle is on but no effort value was
     // ever written to the map (the panel previously only saved explicitly
@@ -490,6 +587,10 @@ extension _ChatPageModelsExt on _ChatPageState {
       modelNames: _getModelNames(),
       selectedModelIndex: _selectedModelIndex,
       onModelSelected: _onModelSelected,
+      onAccountOverrideTap: _effectiveRoutedModelIdentity(activeId) != null
+          ? _chooseAccountOverride
+          : null,
+      accountOverrideName: _nextRequestAccountName,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
       customParams: _adapter.customParams,

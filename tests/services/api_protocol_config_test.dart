@@ -1,0 +1,611 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/tts_models.dart';
+import 'package:stroom/services/api_protocol_config.dart';
+import 'package:stroom/ai_gateway/ai_gateway_protocol_bridges.dart';
+
+void main() {
+  group('API protocol configuration', () {
+    test('audited connectors expose only implemented supplier APIs', () {
+      const expected = {
+        'github': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'ghe-copilot': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'gitlab-duo': {'openai.chat_completions'},
+        'codebuddy-cn': {'openai.chat_completions'},
+        'codebuddy-intl': {'openai.chat_completions'},
+        'workbuddy': {'openai.chat_completions'},
+        'openference': {'openai.chat_completions', 'openai.responses'},
+        'openference-api': {'openai.chat_completions', 'openai.responses'},
+        'cline': {'openai.chat_completions'},
+        'clinepass': {'openai.chat_completions'},
+        'trae': {'openai.chat_completions'},
+        'cloudflare-ai': {'openai.chat_completions'},
+        'aihorde': {'openai.chat_completions'},
+        'kilocode': {'openai.chat_completions'},
+        'qoder': {'openai.chat_completions'},
+        'opencode-go': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'opencode-zen': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'kimi-coding': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'vertex-partner': {'openai.chat_completions'},
+      };
+      for (final entry in expected.entries) {
+        expect(
+          supportedApiProtocolsForSupplier(
+            builtinDefaultApiProtocolForConnector(entry.key),
+            connectorType: entry.key,
+          ),
+          entry.value,
+          reason: entry.key,
+        );
+      }
+      expect(builtinDefaultApiProtocolForConnector('antigravity'),
+          kAntigravityProtocolId);
+      expect(
+        supportedApiProtocolsForSupplier(
+          kAntigravityProtocolId,
+          connectorType: 'antigravity',
+        ),
+        isEmpty,
+      );
+      for (final unsupported in const [
+        kAntigravityProtocolId,
+        'google.gemini.generate_content',
+        'openai.chat_completions',
+      ]) {
+        expect(
+          () => validateApiProtocolOverride(
+            unsupported,
+            supportedApiProtocolsForSupplier(
+              kAntigravityProtocolId,
+              connectorType: 'antigravity',
+            ),
+          ),
+          throwsArgumentError,
+          reason: unsupported,
+        );
+      }
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.responses',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'gitlab-duo',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'anthropic.messages',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'openference-api',
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+      'Codex defaults to Responses while OpenAI API keys stay Chat Completions',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('codex'),
+          'openai.responses',
+        );
+        expect(
+          builtinDefaultApiProtocolForConnector('openai-api'),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.responses',
+            connectorType: 'codex',
+          ),
+          {'openai.responses'},
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'openai-api',
+          ),
+          {'openai.chat_completions', 'openai.responses'},
+        );
+      },
+    );
+
+    test('ZCode CLI owns the local Chat Completions protocol', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('zcode-cli'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'zcode-cli',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.responses',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'zcode-cli',
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('1min.AI has one fixed provider-native protocol', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('oneminai'),
+        'oneminai.chat',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'oneminai.chat',
+          connectorType: 'oneminai',
+        ),
+        {'oneminai.chat'},
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.chat_completions',
+          supportedApiProtocolsForSupplier(
+            'oneminai.chat',
+            connectorType: 'oneminai',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        resolveApiProtocol(
+          supplierProtocol: null,
+          builtinDefault: builtinDefaultApiProtocolForConnector('oneminai'),
+        ),
+        'oneminai.chat',
+      );
+    });
+
+    test('Devin CLI ACP is separate from Devin Connect-RPC', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('devin-cli-agentic'),
+        'devin.acp',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'devin.acp',
+          connectorType: 'devin-cli-agentic',
+        ),
+        {'devin.acp'},
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('devin'),
+        'devin.connect_rpc',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'devin.connect_rpc',
+          connectorType: 'devin',
+        ),
+        {'devin.connect_rpc'},
+      );
+    });
+
+    test(
+      'Kimi Code OAuth uses supplier defaults and provider model overrides',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('kimi-coding'),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'kimi-coding',
+          ),
+          kCustomHttpApiProtocols,
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'kimi-coding',
+            ),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          resolveConnectorProtocol('openai.responses', 'kimi-coding'),
+          'openai.responses',
+          reason: 'the auth connector cannot replace supplier/model protocol',
+        );
+      },
+    );
+
+    test('Qwen Cloud formats are service-owned and model overrides win', () {
+      for (final connector in ['qwen-cloud', 'qwen-cloud-token-plan']) {
+        expect(
+          builtinDefaultApiProtocolForConnector(connector),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: connector,
+          ),
+          {'openai.chat_completions', 'openai.responses', 'anthropic.messages'},
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          resolveConnectorProtocol('anthropic.messages', connector),
+          'anthropic.messages',
+          reason: 'account key type cannot replace upstream protocol',
+        );
+      }
+    });
+
+    test(
+      'Vertex partner Claude model override wins within its supported route',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('vertex-partner'),
+          'openai.chat_completions',
+        );
+        const supported = {'anthropic.messages'};
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.chat_completions',
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'vertex-partner',
+            ),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          () => validateApiProtocolOverride('openai.responses', supported),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test(
+      'OpenCode account mode does not select supplier or model protocol',
+      () {
+        for (final connector in ['opencode-go', 'opencode-zen']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.chat_completions',
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              'openai.chat_completions',
+              connectorType: connector,
+            ),
+            {
+              'openai.chat_completions',
+              'openai.responses',
+              'anthropic.messages',
+            },
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: 'anthropic.messages',
+              supplierProtocol: 'openai.responses',
+              builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+            ),
+            'anthropic.messages',
+            reason:
+                'the model override wins without changing connector identity',
+          );
+          expect(
+            resolveConnectorProtocol('openai.responses', connector),
+            'openai.responses',
+          );
+        }
+      },
+    );
+
+    test(
+      'Command Code API-key mode keeps model protocols account-independent',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('command-code'),
+          'openai.chat_completions',
+        );
+        expect(
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'command-code',
+          ),
+          kCustomHttpApiProtocols,
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.responses',
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'command-code',
+            ),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          resolveConnectorProtocol('openai.responses', 'command-code'),
+          'openai.responses',
+          reason: 'the API-key account does not select a wire protocol',
+        );
+      },
+    );
+
+    test(
+      'GLM and MiniMax regional account IDs keep Chat protocol defaults',
+      () {
+        for (final connector in ['glm-cn', 'minimax-cn']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.chat_completions',
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              'anthropic.messages',
+              connectorType: connector,
+            ),
+            {'openai.chat_completions'},
+            reason: 'the account type cannot enable another upstream format',
+          );
+        }
+      },
+    );
+
+    test(
+      'xAI and Meta API keys default to their native Responses contract',
+      () {
+        for (final connector in ['xai', 'meta']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.responses',
+            reason: connector,
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              builtinDefaultApiProtocolForConnector(connector),
+              connectorType: connector,
+            ),
+            {'openai.responses'},
+            reason: connector,
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: null,
+              supplierProtocol: null,
+              builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+            ),
+            'openai.responses',
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: 'openai.responses',
+              supplierProtocol: 'openai.responses',
+            ),
+            'openai.responses',
+            reason: 'model protocol overrides remain upstream configuration',
+          );
+          expect(
+            resolveConnectorProtocol('openai.responses', connector),
+            'openai.responses',
+            reason: 'auth identity does not choose the protocol',
+          );
+        }
+      },
+    );
+
+    test('migrates legacy provider and model endpoint types on read', () {
+      final provider = ProviderConfigItem.fromMap({
+        'endpointType': 'anthropic',
+        'models': [
+          {'name': 'Claude', 'modelId': 'claude'},
+        ],
+      });
+      final model = ModelConfig.fromMap({
+        'name': 'Claude',
+        'modelId': 'claude',
+        'endpointType': 'openai',
+      });
+
+      expect(provider.apiProtocol, 'anthropic.messages');
+      expect(model.apiProtocolOverride, 'openai.chat_completions');
+      expect(
+        configuredApiProtocol(
+          modelOverride: model.apiProtocolOverride,
+          modelLegacyEndpointType: model.endpointType,
+          supplierProtocol: provider.apiProtocol,
+          supplierLegacyEndpointType: provider.endpointType,
+        ),
+        'openai.chat_completions',
+      );
+      expect(provider.toMap()['endpointType'], 'anthropic');
+      expect(provider.toMap()['apiProtocol'], 'anthropic.messages');
+      expect(model.toMap()['apiProtocolOverride'], 'openai.chat_completions');
+      expect(
+        ProviderConfigItem.fromMap(provider.toMap()).apiProtocol,
+        'anthropic.messages',
+      );
+      expect(
+        ModelConfig.fromMap(model.toMap()).apiProtocolOverride,
+        'openai.chat_completions',
+      );
+    });
+
+    test(
+      'resolves model override, supplier default, then built-in default',
+      () {
+        final provider = ProviderConfigItem(
+          apiProtocol: 'openai.responses',
+          models: [ModelConfig(name: 'A', modelId: 'a')],
+        );
+        expect(
+          resolveApiProtocol(
+            modelOverride: provider.models.single.apiProtocolOverride,
+            supplierProtocol: provider.apiProtocol,
+          ),
+          'openai.responses',
+        );
+
+        provider.models.single.apiProtocolOverride = 'anthropic.messages';
+        expect(
+          resolveApiProtocol(
+            modelOverride: provider.models.single.apiProtocolOverride,
+            supplierProtocol: provider.apiProtocol,
+          ),
+          'anthropic.messages',
+        );
+
+        provider.models.single.apiProtocolOverride = null;
+        provider.apiProtocol = null;
+        expect(
+          resolveApiProtocol(
+            modelOverride: provider.models.single.apiProtocolOverride,
+            supplierProtocol: provider.apiProtocol,
+          ),
+          'openai.chat_completions',
+        );
+      },
+    );
+
+    test('all three custom formats have registered runtime bridges', () {
+      for (final protocol in kCustomHttpApiProtocols) {
+        expect(AiGatewayProtocolBridges.forProtocol(protocol), isNotNull);
+      }
+    });
+
+    test('protocol remains independent of connector authentication type', () {
+      const selected = 'openai.responses';
+      expect(resolveConnectorProtocol(selected, 'openai-api'), selected);
+      expect(resolveConnectorProtocol(selected, 'claude'), selected);
+      expect(
+        resolveConnectorProtocol('google.gemini.generate_content', 'vertex'),
+        'google.gemini.generate_content',
+      );
+    });
+
+    test('keeps native suppliers on their declared protocol', () {
+      expect(
+        supportedApiProtocolsForSupplier(
+          'anthropic.messages',
+          connectorType: 'claude',
+        ),
+        {'anthropic.messages'},
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.responses',
+          supportedApiProtocolsForSupplier(
+            'anthropic.messages',
+            connectorType: 'claude',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'google.gemini.generate_content',
+          connectorType: 'gemini',
+        ),
+        {'google.gemini.generate_content'},
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('vertex'),
+        'google.gemini.generate_content',
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('vertex-partner'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'vertex-partner',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'google.gemini.generate_content',
+          connectorType: 'vertex',
+        ),
+        {'google.gemini.generate_content'},
+      );
+    });
+
+    test('limits built-in suppliers to their implemented API formats', () {
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'uncloseai',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'moonshot',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'openai-api',
+        ),
+        {'openai.chat_completions', 'openai.responses'},
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'openai-compatibility',
+        ),
+        kCustomHttpApiProtocols,
+      );
+    });
+
+    test('validates overrides against supplier supported protocols', () {
+      expect(
+        () => validateApiProtocolOverride('anthropic.messages', const {
+          'openai.chat_completions',
+        }),
+        throwsArgumentError,
+      );
+    });
+  });
+}

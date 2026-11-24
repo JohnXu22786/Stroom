@@ -536,6 +536,10 @@
   "chatAutoContinuePrompt": "Fahre fort, falls du noch nicht fertig bist.",
   "chatSearchCurrent": "Dieses Gespräch durchsuchen …",
   "chatSearchAll": "Alle Gespräche durchsuchen …",
+  "chatSearchCurrentMode": "Aktuelle Unterhaltung",
+  "chatSearchAllMode": "Alle Unterhaltungen",
+  "chatSearchRetry": "Suche erneut versuchen",
+  "chatSearchError": "Suche fehlgeschlagen",
   "searchPrevious": "Vorheriger Treffer",
   "searchNext": "Nächster Treffer",
   "searchClose": "Suche schließen",
@@ -5415,8 +5419,12 @@
   "bgTaskOcrRequestSizeExceeded": "Die OCR-Anfrage ist {encodedBytes} Byte groß und überschreitet das konfigurierte Limit von {budgetBytes} Byte.",
   "@bgTaskOcrRequestSizeExceeded": {
     "placeholders": {
-      "encodedBytes": {"type": "int"},
-      "budgetBytes": {"type": "int"}
+      "encodedBytes": {
+        "type": "int"
+      },
+      "budgetBytes": {
+        "type": "int"
+      }
     }
   },
   "bgTaskOcrError": "OCR fehlgeschlagen: {details}",
@@ -7177,12 +7185,1563 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "Der gespeicherte Temperaturwert liegt außerhalb von 0–2. Passe den Regler an oder deaktiviere die Option vor dem Speichern.",
-  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "@ocrSamplingTemperatureOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR temperature."
+  },
   "ocrSamplingTopPOutOfRange": "Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.",
-  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "@ocrSamplingTopPOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR top-P value."
+  },
   "ocrSamplingSliderRepairRequired": "Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "@ocrSamplingSliderRepairRequired": {
+    "description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."
+  },
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "Verwende die für diesen Anbieter konfigurierte Responses-URL, zum Beispiel /v1/responses. Stroom sendet die URL unverändert."
-
+  "providerResponsesEndpointHelp": "Verwende die für diesen Anbieter konfigurierte Responses-URL, zum Beispiel /v1/responses. Stroom sendet die URL unverändert.",
+  "llmAccountLabel": "Konto",
+  "llmAccountForThisRequest": "Konto für diese Anfrage",
+  "llmAccountUseModelGroup": "Modellgruppenrouting verwenden",
+  "llmAccountManagementTitle": "LLM-Konten und Modellgruppen",
+  "llmAccountAdd": "Konto hinzufügen",
+  "llmAccountEmpty": "Noch keine LLM-Konten.",
+  "llmAccountEditTitleAdd": "LLM-Konto hinzufügen",
+  "llmAccountEditTitleEdit": "LLM-Konto bearbeiten",
+  "traeAuthorizationTitle": "Trae SOLO verbinden",
+  "traeAuthorizationLoadError": "Anmeldeseite konnte nicht geladen werden. Abbrechen und erneut versuchen.",
+  "llmOcrAccountSyncFailed": "OCR-Kontosynchronisierung fehlgeschlagen. Prüfen Sie die Einstellungen in der Kontoverwaltung.",
+  "llmOcrAccountMigrationFailed": "OCR-Kontomigration fehlgeschlagen. Die ursprüngliche Konfiguration ist weiterhin vorhanden.",
+  "llmAccountsTab": "Konten",
+  "llmModelGroupsTab": "Modellgruppen",
+  "llmAccountsSummary": "Jedes Konto speichert eigene Zugangsdaten, Modellfunktionen, Kontingent- und Parallelitätsregeln. Unbekannte Kontingente bleiben unbekannt.",
+  "llmModelGroupsSummary": "Stabile Modellgruppen ordnen Stroom-Modellnamen Konten und Upstream-Modellen zu. Fallbacks bleiben innerhalb der Gruppe.",
+  "llmAccountName": "Kontoname",
+  "llmConnectorLabel": "Connector",
+  "llmProviderPresetLabel": "Anbietervoreinstellung",
+  "llmAuthenticationMethodLabel": "Authentifizierungsmethode",
+  "llmDefaultApiProtocolLabel": "Standard-API-Protokoll",
+  "llmConnectionStatusLabel": "Verbindungsstatus",
+  "llmConfigureModelLabel": "Zu konfigurierendes Modell",
+  "llmModelApiProtocolLabel": "Modell-API-Protokoll",
+  "llmUpstreamModelsCapabilitiesLabel": "Upstream-Modelle und Funktionen",
+  "llmModelGroupNameLabel": "Name der Modellgruppe",
+  "llmStableModelIdLabel": "Stabile Stroom-Modell-ID",
+  "llmPriorityTierLabel": "Prioritätsstufe",
+  "llmUpstreamModelLabel": "Upstream-Modell",
+  "llmSamePrioritySelectionLabel": "Auswahl unter Konten gleicher Priorität",
+  "llmFallbackScopeLabel": "Kontenübergreifender Fallback-Bereich",
+  "llmConcurrencyLimitLabel": "Parallelitätslimit",
+  "llmWindowModeLabel": "Fenstermodus",
+  "llmCalendarTimezoneLabel": "Kalenderzeitzone",
+  "llmValueLabel": "Wert",
+  "llmTypeLabel": "Typ",
+  "llmRemainingQuotaFloorLabel": "Mindestguthaben",
+  "llmWindowUsageCeilingLabel": "Nutzungsgrenze des Zeitfensters",
+  "llmImportZedCredentials": "API-Zugangsdaten aus Zed importieren",
+  "llmAddModelGroupTooltip": "Modellgruppe hinzufügen",
+  "llmNoModelGroups": "Noch keine Modellgruppen.",
+  "llmAccountPolicies": "Kontorichtlinien",
+  "llmQuotaConcurrencyPolicy": "Kontingent- und Parallelitätsrichtlinie",
+  "llmAccountAuthSource": "Authentifizierungsquelle: {source}",
+  "llmAccountRecentError": "Letzter Fehler: {error}",
+  "llmNoRecord": "Kein Eintrag",
+  "llmConnectorUnavailableForChat": "Dieser Connector wird von Chat nicht unterstützt.",
+  "llmAccountUnavailableInSelectors": "Modelle dieses Kontos erscheinen nicht in den Auswahlfeldern von Chat oder Task Flow.",
+  "llmModelsCapabilitiesHeading": "Modelle und Funktionen",
+  "llmNoModelsConfigured": "Keine Modelle konfiguriert",
+  "llmUsageQuotaHeading": "Nutzung und Kontingent",
+  "llmQuotaUnknown": "Kontingent unbekannt",
+  "llmQuotaLimitsHeading": "Kontingentgrenzen",
+  "llmLocalObservedUsageHeading": "Lokal erfasste Nutzung",
+  "llmUsageHistoryDisclaimer": "Lokale Statistik der letzten 62 Tage; sie entspricht nicht dem Anbieterguthaben.",
+  "llmLastRouteHeading": "Letzte Weiterleitung",
+  "llmMembersHeading": "Mitglieder",
+  "llmNoRoutableMembers": "Keine routbaren Kontomitglieder",
+  "llmLegacyMemberRequired": "Ein Mitglied muss erhalten bleiben, um die alte Konversationsmodellreferenz und Modell-ID zu bewahren.",
+  "llmAccountGroupLoadError": "Konto oder Modellgruppe konnte nicht geladen werden.",
+  "llmRetryLoad": "Erneut versuchen",
+  "llmGroupFallbackWithinMembers": "Die gespeicherte Gruppe erlaubt Fallbacks nur unter ihren Mitgliedern.",
+  "llmMixedGroupProtocolError": "Alle Mitglieder einer Modellreferenz müssen dasselbe Chatprotokoll verwenden.",
+  "llmAddMember": "Mitglied hinzufügen",
+  "llmNoGroupMembers": "Diese Modellgruppe enthält keine Mitglieder.",
+  "llmStableModelGroupHelp": "Die lokale Modell-ID hält bestehende Konversationen kompatibel. Fallback bleibt in dieser stabilen Gruppe.",
+  "llmSignInProvider": "Bei {provider} anmelden",
+  "llmOAuthInstructions": "Öffnen Sie die Autorisierung von {provider} und geben Sie den Code ein. Stroom speichert das Konto nach der Autorisierung.",
+  "llmOpenProviderAuthorization": "{provider} öffnen",
+  "llmAuthorizationSource": "Autorisierungsquelle: {source}",
+  "llmAccountDeleteFailed": "Konto konnte nicht gelöscht werden.",
+  "llmAccountDeleteCleanupFailed": "Konto gelöscht, aber die alte Konfiguration konnte nicht bereinigt werden.",
+  "llmSaveBeforeModelRefresh": "Speichern Sie Konto und Änderungen, bevor Sie den Modellkatalog aktualisieren.",
+  "llmRefreshModelCatalog": "Modellkatalog aktualisieren",
+  "llmReauthorize": "Erneut autorisieren",
+  "llmSave": "Speichern",
+  "llmCancel": "Abbrechen",
+  "llmDelete": "Löschen",
+  "llmEdit": "Bearbeiten",
+  "llmContinueKeychainScan": "Scan fortsetzen",
+  "llmImportCredentialsConfirmTitle": "Zugangsdaten für {provider} importieren?",
+  "llmImportThisAccount": "Dieses Konto importieren",
+  "llmImportedAccounts": "{count} Anbieterkonten sicher importiert.",
+  "llmSamePriorityStrategySummary": "Richtlinie für gleiche Priorität: {strategy}",
+  "llmKeepLegacyGroup": "Modellgruppe für ältere Konversationen behalten",
+  "llmGroupUsageSummary": "Gruppennutzung: {usage}",
+  "llmModelGroupSettings": "Einstellungen der Modellgruppe",
+  "llmAddModelGroupMemberTitle": "Modellgruppenmitglied hinzufügen",
+  "llmSavePolicy": "Richtlinie speichern",
+  "llmOpenferenceCatalogNote": "Verfügbare Modelle hängen vom Openference-Kontotarif ab. Ein Offlinekatalog bedeutet keine Berechtigung.",
+  "llmTestLocalCli": "Lokale {cli}-CLI testen",
+  "llmCheckLocalCodexCli": "Lokale Codex-CLI-Anmeldung prüfen",
+  "llmCliReady": "{cli}-CLI ist installiert und einsatzbereit.",
+  "llmCodexCliReady": "Codex-CLI ist angemeldet und einsatzbereit.",
+  "llmCheckZedKeychain": "Zed-Schlüsselbund prüfen?",
+  "llmRoutingPolicyTitle": "Routingrichtlinie für {target}",
+  "llmSupportedAuthRequired": "Wählen Sie vor dem Speichern eine unterstützte Authentifizierungsmethode.",
+  "llmTraeCallbackPrivacy": "Der Anmelde-Callback wird nur auf diesem Gerät empfangen und sicher gespeichert. Callback-URL und Browserverlauf werden nicht gespeichert.",
+  "llmCloudflareAccountIdLabel": "Cloudflare-Konto-ID",
+  "llmCloudflareAccountIdHint": "Die Konto-ID befindet sich rechts im Cloudflare-Dashboard.",
+  "llmDevinExecutablePathLabel": "Pfad zur offiziellen Devin-CLI-Datei",
+  "llmDevinExecutablePathHelp": "Kopieren Sie den vollständigen Pfad zur Devin-Datei aus dem offiziellen Installationsort.",
+  "llmExecutableIntegrityHint": "Stroom speichert den SHA-256-Wert dieser Datei und startet sie nicht, wenn sie verändert wurde.",
+  "llmDevinReauthTitle": "Offizielle Devin-CLI erneut anmelden",
+  "llmDevinReauthSubtitle": "Authentifizieren Sie die separate CLI-Anmeldung dieses Kontos erneut.",
+  "llmKeepOAuthClientSecretHelp": "Nur im sicheren Plattformspeicher; leer lassen, um das vorhandene OAuth-Clientgeheimnis zu behalten.",
+  "llmPublicOauthClientSecretHelp": "Nur im sicheren Plattformspeicher; öffentliche Clients können das Feld leer lassen.",
+  "llmGitlabApplicationsHint": "GitLab-Benutzereinstellungen → Applications",
+  "llmAzureDeploymentIdHelp": "Die Bereitstellungs-ID dient als eindeutige Upstream-Modell-ID dieses Kontos.",
+  "llmAzureApiVersionHelp": "Der Standard folgt der Azure-Modellkatalogkonfiguration.",
+  "llmAmazonQRegionLabel": "Amazon-Q-Developer-Region",
+  "llmQwenCloudRegionLabel": "Qwen-Cloud-Regions-ID",
+  "llmQwenCloudRegionHelp": "Der API-Schlüssel ist an eine Region gebunden. Unterstützt: ap-southeast-1, cn-beijing, eu-central-1, cn-hongkong, ap-northeast-1, us-east-1.",
+  "llmGoogleCloudProjectLabel": "Google-Cloud-Projekt-ID",
+  "llmModelCapabilitiesInputHint": "Eine pro Zeile: Modell-ID,streaming,vision,tools",
+  "llmGoogleOAuthPrerequisites": "Diese Verbindung verwendet Google Generative Language API OAuth. Erforderlich sind ein von Ihnen verwaltetes Google-Cloud-Projekt, die aktivierte Generative Language API und ein konfigurierter Desktop-OAuth-Client. Anfragen werden diesem Projekt berechnet; Code Assist und die AI-Studio-Webanmeldung werden nicht verwendet.",
+  "llmGitlabOAuthPrerequisites": "GitLab Duo OAuth erfordert eine registrierte GitLab-Anwendung mit Callback http://localhost:20128/callback und Berechtigung ai_features read_user. Geben Sie die Client-ID und je nach Anwendungstyp das Clientgeheimnis ein. Tokens werden sicher gespeichert und, falls unterstützt, aktualisiert. Ein PAT kann separat gewählt werden.",
+  "llmAmazonQOAuthPrerequisites": "Importieren Sie AWS-Builder-ID-OAuth-JSON mit refresh_token; access_token, clientId und clientSecret sind optional. Fehlen Clientdaten, registriert Stroom über AWS OIDC einen Client zum Aktualisieren des Tokens. Tokens werden direkt sicher gespeichert; Browser-Cookies werden nicht gelesen. Unterstützte Regionen: us-east-1 und eu-central-1.",
+  "llmTraeTokenSecurity": "SOLO verwendet den festen Trae-Dienstendpunkt und sendet nur das Cloud-IDE-JWT dorthin. Importierte Tokens laufen nach etwa 14 Tagen ab und müssen erneut eingegeben werden.",
+  "llmAccountUsageUsedLabel": "Verwendet",
+  "@llmAccountUsageUsedLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageRemainingLabel": "Verbleibend",
+  "@llmAccountUsageRemainingLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageTotalLabel": "Gesamt",
+  "@llmAccountUsageTotalLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountRemainingQuotaLabel": "Verbleibendes Kontingent:",
+  "@llmAccountRemainingQuotaLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountMetricUnitUnknown": "Unbekannte Einheit",
+  "@llmAccountMetricUnitUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilitySupported": "Unterstützt",
+  "@llmAccountCapabilitySupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnsupported": "Nicht unterstützt",
+  "@llmAccountCapabilityUnsupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnknown": "Unbekannt",
+  "@llmAccountCapabilityUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountQuotaReserveThreshold": "Mindestrestkontingent für {window}: {threshold}",
+  "@llmAccountQuotaReserveThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUsageCeilingThreshold": "Nutzungsobergrenze für {window}: {threshold}",
+  "@llmAccountUsageCeilingThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccountWithOAuth": "„{account}“ löschen, die OAuth-Autorisierung widerrufen und das Konto aus Modellgruppen entfernen?",
+  "@llmConfirmDeleteAccountWithOAuth": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccount": "„{account}“ löschen und das Konto aus Modellgruppen entfernen?",
+  "@llmConfirmDeleteAccount": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteModelGroup": "Routing für „{group}“ löschen? Modellreferenzen in vorhandenen Unterhaltungen bleiben unverändert.",
+  "@llmConfirmDeleteModelGroup": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportAccountSource": "„{account}“ aus dem lokalen Schlüsselbund in ein Stroom-{provider}-API-Konto importieren.",
+  "@llmKeychainImportAccountSource": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportExistingAccountNotice": "Dadurch wird der Schlüssel des Stroom-Kontos aktualisiert; Name, Modelle und Routing-Einstellungen bleiben erhalten.",
+  "@llmKeychainImportExistingAccountNotice": {
+    "description": "LLM account management UI text."
+  },
+  "llmKeychainImportSecurityNote": "Nach deiner Bestätigung liest Stroom die Zugangsdaten erneut ein und überprüft sie. Der Schlüssel wird nie in der Benutzeroberfläche angezeigt.",
+  "@llmKeychainImportSecurityNote": {
+    "description": "LLM account management UI text."
+  },
+  "llmProviderAuthorizationFailed": "Die Autorisierung bei {provider} ist fehlgeschlagen. Bitte starte die Anmeldung erneut.",
+  "@llmProviderAuthorizationFailed": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountConcurrencySummary": "Gleichzeitige Anfragen des Kontos: {value}",
+  "@llmAccountConcurrencySummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountGroupUsageSummary": "Lokale Nutzung der Modellgruppe: {usage}",
+  "@llmAccountGroupUsageSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "usage": {
+        "type": "String"
+      }
+    }
+  },
+  "llmPriorityTierValue": "Stufe {tier}",
+  "@llmPriorityTierValue": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "tier": {
+        "type": "int"
+      }
+    }
+  },
+  "llmGroupMemberSummary": "{upstream} · Priorität {priority} · Lokale ID {localId}",
+  "@llmGroupMemberSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "upstream": {
+        "type": "String"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "localId": {
+        "type": "String"
+      }
+    }
+  },
+  "llmNoAccountCanProcessModel": "Kein Konto kann {model} verarbeiten.",
+  "@llmNoAccountCanProcessModel": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "llmOAuthLimitationSaveMessage": "{limitation}\nWähle vor dem Speichern dieses Kontos eine unterstützte Authentifizierungsmethode aus.",
+  "@llmOAuthLimitationSaveMessage": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "limitation": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderEnterpriseCredentials": "Unternehmenszugangsdaten von {provider}",
+  "@llmProviderEnterpriseCredentials": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderSessionToken": "Sitzungstoken von {provider}",
+  "@llmProviderSessionToken": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderCredential": "Zugangsdaten von {provider}",
+  "@llmProviderCredential": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUiAccountSaving": "Das Speichern des Kontos ist fehlgeschlagen. Bitte überprüfen Sie Ihre Kontoinformationen und den sicheren Speicherstatus.",
+  "@llmAccountUiAccountSaving": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountDeletion": "Das Löschen des Kontos ist fehlgeschlagen.",
+  "@llmAccountUiAccountDeletion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccount": "Das Konto wurde gelöscht, aber die Bereinigung der alten Konfiguration ist fehlgeschlagen.",
+  "@llmAccountUiTheAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountWas": "Das Konto wurde gelöscht, aber die OAuth-Sperrung ist fehlgeschlagen. Um die Autorisierung zu widerrufen, gehen Sie bitte in die Kontoeinstellungen des Anbieters.",
+  "@llmAccountUiTheAccountWas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckZed": "Überprüfen Sie den Zed-Schlüsselanhänger?",
+  "@llmAccountUiCheckZed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMacOSMay": "macOS fragt möglicherweise Element für Element, ob Stroom beim Generieren eines importierbaren Manifests nach passenden Schlüsselbundeinträgen suchen darf.",
+  "@llmAccountUiMacOSMay": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisStep": "Durch diesen Schritt wird das Konto nicht gespeichert; Sie müssen die Konten, die Sie importieren möchten, später noch einzeln bestätigen.",
+  "@llmAccountUiThisStep": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepChecking": "Überprüfen Sie weiter",
+  "@llmAccountUiKeepChecking": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnableTo": "Der System-Schlüsselbund kann nicht gelesen werden. Bitte überprüfen Sie die Zugriffsberechtigungen für Ihren Systemschlüsselbund und versuchen Sie es erneut.",
+  "@llmAccountUiUnableTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoReadable": "Es wurden keine lesbaren Zed OpenAI-, Anthropic-, Google-, Mistral- oder xAI-Anmeldeinformationen gefunden.",
+  "@llmAccountUiNoReadable": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiProviderText": "Anbieter",
+  "@llmAccountUiProviderText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomWill": "Stroom wird die Anmeldeinformationen nach der Bestätigung erneut lesen und überprüfen. Der Schlüssel wird nicht in der Benutzeroberfläche angezeigt.",
+  "@llmAccountUiStroomWill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportThis": "Importieren Sie dieses Konto",
+  "@llmAccountUiImportThis": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsNot": "Anmeldeinformationen wurden nicht importiert. Möglicherweise wurde das Schlüsselbundelement geändert, der Zugriff wurde verweigert oder der sichere Speicher ist nicht verfügbar.",
+  "@llmAccountUiCredentialsNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseAdd": "Bitte fügen Sie zuerst Modelle zu Ihrem Konto hinzu und erstellen Sie dann eine Modellgruppe.",
+  "@llmAccountUiPleaseAdd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModel": "Die Modellgruppe konnte nicht gespeichert werden. Bitte bestätigen Sie, dass das entsprechende Upstream-Modell im Mitgliedskonto vorhanden ist.",
+  "@llmAccountUiTheModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroup": "Das Löschen der Modellgruppe ist fehlgeschlagen.",
+  "@llmAccountUiModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLLMAccount": "LLM-Konto und Modellgruppe",
+  "@llmAccountUiLLMAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupText": "Modellgruppe",
+  "@llmAccountUiModelGroupText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachAccount": "Jedes Konto speichert unabhängig voneinander Anmeldeinformationen, Modellfunktionen, Kontingente und Parallelitätsstrategien. Der unbekannte Betrag bleibt unbekannt.",
+  "@llmAccountUiEachAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportAPI": "Importieren Sie API-Anmeldeinformationen von Zed",
+  "@llmAccountUiImportAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRouting": "Die Routing-Richtlinie konnte nicht gespeichert werden.",
+  "@llmAccountUiTheRouting": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStableModel": "Stabile Modellgruppen ordnen Legacy-Sitzungsmodell-IDs optionalen Konten und Upstream-Modellen zu. Mitglieder können nur innerhalb dieser Gruppe ein Rollback durchführen.",
+  "@llmAccountUiStableModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddModel": "Modellgruppe hinzufügen",
+  "@llmAccountUiAddModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCode": "Die Autorisierung des Kimi-Codes ist fehlgeschlagen. Bitte versuchen Sie erneut, sich anzumelden.",
+  "@llmAccountUiKimiCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginTo": "Melden Sie sich bei Kimi Code CLI an",
+  "@llmAccountUiLoginTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenThe": "Öffnen Sie die Kimi-Bestätigungsseite und geben Sie den untenstehenden Code ein. Nach Abschluss der Autorisierung speichert Stroom das Konto automatisch.",
+  "@llmAccountUiOpenThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKimi": "Öffne Kimi",
+  "@llmAccountUiOpenKimi": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCode": "Die Kilo-Code-Autorisierung ist fehlgeschlagen. Versuchen Sie bitte erneut, sich anzumelden.",
+  "@llmAccountUiKiloCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginToKilo": "Melden Sie sich bei Kilo Code an",
+  "@llmAccountUiLoginToKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheKilo": "Öffnen Sie die Kilo-Code-Bestätigungsseite und geben Sie den Code ein. Nach Abschluss der Autorisierung speichert Stroom das Konto automatisch.",
+  "@llmAccountUiOpenTheKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKilo": "Öffnen Sie den Kilo-Code",
+  "@llmAccountUiOpenKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuse": "Die Meta Muse-Autorisierung ist fehlgeschlagen. Bitte versuchen Sie erneut, sich anzumelden.",
+  "@llmAccountUiMetaMuse": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginMeta": "Login-Meta-Muse-Code",
+  "@llmAccountUiLoginMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheMeta": "Öffnen Sie die Meta-Verifizierungsseite und geben Sie den untenstehenden Code ein. Nach Abschluss der Autorisierung speichert Stroom das Konto automatisch.",
+  "@llmAccountUiOpenTheMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenMeta": "Meta öffnen",
+  "@llmAccountUiOpenMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountOr": "Das Konto oder die Modellgruppe kann nicht gelesen werden.",
+  "@llmAccountUiTheAccountOr": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAnd": "Quoten- und Parallelitätsstrategie",
+  "@llmAccountUiQuotaAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAvailableModels": "Verfügbare Modelle hängen vom Openference-Kontoplan ab; Für den Offline-Modellkatalog ist keine Autorisierung erforderlich.",
+  "@llmAccountUiAvailableModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoRecord": "Keine Aufzeichnung",
+  "@llmAccountUiNoRecord": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoes": "ChatAdapter unterstützt diesen Connector derzeit nicht.",
+  "@llmAccountUiChatAdapterDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAccount": "Die Modellgruppe dieses Kontos wird nicht in der Chat- und TaskFlow-Modellauswahl angezeigt.",
+  "@llmAccountUiThisAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAnd": "Modelle und Fähigkeiten",
+  "@llmAccountUiModelsAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservation": "Lokale Beobachtungsnutzung",
+  "@llmAccountUiLocalObservation": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoLocal": "Keine lokalen Aufzeichnungen (letzte 62 Tage)",
+  "@llmAccountUiNoLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservationUsage": "Lokale Beobachtungsnutzung ist unbekannt (Routing-Datensatz kann nicht gelesen werden)",
+  "@llmAccountUiLocalObservationUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalStatistics": "Lokale Statistiken für die letzten 62 Tage stellen keinen Kontostand dar.",
+  "@llmAccountUiLocalStatistics": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndFallback": "Quoten- und Fallback-Strategie",
+  "@llmAccountUiQuotaAndFallback": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepOld": "Behalten Sie die alte Sitzungsmodellgruppe bei",
+  "@llmAccountUiKeepOld": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDeleteModel": "Modellgruppe löschen",
+  "@llmAccountUiDeleteModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocal": "Lokale kumulative Nutzung der Modellgruppe: unbekannt",
+  "@llmAccountUiModelGroupLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocalCumulative": "Lokale kumulative Nutzung der Modellgruppe: unbekannt (Routing-Datensatz kann nicht gelesen werden)",
+  "@llmAccountUiModelGroupLocalCumulative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCorresponding": "Die entsprechenden Mitglieder und lokalen Referenz-IDs der alten Sitzungsmodellreferenzen müssen beibehalten werden.",
+  "@llmAccountUiTheCorresponding": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThereAre": "Es gibt keine weiterleitbaren Kontomitglieder",
+  "@llmAccountUiThereAre": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHoursText": "5 Stunden",
+  "@llmAccountUiHoursText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyText": "täglich",
+  "@llmAccountUiDailyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyText": "wöchentlich",
+  "@llmAccountUiWeeklyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyText": "monatlich",
+  "@llmAccountUiMonthlyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMainWindow": "Verbleibender Restbetrag im Hauptfenster",
+  "@llmAccountUiMainWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRemaining": "Der verbleibende Betrag des Unterfensters",
+  "@llmAccountUiTheRemaining": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyQuota": "Verbleibendes Tageskontingent",
+  "@llmAccountUiDailyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyQuota": "Verbleibendes wöchentliches Kontingent",
+  "@llmAccountUiWeeklyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyQuota": "Verbleibendes monatliches Kontingent",
+  "@llmAccountUiMonthlyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeReview": "Verbleibendes Codeüberprüfungskontingent",
+  "@llmAccountUiCodeReview": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestText": "Anfrage",
+  "@llmAccountUiRequestText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityUnknown": "Fähigkeit unbekannt",
+  "@llmAccountUiAbilityUnknown": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatus": "Verbindungsstatus unbekannt",
+  "@llmAccountUiConnectionStatus": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReadyText": "fertig",
+  "@llmAccountUiReadyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSuspendedText": "Suspendiert",
+  "@llmAccountUiSuspendedText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReAuthentication": "Erneute Authentifizierung erforderlich",
+  "@llmAccountUiReAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConnection": "Der Verbindungsstatus ist unbekannt; Die Route kann weiterhin versuchen, eine Anfrage zu stellen. Bitte aktualisieren Sie den Status entsprechend dem Anfrageergebnis.",
+  "@llmAccountUiTheConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountsCan": "Konten können an ihrem Modellgruppenrouting teilnehmen.",
+  "@llmAccountUiAccountsCan": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountHas": "Das Konto wurde gesperrt und nimmt nicht am Routing teil.",
+  "@llmAccountUiTheAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountNeeds": "Das Konto muss erneut authentifiziert werden, bevor es am Routing teilnehmen kann.",
+  "@llmAccountUiTheAccountNeeds": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteCloud": "Fügen Sie Cloud-IDE-JWT ein",
+  "@llmAccountUiPasteCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeDevice": "Kilo-Code-Geräte-OAuth",
+  "@llmAccountUiKiloCodeDevice": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousFree": "Anonym (nur kostenlose Modelle)",
+  "@llmAccountUiAnonymousFree": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderAdministrator": "Der Qoder-Administrator konfiguriert OAuth",
+  "@llmAccountUiQoderAdministrator": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyDomestic": "CodeBuddy Domestic Device OAuth",
+  "@llmAccountUiCodeBuddyDomestic": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyInternational": "CodeBuddy International Device OAuth",
+  "@llmAccountUiCodeBuddyInternational": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWorkBuddyCLI": "WorkBuddy CLI-Geräte-OAuth",
+  "@llmAccountUiWorkBuddyCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyOAuth": "Legacy-OAuth (nicht unterstützt)",
+  "@llmAccountUiLegacyOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubscribeTo": "Abonnieren Sie OAuth",
+  "@llmAccountUiSubscribeTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleService": "Google-Dienstkonto",
+  "@llmAccountUiGoogleService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSAccess": "AWS Access + Secret Key (Sitzungstoken optional)",
+  "@llmAccountUiAWSAccess": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSDefault": "AWS-Standard-Anmeldeinformationskette",
+  "@llmAccountUiAWSDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSessionToken": "Sitzungstoken",
+  "@llmAccountUiSessionToken": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevin": "Offizielles unabhängiges Devin-CLI-Login",
+  "@llmAccountUiOfficialDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAI": "Legacy-AI-Studio-Relay (eingestellt)",
+  "@llmAccountUiLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoCertification": "Keine Zertifizierung",
+  "@llmAccountUiNoCertification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenVerification": "Verifizierungsseite öffnen",
+  "@llmAccountUiOpenVerification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUserProvided": "Vom Benutzer bereitgestellter Upstream-API-Schlüssel",
+  "@llmAccountUiUserProvided": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBedrock": "Vom Benutzer bereitgestellte statische Anmeldeinformationen für AWS Bedrock",
+  "@llmAccountUiAWSBedrock": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomDevin": "Die CLI-Anmeldekonfiguration von Stroom Devin wurde separat für dieses Konto erstellt",
+  "@llmAccountUiStroomDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacy": "Das alte AI Studio-Relay wurde eingestellt. Bitte verwenden Sie stattdessen den API-Schlüssel oder das unterstützte OAuth.",
+  "@llmAccountUiTheLegacy": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNativeCompatible": "Nativer kompatibler Endpunkt, keine Anmeldeinformationen",
+  "@llmAccountUiNativeCompatible": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamAuthentication": "Die Upstream-Authentifizierung ist fehlgeschlagen",
+  "@llmAccountUiUpstreamAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInsufficientUpstream": "Unzureichendes Upstream-Kontingent",
+  "@llmAccountUiInsufficientUpstream": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequests": "Upstream-Anfragen sind begrenzt",
+  "@llmAccountUiUpstreamRequests": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamConnection": "Die Upstream-Verbindung ist fehlgeschlagen",
+  "@llmAccountUiUpstreamConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamService": "Upstream-Dienstfehler",
+  "@llmAccountUiUpstreamService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRejects": "Upstream lehnt Anfrage ab",
+  "@llmAccountUiUpstreamRejects": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestCanceled": "Anfrage abgebrochen",
+  "@llmAccountUiRequestCanceled": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequest": "Die Upstream-Anfrage ist fehlgeschlagen",
+  "@llmAccountUiUpstreamRequest": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSameConnector": "Gleiches Connector-Konto",
+  "@llmAccountUiSameConnector": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCurrentModel": "Aktuelle Modellgruppe",
+  "@llmAccountUiCurrentModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeastUsed": "am wenigsten genutzt",
+  "@llmAccountUiLeastUsed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPollingText": "Umfrage",
+  "@llmAccountUiPollingText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeHigher": "Priorisieren Sie höhere Guthaben",
+  "@llmAccountUiPrioritizeHigher": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeConsumption": "Priorisieren Sie den Verbrauch niedriger Guthaben",
+  "@llmAccountUiPrioritizeConsumption": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddLLM": "LLM-Konto hinzufügen",
+  "@llmAccountUiAddLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEditLLM": "LLM-Konto bearbeiten",
+  "@llmAccountUiEditLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceProvider": "Standardeinstellung des Dienstanbieters",
+  "@llmAccountUiServiceProvider": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCustomOpenAI": "Benutzerdefinierter OpenAI-kompatibler Endpunkt",
+  "@llmAccountUiCustomOpenAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogIn": "Melden Sie sich bei Trae SOLO in Stroom an",
+  "@llmAccountUiLogIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginCallbacks": "Anmelderückrufe werden nur lokal empfangen und in den sicheren Anmeldeinformationsspeicher geschrieben; Es werden keine Rückrufadressen oder Browserverlauf gespeichert.",
+  "@llmAccountUiLoginCallbacks": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoesNot": "ChatAdapter unterstützt diesen Connector derzeit nicht. Nach dem Speichern wird die Modellgruppe des Kontos nicht in den Chat- und TaskFlow-Modellauswahlen angezeigt.",
+  "@llmAccountUiChatAdapterDoesNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuthenticationMethod": "Authentifizierungsmethode",
+  "@llmAccountUiAuthenticationMethod": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFindThe": "Suchen Sie die Konto-ID auf der rechten Seite des Cloudflare-Dashboards.",
+  "@llmAccountUiFindThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAPIKeys": "API-Schlüssel können als mehrere unabhängige Verbindungen hinzugefügt und über Modellgruppen abgefragt werden. Im anonymen Modus werden nur bestätigte kostenlose Modelle angezeigt und aufgerufen. Das Kontoverzeichnis wird nicht verwendet.",
+  "@llmAccountUiAPIKeys": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachCline": "Jeder Cline-API-Schlüssel muss als unabhängiges Konto gespeichert werden. Der Modellkatalog wird separat von Cline oder ClinePass aktualisiert; Der Katalog selbst bedeutet nicht, dass das Konto über eine Abonnementberechtigung verfügt.",
+  "@llmAccountUiEachCline": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyLaunch": "Starten Sie nur die offizielle Devin-CLI. Die Anmeldekonfiguration wird unabhängig von diesem Konto im Stroom-Anwendungsverzeichnis gespeichert; Der Devin-Login oder API-Schlüssel des Hosts wird nicht gelesen.",
+  "@llmAccountUiOnlyLaunch": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseThe": "Verwenden Sie die native Codex-CLI. Bitte führen Sie zuerst die Codex-Anmeldung im Terminal aus; Stroom liest oder speichert keine CLI-Anmeldedaten.",
+  "@llmAccountUiUseThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseTheNative": "Verwenden Sie den nativen ZCode-App-Server und den GLM-Codierungsplan. Bitte melden Sie sich bei Bedarf zuerst in der offiziellen ZCode-App an. Stroom liest oder speichert keine ZCode-Anmeldedaten.",
+  "@llmAccountUiUseTheNative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevinCLI": "Offizieller absoluter Pfad der ausführbaren Devin-CLI",
+  "@llmAccountUiOfficialDevinCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCopyThe": "Kopieren Sie den vollständigen Pfad zur ausführbaren Devin-Datei vom offiziellen Devin-Installationsort.",
+  "@llmAccountUiCopyThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRetrustCurrent": "Vertrauen Sie der aktuellen ausführbaren CLI-Datei erneut und aktualisieren Sie SHA-256",
+  "@llmAccountUiRetrustCurrent": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiIHave": "Ich habe diese ausführbare Datei über die offiziellen Devin-Kanäle installiert und ihr vertraut",
+  "@llmAccountUiIHave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomFixes": "Stroom behebt den SHA-256 der aktuellen Datei; weigert sich zu starten, wenn die Datei geändert wird.",
+  "@llmAccountUiStroomFixes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogBack": "Melden Sie sich erneut bei der offiziellen Devin-CLI an",
+  "@llmAccountUiLogBack": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReauthenticateThe": "Authentifizieren Sie die eigenständige CLI-Anmeldekonfiguration für dieses Konto erneut.",
+  "@llmAccountUiReauthenticateThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseSelect": "Bitte wählen Sie eine unterstützte Authentifizierungsmethode aus, bevor Sie dieses Konto speichern.",
+  "@llmAccountUiPleaseSelect": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacyAI": "Die alte AI Studio-Websitzungsverbindung wurde eingestellt. Bitte wählen Sie einen API-Schlüssel oder einen unterstützten OAuth aus und autorisieren Sie ihn erneut.",
+  "@llmAccountUiTheLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderOAuth": "Für Qoder OAuth muss der Dienstadministrator die vollständige OAuth-Autorisierung, das Token, die Benutzerinformations-URL und die Client-Anmeldeinformationen bereitstellen. Nur der DashScope-API-Schlüssel und vertrauliche OAuth-Anmeldeinformationen werden nach der Autorisierung im sicheren Speicher der Plattform gespeichert. Browser-Cookies werden nicht verwendet. Die Aktualisierungsgewährung ist im Upstream nicht definiert; Bitte autorisieren Sie erneut, wenn die Zugangsdaten ablaufen.",
+  "@llmAccountUiQoderOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubmitTo": "Nur an sicheren Plattformspeicher übermitteln; Lassen Sie das Feld leer, um das vorhandene OAuth-Client-Geheimnis beizubehalten.",
+  "@llmAccountUiSubmitTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterThe": "Geben Sie den persönlichen Qoder-Zugriffstoken ein, beginnend mit pt-. Wird über natives qodercli aufgerufen; Es wird nur Text-Chat unterstützt, Anrufer-Tools werden nicht unterstützt, Antworten werden gepuffert und zurückgegeben, wobei eine einzelne Anfrage maximal 45 Sekunden dauert.",
+  "@llmAccountUiEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitLabUser": "GitLab-Benutzereinstellungen → Anwendungen",
+  "@llmAccountUiGitLabUser": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlySaved": "Nur im plattformsicheren Speicher gespeichert; kann für öffentliche Kunden leer bleiben.",
+  "@llmAccountUiOnlySaved": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyStored": "Nur im plattformsicheren Speicher gespeichert.",
+  "@llmAccountUiOnlyStored": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitHubEnterprise": "Für GitHub Enterprise Cloud oder Server muss Copilot aktiviert sein und Geräte-OAuth zulassen. Verwenden Sie die HTTPS-Instanzadresse; Die Client-ID der OAuth-Anwendung kann vom Administrator bereitgestellt oder leer gelassen werden, um die öffentliche Client-ID zu verwenden.",
+  "@llmAccountUiGitHubEnterprise": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiClineUses": "Cline verwendet feste Service-Endpunkte",
+  "@llmAccountUiClineUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHorde": "AI Horde verwendet einen festen HTTPS-Chat-Endpunkt",
+  "@llmAccountUiAIHorde": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUncloseAIUses": "UncloseAI verwendet einen festen OpenAI Chat Completions-Endpunkt",
+  "@llmAccountUiUncloseAIUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeUses": "Kilo Code verwendet feste Service-Endpunkte",
+  "@llmAccountUiKiloCodeUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedService": "Fester Dienstendpunkt",
+  "@llmAccountUiFixedService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEndpointAddress": "Endpunktadresse (ausfüllen, falls für den Connector erforderlich)",
+  "@llmAccountUiEndpointAddress": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterAzure": "Geben Sie die Azure OpenAI-Ressource oder den Azure AI Foundry-Host ein. Bereitstellung und Version werden separat konfiguriert.",
+  "@llmAccountUiEnterAzure": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlank": "Lassen Sie das Feld leer, um den offiziellen Modellkatalog und die API-Endpunkte für diesen Kontotyp zu verwenden.",
+  "@llmAccountUiLeaveBlank": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPS": "HTTPS-API-Endpunkt mit Befehlscode behoben.",
+  "@llmAccountUiFixedHTTPS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSEndpoint": "HTTPS-Endpunkt mithilfe des Kilo-Code-Modell-Gateways behoben.",
+  "@llmAccountUiFixedHTTPSEndpoint": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSChat": "HTTPS-Chat-Completions-Endpunkt mithilfe von Cline behoben.",
+  "@llmAccountUiFixedHTTPSChat": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoAPI": "Es ist kein API-Schlüssel erforderlich. Der optionale Schlüssel dient nur zur Identifizierung.",
+  "@llmAccountUiNoAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeS": "Der anonyme Schlüssel oder Prioritäts-API-Schlüssel von AI Horde wird nur an den festen Chat-Service-Endpunkt gesendet.",
+  "@llmAccountUiAIHordeS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSOLOUses": "SOLO verwendet einen festen Trae-Service-Endpunkt; Senden Sie Cloud-IDE-JWT nur an diesen Endpunkt. Eingefügte Token müssen etwa 14 Tage später erneut eingegeben werden.",
+  "@llmAccountUiSOLOUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDeployment": "Die Bereitstellungs-ID wird als eindeutige Upstream-Modell-ID des Kontos verwendet.",
+  "@llmAccountUiTheDeployment": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDefault": "Der Standardwert wird gemäß dem Azure-Modellkatalog konfiguriert.",
+  "@llmAccountUiTheDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAmazonQ": "Amazon Q-Entwicklerregion",
+  "@llmAccountUiAmazonQ": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSRegion": "AWS-Region",
+  "@llmAccountUiAWSRegion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexArea": "Scheitelpunktbereich",
+  "@llmAccountUiVertexArea": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQwenCloud": "Qwen Cloud-Regions-ID",
+  "@llmAccountUiQwenCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleCloud": "Google Cloud-Projekt-ID",
+  "@llmAccountUiGoogleCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThePartner": "Das Partnermodell erfordert eine Projekt-ID; Das Dienstkonto kann automatisch aus der Projekt-ID des JSON gelesen werden.",
+  "@llmAccountUiThePartner": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCanBe": "Kann leer gelassen werden, um die project_id aus dem JSON-Dienstkonto zu verwenden.",
+  "@llmAccountUiCanBe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBuilder": "AWS Builder-ID, OAuth-Anmeldeinformationen, JSON",
+  "@llmAccountUiAWSBuilder": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAuthentication": "Diese Authentifizierungsmethode erfordert keine Eingabe von Anmeldeinformationen",
+  "@llmAccountUiThisAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSCredentials": "AWS-Anmeldeinformationen JSON",
+  "@llmAccountUiAWSCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceAccount": "Dienstkonto JSON",
+  "@llmAccountUiServiceAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeAPI": "AI Horde API-Schlüssel (optionale Priorität)",
+  "@llmAccountUiAIHordeAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsText": "Anmeldeinformationen",
+  "@llmAccountUiCredentialsText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteThe": "Fügen Sie das JWT selbst oder den vollständigen Anforderungsheaderwert „Cloud-IDE-JWT <token>“ ein. Importtokens werden nicht automatisch aktualisiert; Anmeldeinformationen für In-App-Trae-Anmeldungen werden automatisch aktualisiert, wenn sie ablaufen.",
+  "@llmAccountUiPasteThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGetThe": "Holen Sie sich den Benutzer-API-Schlüssel (crsr_… oder grok_…) von Cursor.com/dashboard/api. Cursor-IDE-Anmeldung wird nicht gelesen.",
+  "@llmAccountUiGetThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheOptional": "Der optionale AI Horde API Key erhöht nur die Warteschlangenpriorität (Kudos) und nicht die Modellberechtigungen. Wählen Sie „Keine Authentifizierung“, um den anonymen Modus zu verwenden.",
+  "@llmAccountUiTheOptional": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUsingThe": "Verwendung der AWS-Standardanmeldeinformationskette für die Ausführungsumgebung",
+  "@llmAccountUiUsingThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSavedIn": "Im plattformsicheren Speicher gespeichert",
+  "@llmAccountUiSavedIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankTo": "Lassen Sie das Feld leer, um die aktuellen Sicherheitsanmeldeinformationen beizubehalten",
+  "@llmAccountUiLeaveBlankTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDefaultAPI": "Standard-API-Protokoll",
+  "@llmAccountUiDefaultAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatusText": "Verbindungsstatus",
+  "@llmAccountUiConnectionStatusText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelTo": "Modell zum Konfigurieren",
+  "@llmAccountUiModelTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelAPI": "Modell-API-Protokoll",
+  "@llmAccountUiModelAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInheritAccount": "Standardvereinbarung des Kontos übernehmen",
+  "@llmAccountUiInheritAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamModels": "Upstream-Modelle und -Funktionen",
+  "@llmAccountUiUpstreamModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnePer": "Eine pro Zeile: Modell-ID, Streaming, Vision, Tools",
+  "@llmAccountUiOnePer": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelID": "Modell-ID und Kontextlänge stammen aus einem festen Katalog; andere Fähigkeiten bleiben unbekannt.",
+  "@llmAccountUiModelID": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousMode": "Der anonyme Modus erlaubt nur openrouter/free. Nachdem Sie das Konto verbunden haben, können Sie die Modelle im Kontoverzeichnis verwenden.",
+  "@llmAccountUiAnonymousMode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsCome": "Die Modelle stammen aus dem Kilo-Code-Verzeichnis. API-Schlüssel und Geräte-OAuth verwenden ihre eigenen gespeicherten Anmeldeinformationen.",
+  "@llmAccountUiModelsCome": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAndCapabilities": "Modelle und Funktionen stammen aus dem Upstream-Verzeichnis; Wählen Sie oben für jedes Modell die API-Protokolle aus, die es unterstützen soll.",
+  "@llmAccountUiModelsAndCapabilities": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiACPDoes": "ACP stellt keinen stabilen Modellkatalog bereit; Verwenden Sie das aktuelle Standardmodell der offiziellen CLI.",
+  "@llmAccountUiACPDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeCLI": "Kimi Code CLI öffnet nur das verifizierte Coding Plan-Modellverzeichnis.",
+  "@llmAccountUiKimiCodeCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGrokBuild": "Grok Build öffnet nur Kataloge verifizierter Abonnementmodelle.",
+  "@llmAccountUiGrokBuild": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiXAIOAuth": "xAI OAuth öffnet nur das Modellverzeichnis, das das Konto von der API erhalten hat.",
+  "@llmAccountUiXAIOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuseOAuth": "Meta Muse OAuth öffnet nur das Modellverzeichnis, das das Abonnementkonto von der API erhalten hat.",
+  "@llmAccountUiMetaMuseOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsComeFrom": "Die Modelle stammen aus dem Chat Completions-Katalog von Cline. Die Verfügbarkeit wird durch das entsprechende Konto und Abonnement bestimmt.",
+  "@llmAccountUiModelsComeFrom": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAbility": "Die Fähigkeit wird explizit deklariert; Verwenden Sie vision=false, um es explizit zu deaktivieren, und lassen Sie es unbekannt, wenn es nicht ausgefüllt ist.",
+  "@llmAccountUiTheAbility": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRefreshModel": "Modellverzeichnis aktualisieren",
+  "@llmAccountUiRefreshModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTestThe": "Testen Sie die lokale Auggie-CLI",
+  "@llmAccountUiTestThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckLocal": "Überprüfen Sie den Anmeldestatus der lokalen Codex-CLI",
+  "@llmAccountUiCheckLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelDirectory": "Das Modellverzeichnis kann nach dem Speichern des Kontos und der Änderungen aktualisiert werden.",
+  "@llmAccountUiTheModelDirectory": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLI": "Die Auggie-CLI-Modellliste lieferte keinen Katalog; fester Modellkatalog beibehalten.",
+  "@llmAccountUiAuggieCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAI": "Für Vertex AI Partners sind ein gültiges Google Cloud-Projekt und ein Dienstkonto mit Berechtigungen erforderlich. Express API Key unterstützt nur Gemini.",
+  "@llmAccountUiVertexAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedTo": "Das Modellverzeichnis konnte nicht gelesen werden. Bitte überprüfen Sie die Kontoauthentifizierung und Verbindungseinstellungen.",
+  "@llmAccountUiFailedTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLIIs": "Auggie CLI ist installiert und läuft.",
+  "@llmAccountUiAuggieCLIIs": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodexCLI": "Codex CLI ist angemeldet und betriebsbereit.",
+  "@llmAccountUiCodexCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAIPartners": "Für Vertex AI Partners ist eine gültige Projekt-ID erforderlich. Das Dienstkonto kann aus JSON gelesen werden und der API-Schlüssel muss an das Projekt gebunden sein.",
+  "@llmAccountUiVertexAIPartners": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedToSave": "Das Konto konnte nicht gespeichert werden. Bitte überprüfen Sie die Verbindungseinstellungen und versuchen Sie es erneut.",
+  "@llmAccountUiFailedToSave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTraeThe": "Trae Die Anmeldung ist nicht abgeschlossen. Bitte versuchen Sie es erneut oder verwenden Sie Cloud-IDE-JWT für den manuellen Import.",
+  "@llmAccountUiTraeThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnter": "Bitte geben Sie einen Kontonamen ein.",
+  "@llmAccountUiPleaseEnter": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterThe": "Bitte geben Sie den Cursor-Benutzer-API-Schlüssel ein, beginnend mit crsr_.",
+  "@llmAccountUiPleaseEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYour": "Bitte geben Sie Ihre GitLab Duo OAuth-Client-ID ein.",
+  "@llmAccountUiPleaseEnterYour": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterA": "Bitte geben Sie einen gültigen HTTPS-Qoder-OAuth-Administratorendpunkt ein.",
+  "@llmAccountUiPleaseEnterA": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterQODER": "Bitte geben Sie QODER_OAUTH_CLIENT_ID und das Client-Geheimnis ein.",
+  "@llmAccountUiPleaseEnterQODER": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValid": "Geben Sie einen gültigen Azure HTTPS-Ressourcenhost, eine Bereitstellungs-ID und eine API-Version ein.",
+  "@llmAccountUiPleaseEnterAValid": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidCloudflare": "Bitte geben Sie eine gültige Cloudflare-Konto-ID ein.",
+  "@llmAccountUiPleaseEnterAValidCloudflare": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCloudflareWorkers": "Cloudflare Workers AI stellt nur einen Katalog verifizierter fester Modelle bereit.",
+  "@llmAccountUiCloudflareWorkers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeAccounts": "Kimi Code-Konten können nur verifizierte Coding Plan-Modelle verwenden.",
+  "@llmAccountUiKimiCodeAccounts": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseRefresh": "Bitte aktualisieren Sie zuerst das Modellverzeichnis und wählen Sie das Protokoll in den unterstützten ApiProtocols aus.",
+  "@llmAccountUiPleaseRefresh": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityValues": "Fähigkeitswerte können nur wahr oder falsch sein.",
+  "@llmAccountUiAbilityValues": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCommandCode": "Die Funktionen des Befehlscodemodells können nur von Upstream-Verzeichnissen deklariert werden.",
+  "@llmAccountUiCommandCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidGitHub": "Bitte geben Sie eine gültige GitHub Enterprise HTTPS-Instanzadresse ein.",
+  "@llmAccountUiPleaseEnterAValidGitHub": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseFill": "Bitte geben Sie den vollständigen Pfad zur offiziellen ausführbaren Devin-CLI-Datei ein.",
+  "@llmAccountUiPleaseFill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseConfirm": "Bitte bestätigen Sie, dass diese ausführbare Datei vom offiziellen Devin-Installationskanal stammt.",
+  "@llmAccountUiPleaseConfirm": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheSelected": "Der ausgewählte CLI-Pfad ist ungültig oder nicht ausführbar.",
+  "@llmAccountUiTheSelected": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterTheAmazon": "Bitte geben Sie die JSON-Anmeldeinformationen für Amazon Q ein, die das Aktualisierungstoken für die AWS Builder-ID enthalten.",
+  "@llmAccountUiPleaseEnterTheAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidAmazon": "Bitte geben Sie gültige JSON-Anmeldeinformationen für Amazon Q OAuth und eine unterstützte Region ein.",
+  "@llmAccountUiPleaseEnterAValidAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAIStudio": "Ältere AI Studio-Websitzungsverbindungen wurden eingestellt. Bitte verwenden Sie stattdessen API Key oder unterstütztes OAuth.",
+  "@llmAccountUiLegacyAIStudio": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseProvide": "Bitte geben Sie die Google OAuth Desktop-Client-ID und das entsprechende Client-Geheimnis an.",
+  "@llmAccountUiPleaseProvide": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYourCredentials": "Bitte geben Sie Ihre Zugangsdaten ein.",
+  "@llmAccountUiPleaseEnterYourCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupName": "Name der Modellgruppe",
+  "@llmAccountUiModelGroupName": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountAnd": "Konto- und Upstream-Modell",
+  "@llmAccountUiAccountAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelGroup": "Die Modellgruppe hat derzeit keine Mitglieder.",
+  "@llmAccountUiTheModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalReferences": "Lokale Referenzen werden aus Kompatibilitätsgründen mit vorhandenen Sitzungsmodell-IDs verwendet. Kontomitglieder nehmen nur innerhalb dieser stabilen Gruppe an der Auswahl teil.",
+  "@llmAccountUiLocalReferences": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGroupMembers": "Gruppenmitglieder unter derselben Modellreferenz müssen dasselbe Chat-Protokoll verwenden.",
+  "@llmAccountUiGroupMembers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountHas": "Konto wurde gelöscht",
+  "@llmAccountUiAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOldSession": "Alte Sitzungsreferenz erforderliches Mitglied",
+  "@llmAccountUiOldSession": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemoveMember": "Mitglied entfernen",
+  "@llmAccountUiRemoveMember": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalModel": "Referenz-ID des lokalen Modells",
+  "@llmAccountUiLocalModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSamePriority": "Gleiche Prioritätsauswahl",
+  "@llmAccountUiSamePriority": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCrossAccount": "Kontoübergreifender Rollback-Bereich",
+  "@llmAccountUiCrossAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConcurrencyLimit": "Parallelitätslimit",
+  "@llmAccountUiConcurrencyLimit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankToIndicate": "Lassen Sie das Feld leer, um anzugeben, dass es keine Einschränkung gibt. Konto und Modellgruppe werden separat konfiguriert.",
+  "@llmAccountUiLeaveBlankToIndicate": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRollingWindow": "Rollfenster",
+  "@llmAccountUiRollingWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarWindow": "Kalenderfenster",
+  "@llmAccountUiCalendarWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarTime": "Kalenderzeitzone",
+  "@llmAccountUiCalendarTime": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiForExample": "Zum Beispiel Asia/Taipei oder UTC",
+  "@llmAccountUiForExample": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemainingCredit": "Verbleibender Kreditrahmen",
+  "@llmAccountUiRemainingCredit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWindowUsage": "Beschränkung der Fensternutzung",
+  "@llmAccountUiWindowUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedValue": "fester Wert",
+  "@llmAccountUiFixedValue": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPercentageText": "Prozentsatz",
+  "@llmAccountUiPercentageText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnitText": "Einheit",
+  "@llmAccountUiUnitText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConcurrency": "Die Obergrenze für die Parallelität muss eine positive ganze Zahl sein oder leer bleiben, um anzugeben, dass es keine Grenze gibt.",
+  "@llmAccountUiTheConcurrency": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCalendar": "Das Kalenderfenster muss mit der Zeitzone ausgefüllt werden.",
+  "@llmAccountUiTheCalendar": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndUsage": "Kontingent und Nutzungslimit dürfen nicht negativ sein; Der Prozentsatz darf 100 nicht überschreiten.",
+  "@llmAccountUiQuotaAndUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHourWindow": "5-Stunden-Fenster",
+  "@llmAccountUiHourWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDayWindow": "Tagesfenster",
+  "@llmAccountUiDayWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyWindow": "wöchentliches Fenster",
+  "@llmAccountUiWeeklyWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthWindow": "Monatsfenster",
+  "@llmAccountUiMonthWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmImportStoppedAfterLegacySyncFailure": "{count} Konto(s) importiert, aber die Synchronisierung der alten Konfiguration ist fehlgeschlagen.",
+  "@llmImportStoppedAfterLegacySyncFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmImportStoppedAfterCredentialFailure": "{count} Konto(s) importiert. Weitere Zugangsdaten wurden nicht importiert, weil sich der Schlüsselbundeintrag geändert hat, der Zugriff verweigert wurde oder der sichere Speicher nicht verfügbar ist.",
+  "@llmImportStoppedAfterCredentialFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmRequestUsedAccount": "Für diese Anfrage verwendetes Konto",
+  "@llmRequestUsedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmLastAttemptedAccount": "Zuletzt versuchtes Konto",
+  "@llmLastAttemptedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmRouteDecisionSessionAffinity": "Das zuletzt erfolgreiche Konto für diesen Chat verwenden",
+  "@llmRouteDecisionSessionAffinity": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSessionAffinityPersistenceFailed": "Die Kontinuität dieses Kontos konnte nicht gespeichert werden",
+  "@llmRouteDecisionSessionAffinityPersistenceFailed": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionExplicitAccountSelection": "Routing nach vom Benutzer ausgewähltem Konto",
+  "@llmRouteDecisionExplicitAccountSelection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSelectedAccountOutsideGroup": "Das ausgewählte Konto gehört nicht zur aktuellen Modellgruppe",
+  "@llmRouteDecisionSelectedAccountOutsideGroup": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConversationIdInvalid": "Die Dialog-ID ist ungültig und es wird keine Sitzungsaffinität verwendet.",
+  "@llmRouteDecisionConversationIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupMissing": "Für dieses Modell wurde keine stabile Modellgruppe gefunden",
+  "@llmRouteDecisionModelGroupMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupAmbiguous": "Dieses Modell ist gleichzeitig mit mehreren Modellgruppen verknüpft",
+  "@llmRouteDecisionModelGroupAmbiguous": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectorProtocolIncompatible": "Das Connector-Protokoll ist für dieses Chat-Modell nicht geeignet",
+  "@llmRouteDecisionConnectorProtocolIncompatible": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectionUnknown": "Verbindungsstatus unbekannt",
+  "@llmRouteDecisionConnectionUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountMissing": "Das Konto wurde gelöscht",
+  "@llmRouteDecisionAccountMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountIdInvalid": "Die Konto-ID ist ungültig",
+  "@llmRouteDecisionAccountIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountUnavailable": "Das Konto wurde gesperrt oder muss erneut verifiziert werden",
+  "@llmRouteDecisionAccountUnavailable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelMappingMismatch": "Das Konto ist dem ausgewählten Modell nicht zugeordnet",
+  "@llmRouteDecisionModelMappingMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelNotMapped": "Das entsprechende vorgelagerte Modell wurde im Konto nicht gefunden",
+  "@llmRouteDecisionModelNotMapped": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCapabilityMismatch": "Das Kontomodell unterstützt die für diese Anfrage erforderlichen Funktionen nicht",
+  "@llmRouteDecisionCapabilityMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionFallbackScope": "Der Rücksetzbereich erlaubt keinen Wechsel zu diesem Konnektor",
+  "@llmRouteDecisionFallbackScope": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCooldown": "Das Konto befindet sich noch in der Abkühlphase nach einem Fehler.",
+  "@llmRouteDecisionCooldown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConcurrencyLimit": "Das Konto oder die Modellgruppe hat die maximale Anzahl gleichzeitiger Verbindungen erreicht",
+  "@llmRouteDecisionConcurrencyLimit": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceUnknownOrIncomparable": "Das Limit ist unbekannt oder die Maßeinheiten sind nicht vergleichbar",
+  "@llmRouteDecisionBalanceUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceAtOrBelowReserve": "Der Saldo hat die Mindestreserve erreicht oder unterschreitet sie",
+  "@llmRouteDecisionBalanceAtOrBelowReserve": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnknown": "Die Nutzung ist unbekannt, daher kann die Beschränkung nicht beurteilt werden",
+  "@llmRouteDecisionUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveBalanceUnknown": "Das verbleibende Limit ist unbekannt, daher kann die Reservierungsgrenze nicht ermittelt werden.",
+  "@llmRouteDecisionReserveBalanceUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUnitUnknownOrIncomparable": "Die Maßeinheit der Reservelinie ist unbekannt oder nicht vergleichbar",
+  "@llmRouteDecisionReserveUnitUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknownOrIncomparable": "Das Gesamtlimit ist unbekannt oder nicht vergleichbar",
+  "@llmRouteDecisionReserveTotalUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknown": "Das Gesamtlimit ist unbekannt, daher kann die Reservierungsgrenze nicht berechnet werden",
+  "@llmRouteDecisionReserveTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUsageEstimateUnknown": "Die geschätzte Nutzung der Anforderung ist unbekannt, daher kann die Reservegrenze nicht ermittelt werden.",
+  "@llmRouteDecisionReserveUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveInFlightUsageUnknown": "Der Verbrauch der laufenden Anforderung ist unbekannt, daher kann die Reservierungsgrenze nicht ermittelt werden.",
+  "@llmRouteDecisionReserveInFlightUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloorReached": "Das verbleibende Limit liegt unter der Reservierungsgrenze",
+  "@llmRouteDecisionReserveFloorReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingReached": "Die Nutzungsobergrenze wurde erreicht",
+  "@llmRouteDecisionUsageCeilingReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingTotalUnknown": "Der Gesamtbetrag der Nutzung ist unbekannt, daher kann die Obergrenze nicht ermittelt werden",
+  "@llmRouteDecisionUsageCeilingTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnitMismatch": "Die Maßeinheit für die Nutzung stimmt nicht überein",
+  "@llmRouteDecisionUsageUnitMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageSourceMismatch": "Die Nutzungsmenge stimmt nicht mit der Datenquelle des Limits überein",
+  "@llmRouteDecisionUsageSourceMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageInFlightUnknown": "Der Verbrauch der laufenden Anforderung ist unbekannt, daher kann die Obergrenze nicht ermittelt werden",
+  "@llmRouteDecisionUsageInFlightUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageEstimateUnknown": "Die geschätzte Nutzung des Antrags ist unbekannt, daher kann die Obergrenze nicht bestimmt werden",
+  "@llmRouteDecisionUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionInvalidWindowTimezone": "Die Konfiguration der Zeitzone für das Limitfenster ist ungültig",
+  "@llmRouteDecisionInvalidWindowTimezone": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloor": "Das verbleibende Limit liegt unter der Reservierungsgrenze",
+  "@llmRouteDecisionReserveFloor": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeiling": "Die Nutzungsobergrenze wurde erreicht",
+  "@llmRouteDecisionUsageCeiling": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestAuthentication": "Die vorgelagerte Stelle hat die Authentifizierung abgelehnt",
+  "@llmRouteDecisionRequestAuthentication": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestQuotaExhausted": "Das vorgelagerte System meldet, dass das Limit erschöpft ist",
+  "@llmRouteDecisionRequestQuotaExhausted": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestRateLimited": "Upstream-Drosselung",
+  "@llmRouteDecisionRequestRateLimited": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestConnection": "Verbindung zum Upstream fehlgeschlagen",
+  "@llmRouteDecisionRequestConnection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestServer": "Fehler beim Upstream-Dienst",
+  "@llmRouteDecisionRequestServer": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestInvalidRequest": "Der Upstream hat die Anfrageparameter abgelehnt",
+  "@llmRouteDecisionRequestInvalidRequest": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestCancelled": "Anfrage wurde abgebrochen",
+  "@llmRouteDecisionRequestCancelled": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestOther": "Upstream-Anfrage fehlgeschlagen",
+  "@llmRouteDecisionRequestOther": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  }
 }

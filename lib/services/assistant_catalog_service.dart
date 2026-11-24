@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -96,28 +97,39 @@ class AssistantCatalogService {
   }
 
   Future<List<int>> _getBytes(Uri uri, {Uri? expectedOrigin}) async {
-    final response = await _client.get(
-      uri,
-      headers: const {
-        'Accept':
-            'application/json, application/yaml, text/markdown, text/plain'
-      },
-    );
+    final request = http.Request('GET', uri)
+      ..headers['Accept'] =
+          'application/json, application/yaml, text/markdown, text/plain';
+    final response = await _client.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      await response.stream.listen((_) {}).cancel();
       throw FormatException(
           'Download failed with HTTP ${response.statusCode}.');
     }
-    if (response.bodyBytes.length > _maxCatalogBytes) {
+    if (response.contentLength != null &&
+        response.contentLength! > _maxCatalogBytes) {
+      await response.stream.listen((_) {}).cancel();
       throw const FormatException(
           'Remote assistant files may not exceed 1 MiB.');
     }
     final finalUri = response.request?.url ?? uri;
     if (finalUri.scheme != 'https' ||
         (expectedOrigin != null && !_sameOrigin(expectedOrigin, finalUri))) {
+      await response.stream.listen((_) {}).cancel();
       throw const FormatException(
           'HTTPS redirects must stay on the same origin.');
     }
-    return response.bodyBytes;
+    final bytes = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in response.stream) {
+      length += chunk.length;
+      if (length > _maxCatalogBytes) {
+        throw const FormatException(
+            'Remote assistant files may not exceed 1 MiB.');
+      }
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   static Uri _validateHttpsUri(String value) {
@@ -142,31 +154,130 @@ class AssistantCatalogService {
         host.endsWith('.test')) {
       return true;
     }
+    final bytes = _parseIpAddress(host);
+    if (bytes == null) {
+      // Reject malformed numeric and IPv6-looking literals rather than
+      // letting alternate parser spellings reach the HTTP client.
+      return host.contains(':') ||
+          RegExp(
+            r'^(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*$',
+            caseSensitive: false,
+          ).hasMatch(host);
+    }
+    if (bytes.length == 4) return _isPrivateIpv4(bytes);
+    if (bytes.length != 16) return true;
+
+    // IPv4-mapped IPv6 addresses use the same private-range policy as IPv4.
+    final isIpv4Mapped = bytes.take(10).every((byte) => byte == 0) &&
+        bytes[10] == 0xff &&
+        bytes[11] == 0xff;
+    if (isIpv4Mapped) return _isPrivateIpv4(bytes.sublist(12));
+
+    final isUnspecified = bytes.every((byte) => byte == 0);
+    final isLoopback =
+        bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
+    final isUniqueLocal = bytes[0] & 0xfe == 0xfc;
+    final isLinkLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80;
+    final isSiteLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0;
+    final isMulticast = bytes[0] == 0xff;
+    final isDocumentation = bytes[0] == 0x20 &&
+        bytes[1] == 0x01 &&
+        bytes[2] == 0x0d &&
+        bytes[3] == 0xb8;
+    return isUnspecified ||
+        isLoopback ||
+        isUniqueLocal ||
+        isLinkLocal ||
+        isSiteLocal ||
+        isMulticast ||
+        isDocumentation;
+  }
+
+  static bool _isPrivateIpv4(List<int> octets) =>
+      octets[0] == 0 ||
+      octets[0] == 10 ||
+      octets[0] == 127 ||
+      octets[0] >= 224 ||
+      (octets[0] == 169 && octets[1] == 254) ||
+      (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] == 192 && octets[1] == 168) ||
+      (octets[0] == 100 && octets[1] >= 64 && octets[1] <= 127) ||
+      (octets[0] == 192 && octets[1] == 0 && octets[2] == 0) ||
+      (octets[0] == 192 && octets[1] == 0 && octets[2] == 2) ||
+      (octets[0] == 192 && octets[1] == 88 && octets[2] == 99) ||
+      (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19)) ||
+      (octets[0] == 198 && octets[1] == 51 && octets[2] == 100) ||
+      (octets[0] == 203 && octets[1] == 0 && octets[2] == 113);
+
+  static List<int>? _parseIpAddress(String host) {
+    if (!host.contains(':')) return _parseIpv4(host);
+
+    final compressionIndex = host.indexOf('::');
+    if (compressionIndex >= 0 &&
+        host.indexOf('::', compressionIndex + 2) >= 0) {
+      return null;
+    }
+    final leftText =
+        compressionIndex < 0 ? host : host.substring(0, compressionIndex);
+    final rightText =
+        compressionIndex < 0 ? '' : host.substring(compressionIndex + 2);
+    final left = _parseIpv6Groups(leftText);
+    final right = _parseIpv6Groups(rightText);
+    if (left == null || right == null) return null;
+    final groupCount = left.length + right.length;
+    if ((compressionIndex < 0 && groupCount != 8) ||
+        (compressionIndex >= 0 && groupCount >= 8)) {
+      return null;
+    }
+    final groups = [
+      ...left,
+      if (compressionIndex >= 0) ...List<int>.filled(8 - groupCount, 0),
+      ...right,
+    ];
+    return [
+      for (final group in groups) ...[group >> 8, group & 0xff],
+    ];
+  }
+
+  static List<int>? _parseIpv6Groups(String section) {
+    if (section.isEmpty) return const [];
+    final parts = section.split(':');
+    final groups = <int>[];
+    for (var index = 0; index < parts.length; index++) {
+      final part = parts[index];
+      if (part.isEmpty) return null;
+      if (part.contains('.')) {
+        if (index != parts.length - 1) return null;
+        final ipv4 = _parseIpv4(part);
+        if (ipv4 == null) return null;
+        groups
+          ..add((ipv4[0] << 8) | ipv4[1])
+          ..add((ipv4[2] << 8) | ipv4[3]);
+        continue;
+      }
+      if (part.length > 4 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(part)) {
+        return null;
+      }
+      groups.add(int.parse(part, radix: 16));
+    }
+    return groups;
+  }
+
+  static List<int>? _parseIpv4(String host) {
     final parts = host.split('.');
-    if (parts.length == 4 &&
-        parts.every((part) => int.tryParse(part) != null)) {
-      final octets = parts.map(int.parse).toList();
-      if (octets.any((part) => part < 0 || part > 255)) return true;
-      return octets[0] == 10 ||
-          octets[0] == 127 ||
-          octets[0] == 0 ||
-          (octets[0] == 169 && octets[1] == 254) ||
-          (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
-          (octets[0] == 192 && octets[1] == 168);
+    if (parts.length != 4) return null;
+    final octets = <int>[];
+    for (final part in parts) {
+      if (part.isEmpty ||
+          (part.length > 1 && part.startsWith('0')) ||
+          !RegExp(r'^\d+$').hasMatch(part)) {
+        return null;
+      }
+      final octet = int.tryParse(part);
+      if (octet == null || octet > 255) return null;
+      octets.add(octet);
     }
-    if (host.contains(':')) {
-      return host == '::1' ||
-          host.startsWith('fc') ||
-          host.startsWith('fd') ||
-          host.startsWith('fe8') ||
-          host.startsWith('fe9') ||
-          host.startsWith('fea') ||
-          host.startsWith('feb') ||
-          host.startsWith('::ffff:127.') ||
-          host.startsWith('::ffff:10.') ||
-          host.startsWith('::ffff:192.168.');
-    }
-    return false;
+    return octets;
   }
 
   static bool _sameOrigin(Uri a, Uri b) =>

@@ -7,6 +7,1479 @@ import 'app_localizations.dart';
 
 /// The translations for Chinese (`zh`).
 class AppLocalizationsZh extends AppLocalizations {
+
+  @override
+  String get llmAccountLabel => '账号';
+
+  @override
+  String get llmAccountForThisRequest => '本次请求使用账号';
+
+  @override
+  String get llmAccountUseModelGroup => '按模型组策略路由';
+
+  @override
+  String get llmAccountManagementTitle => 'LLM 账号与模型组';
+
+  @override
+  String get llmAccountAdd => '添加账号';
+
+  @override
+  String get llmAccountEmpty => '还没有 LLM 账号。';
+
+  @override
+  String get llmAccountEditTitleAdd => '添加 LLM 账号';
+
+  @override
+  String get llmAccountEditTitleEdit => '编辑 LLM 账号';
+
+  @override
+  String get traeAuthorizationTitle => '连接 Trae SOLO';
+
+  @override
+  String get traeAuthorizationLoadError => '登录页面加载失败，请取消后重试。';
+
+  @override
+  String get llmOcrAccountSyncFailed => 'OCR 账号同步失败；请在账号管理中检查配置。';
+
+  @override
+  String get llmOcrAccountMigrationFailed => 'OCR 账号迁移失败；原配置仍保留。';
+
+  @override
+  String get llmAccountsTab => '账号';
+
+  @override
+  String get llmModelGroupsTab => '模型组';
+
+  @override
+  String get llmAccountsSummary => '每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。';
+
+  @override
+  String get llmModelGroupsSummary => '稳定模型组把 Stroom 模型名映射到账号和上游模型。回退仅限本组成员。';
+
+  @override
+  String get llmAccountName => '账号名称';
+
+  @override
+  String get llmConnectorLabel => '连接器';
+
+  @override
+  String get llmProviderPresetLabel => '服务商预设';
+
+  @override
+  String get llmAuthenticationMethodLabel => '认证方式';
+
+  @override
+  String get llmDefaultApiProtocolLabel => '默认 API 协议';
+
+  @override
+  String get llmConnectionStatusLabel => '连接状态';
+
+  @override
+  String get llmConfigureModelLabel => '要配置的模型';
+
+  @override
+  String get llmModelApiProtocolLabel => '模型 API 协议';
+
+  @override
+  String get llmUpstreamModelsCapabilitiesLabel => '上游模型与能力';
+
+  @override
+  String get llmModelGroupNameLabel => '模型组名称';
+
+  @override
+  String get llmStableModelIdLabel => 'Stroom 稳定模型引用 ID';
+
+  @override
+  String get llmPriorityTierLabel => '优先级层级';
+
+  @override
+  String get llmUpstreamModelLabel => '上游模型';
+
+  @override
+  String get llmSamePrioritySelectionLabel => '同优先级账号选择';
+
+  @override
+  String get llmFallbackScopeLabel => '跨账号回退范围';
+
+  @override
+  String get llmConcurrencyLimitLabel => '并发上限';
+
+  @override
+  String get llmWindowModeLabel => '窗口模式';
+
+  @override
+  String get llmCalendarTimezoneLabel => '日历时区';
+
+  @override
+  String get llmValueLabel => '数值';
+
+  @override
+  String get llmTypeLabel => '类型';
+
+  @override
+  String get llmRemainingQuotaFloorLabel => '剩余额度保留线';
+
+  @override
+  String get llmWindowUsageCeilingLabel => '窗口使用量上限';
+
+  @override
+  String get llmImportZedCredentials => '从 Zed 导入 API 凭据';
+
+  @override
+  String get llmAddModelGroupTooltip => '添加模型组';
+
+  @override
+  String get llmNoModelGroups => '还没有模型组。';
+
+  @override
+  String get llmAccountPolicies => '账号策略';
+
+  @override
+  String get llmQuotaConcurrencyPolicy => '额度与并发策略';
+
+  @override
+  String llmAccountAuthSource(Object source) {
+    return '认证来源：$source';
+  }
+
+  @override
+  String llmAccountRecentError(Object error) {
+    return '最近错误：$error';
+  }
+
+  @override
+  String get llmNoRecord => '无记录';
+
+  @override
+  String get llmConnectorUnavailableForChat => '此连接器不支持 Chat。';
+
+  @override
+  String get llmAccountUnavailableInSelectors =>
+      '此账号的模型不会出现在 Chat 或 Task Flow 选择器中。';
+
+  @override
+  String get llmModelsCapabilitiesHeading => '模型与能力';
+
+  @override
+  String get llmNoModelsConfigured => '未配置模型';
+
+  @override
+  String get llmUsageQuotaHeading => '用量与额度';
+
+  @override
+  String get llmQuotaUnknown => '额度未知';
+
+  @override
+  String get llmQuotaLimitsHeading => '额度限制';
+
+  @override
+  String get llmLocalObservedUsageHeading => '本地观测用量';
+
+  @override
+  String get llmUsageHistoryDisclaimer => '最近 62 天的本地统计，不代表供应商余额。';
+
+  @override
+  String get llmLastRouteHeading => '最近一次路由';
+
+  @override
+  String get llmMembersHeading => '成员';
+
+  @override
+  String get llmNoRoutableMembers => '没有可路由的账号成员';
+
+  @override
+  String get llmLegacyMemberRequired => '需要保留该成员以兼容旧会话模型引用和本地模型 ID。';
+
+  @override
+  String get llmAccountGroupLoadError => '账号或模型组无法读取。';
+
+  @override
+  String get llmRetryLoad => '重试';
+
+  @override
+  String get llmGroupFallbackWithinMembers => '已保存的模型组只允许在组成员中回退。';
+
+  @override
+  String get llmMixedGroupProtocolError => '同一模型引用下的所有成员必须使用相同聊天协议。';
+
+  @override
+  String get llmAddMember => '添加成员';
+
+  @override
+  String get llmNoGroupMembers => '模型组当前没有成员。';
+
+  @override
+  String get llmStableModelGroupHelp => '本地模型 ID 用于兼容已有会话；回退仅限此稳定组。';
+
+  @override
+  String llmSignInProvider(Object provider) {
+    return '登录 $provider';
+  }
+
+  @override
+  String llmOAuthInstructions(Object provider) {
+    return '打开 $provider 授权页面并输入下方代码。授权完成后 Stroom 会保存账号。';
+  }
+
+  @override
+  String llmOpenProviderAuthorization(Object provider) {
+    return '打开 $provider';
+  }
+
+  @override
+  String llmAuthorizationSource(Object source) {
+    return '授权来源：$source';
+  }
+
+  @override
+  String get llmAccountDeleteFailed => '账号删除失败。';
+
+  @override
+  String get llmAccountDeleteCleanupFailed => '账号已删除，但旧配置清理失败。';
+
+  @override
+  String get llmSaveBeforeModelRefresh => '保存账号及修改后才能刷新模型目录。';
+
+  @override
+  String get llmRefreshModelCatalog => '刷新模型目录';
+
+  @override
+  String get llmReauthorize => '重新授权';
+
+  @override
+  String get llmSave => '保存';
+
+  @override
+  String get llmCancel => '取消';
+
+  @override
+  String get llmDelete => '删除';
+
+  @override
+  String get llmEdit => '编辑';
+
+  @override
+  String get llmContinueKeychainScan => '继续检查';
+
+  @override
+  String llmImportCredentialsConfirmTitle(Object provider) {
+    return '导入 $provider 凭据？';
+  }
+
+  @override
+  String get llmImportThisAccount => '导入此账号';
+
+  @override
+  String llmImportedAccounts(Object count) {
+    return '已安全导入 $count 个提供商账号。';
+  }
+
+  @override
+  String llmSamePriorityStrategySummary(Object strategy) {
+    return '同优先级策略：$strategy';
+  }
+
+  @override
+  String get llmKeepLegacyGroup => '为旧会话保留此模型组';
+
+  @override
+  String llmGroupUsageSummary(Object usage) {
+    return '模型组用量：$usage';
+  }
+
+  @override
+  String get llmModelGroupSettings => '模型组设置';
+
+  @override
+  String get llmAddModelGroupMemberTitle => '添加模型组成员';
+
+  @override
+  String get llmSavePolicy => '保存策略';
+
+  @override
+  String get llmOpenferenceCatalogNote =>
+      '可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。';
+
+  @override
+  String llmTestLocalCli(Object cli) {
+    return '测试本地 $cli CLI';
+  }
+
+  @override
+  String get llmCheckLocalCodexCli => '检查本地 Codex CLI 登录状态';
+
+  @override
+  String llmCliReady(Object cli) {
+    return '$cli CLI 已安装并可运行。';
+  }
+
+  @override
+  String get llmCodexCliReady => 'Codex CLI 已登录并可运行。';
+
+  @override
+  String get llmCheckZedKeychain => '检查 Zed 钥匙串？';
+
+  @override
+  String llmRoutingPolicyTitle(Object target) {
+    return '$target 路由策略';
+  }
+
+  @override
+  String get llmSupportedAuthRequired => '请选择受支持的认证方式后再保存此账号。';
+
+  @override
+  String get llmTraeCallbackPrivacy => '登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。';
+
+  @override
+  String get llmCloudflareAccountIdLabel => 'Cloudflare 账号 ID';
+
+  @override
+  String get llmCloudflareAccountIdHint =>
+      '在 Cloudflare Dashboard 右侧查找 Account ID。';
+
+  @override
+  String get llmDevinExecutablePathLabel => 'Devin 官方 CLI 可执行文件路径';
+
+  @override
+  String get llmDevinExecutablePathHelp => '从 Devin 官方安装位置复制可执行文件的完整路径。';
+
+  @override
+  String get llmExecutableIntegrityHint => 'Stroom 会记录此文件的 SHA-256；文件更改后将拒绝启动。';
+
+  @override
+  String get llmDevinReauthTitle => '重新登录官方 Devin CLI';
+
+  @override
+  String get llmDevinReauthSubtitle => '重新认证此账号独立的 CLI 登录。';
+
+  @override
+  String get llmKeepOAuthClientSecretHelp =>
+      '仅保存在平台安全存储中；留空以保留现有 OAuth client secret。';
+
+  @override
+  String get llmPublicOauthClientSecretHelp => '仅保存在平台安全存储中；公开客户端可留空。';
+
+  @override
+  String get llmGitlabApplicationsHint => 'GitLab 用户设置 → Applications';
+
+  @override
+  String get llmAzureDeploymentIdHelp => '部署 ID 会作为该账号唯一的上游模型 ID。';
+
+  @override
+  String get llmAzureApiVersionHelp => '默认值依据 Azure 模型目录配置。';
+
+  @override
+  String get llmAmazonQRegionLabel => 'Amazon Q Developer 区域';
+
+  @override
+  String get llmQwenCloudRegionLabel => 'Qwen Cloud 区域 ID';
+
+  @override
+  String get llmQwenCloudRegionHelp =>
+      'API Key 与区域绑定。支持：ap-southeast-1、cn-beijing、eu-central-1、cn-hongkong、ap-northeast-1、us-east-1。';
+
+  @override
+  String get llmGoogleCloudProjectLabel => 'Google Cloud 项目 ID';
+
+  @override
+  String get llmModelCapabilitiesInputHint =>
+      '每行一个：模型 ID,streaming,vision,tools';
+
+  @override
+  String get llmGoogleOAuthPrerequisites =>
+      '此连接使用 Google Generative Language API OAuth；需要你管理的 Google Cloud 项目、已启用 Generative Language API 和配置好的 OAuth Desktop 客户端。请求按此项目计费，不使用 Code Assist 或 AI Studio 网页登录。';
+
+  @override
+  String get llmGitlabOAuthPrerequisites =>
+      'GitLab Duo OAuth 需要先注册 GitLab 应用，并设置回调 http://localhost:20128/callback 和 ai_features read_user 权限。填写 client ID，并按应用类型填写 client secret。令牌会安全保存，并在支持时自动刷新。也可单独选择 PAT。';
+
+  @override
+  String get llmAmazonQOAuthPrerequisites =>
+      '导入 AWS Builder ID OAuth 凭据 JSON，必须包含 refresh_token；access_token、clientId 和 clientSecret 可选。缺少客户端凭据时，Stroom 会通过 AWS OIDC 注册客户端后刷新令牌。令牌直接写入安全存储；Stroom 不读取浏览器 Cookie。仅支持 us-east-1 和 eu-central-1。';
+
+  @override
+  String get llmTraeTokenSecurity =>
+      'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。导入的令牌约 14 天后过期，需要重新输入。';
+
+  @override
+  String get llmAccountUsageUsedLabel => '已用';
+
+  @override
+  String get llmAccountUsageRemainingLabel => '剩余';
+
+  @override
+  String get llmAccountUsageTotalLabel => '总额';
+
+  @override
+  String get llmAccountRemainingQuotaLabel => '剩余额度：';
+
+  @override
+  String get llmAccountMetricUnitUnknown => '单位未知';
+
+  @override
+  String get llmAccountCapabilitySupported => '支持';
+
+  @override
+  String get llmAccountCapabilityUnsupported => '不支持';
+
+  @override
+  String get llmAccountCapabilityUnknown => '未知';
+
+  @override
+  String llmAccountQuotaReserveThreshold(String window, String threshold) {
+    return '$window剩余额度保留线：$threshold';
+  }
+
+  @override
+  String llmAccountUsageCeilingThreshold(String window, String threshold) {
+    return '$window使用上限：$threshold';
+  }
+
+  @override
+  String llmConfirmDeleteAccountWithOAuth(String account) {
+    return '删除“$account”、撤销 OAuth 授权并从模型组中移除该账号？';
+  }
+
+  @override
+  String llmConfirmDeleteAccount(String account) {
+    return '删除“$account”并从模型组中移除该账号？';
+  }
+
+  @override
+  String llmConfirmDeleteModelGroup(String group) {
+    return '删除“$group”的路由配置？已有会话中的模型引用不会改写。';
+  }
+
+  @override
+  String llmKeychainImportAccountSource(String account, String provider) {
+    return '将从本机钥匙串导入“$account”到 Stroom 的 $provider API 账号。';
+  }
+
+  @override
+  String get llmKeychainImportExistingAccountNotice =>
+      '这会更新该 Stroom 账号的密钥，并保留名称、模型和路由设置。';
+
+  @override
+  String get llmKeychainImportSecurityNote =>
+      '确认后 Stroom 会重新读取并核对该凭据。密钥不会显示在界面中。';
+
+  @override
+  String llmProviderAuthorizationFailed(String provider) {
+    return '$provider 授权失败，请重新开始登录。';
+  }
+
+  @override
+  String llmAccountConcurrencySummary(String value) {
+    return '账号并发 $value';
+  }
+
+  @override
+  String llmAccountGroupUsageSummary(String usage) {
+    return '模型组本地累计用量：$usage';
+  }
+
+  @override
+  String llmPriorityTierValue(int tier) {
+    return '层级 $tier';
+  }
+
+  @override
+  String llmGroupMemberSummary(String upstream, int priority, String localId) {
+    return '$upstream · 优先级 $priority · 本地引用 $localId';
+  }
+
+  @override
+  String llmNoAccountCanProcessModel(String model) {
+    return '没有账号可处理 $model';
+  }
+
+  @override
+  String llmOAuthLimitationSaveMessage(String limitation) {
+    return '$limitation\n请选择受支持的认证方式后再保存此账号。';
+  }
+
+  @override
+  String llmProviderEnterpriseCredentials(String provider) {
+    return '$provider 企业服务凭据';
+  }
+
+  @override
+  String llmProviderSessionToken(String provider) {
+    return '$provider 用户提供的会话令牌';
+  }
+
+  @override
+  String llmProviderCredential(String provider) {
+    return '$provider 提供的凭据';
+  }
+
+  @override
+  String get llmAccountUiAccountSaving => '账号保存失败。请检查账号信息和安全存储状态。';
+
+  @override
+  String get llmAccountUiAccountDeletion => '账号删除失败。';
+
+  @override
+  String get llmAccountUiTheAccount => '账号已删除，但旧配置清理失败。';
+
+  @override
+  String get llmAccountUiTheAccountWas => '账号已删除，但 OAuth 撤销失败。请到提供商账户设置中撤销授权。';
+
+  @override
+  String get llmAccountUiCheckZed => '检查 Zed 钥匙串？';
+
+  @override
+  String get llmAccountUiMacOSMay =>
+      'macOS 可能在生成可导入清单时，逐项询问是否允许 Stroom 检查匹配的钥匙串条目。';
+
+  @override
+  String get llmAccountUiThisStep => '这一步不会保存账号；之后你仍需逐个确认要导入的账号。';
+
+  @override
+  String get llmAccountUiKeepChecking => '继续检查';
+
+  @override
+  String get llmAccountUiUnableTo => '无法读取系统钥匙串。请检查系统钥匙串访问权限后重试。';
+
+  @override
+  String get llmAccountUiNoReadable =>
+      '没有找到可读取的 Zed OpenAI、Anthropic、Google、Mistral 或 xAI 凭据。';
+
+  @override
+  String get llmAccountUiProviderText => '提供商';
+
+  @override
+  String get llmAccountUiStroomWill => '\n\nStroom 会在确认后重新读取并核对该凭据。密钥不会显示在界面中。';
+
+  @override
+  String get llmAccountUiImportThis => '导入此账号';
+
+  @override
+  String get llmAccountUiCredentialsNot => '凭据未导入。钥匙串项目可能已更改、访问被拒绝，或安全存储不可用。';
+
+  @override
+  String get llmAccountUiPleaseAdd => '请先在账号中添加模型，再创建模型组。';
+
+  @override
+  String get llmAccountUiTheModel => '模型组保存失败。请确认成员账号中存在对应的上游模型。';
+
+  @override
+  String get llmAccountUiModelGroup => '模型组删除失败。';
+
+  @override
+  String get llmAccountUiLLMAccount => 'LLM 账号与模型组';
+
+  @override
+  String get llmAccountUiModelGroupText => '模型组';
+
+  @override
+  String get llmAccountUiEachAccount => '每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。';
+
+  @override
+  String get llmAccountUiImportAPI => '从 Zed 导入 API 凭据';
+
+  @override
+  String get llmAccountUiTheRouting => '路由策略保存失败。';
+
+  @override
+  String get llmAccountUiStableModel =>
+      '稳定模型组把旧会话模型 ID 映射到可选账号和上游模型。成员只能在此组内回退。';
+
+  @override
+  String get llmAccountUiAddModel => '添加模型组';
+
+  @override
+  String get llmAccountUiKimiCode => 'Kimi Code 授权失败，请重新开始登录。';
+
+  @override
+  String get llmAccountUiLoginTo => '登录 Kimi Code CLI';
+
+  @override
+  String get llmAccountUiOpenThe =>
+      '打开 Kimi 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。';
+
+  @override
+  String get llmAccountUiOpenKimi => '打开 Kimi';
+
+  @override
+  String get llmAccountUiKiloCode => 'Kilo Code 授权失败，请重新开始登录。';
+
+  @override
+  String get llmAccountUiLoginToKilo => '登录 Kilo Code';
+
+  @override
+  String get llmAccountUiOpenTheKilo =>
+      '打开 Kilo Code 验证页面并输入代码。授权完成后 Stroom 会自动保存账号。';
+
+  @override
+  String get llmAccountUiOpenKilo => '打开 Kilo Code';
+
+  @override
+  String get llmAccountUiMetaMuse => 'Meta Muse 授权失败，请重新开始登录。';
+
+  @override
+  String get llmAccountUiLoginMeta => '登录 Meta Muse Code';
+
+  @override
+  String get llmAccountUiOpenTheMeta =>
+      '打开 Meta 验证页面并输入下面的代码。授权完成后 Stroom 会自动保存账号。';
+
+  @override
+  String get llmAccountUiOpenMeta => '打开 Meta';
+
+  @override
+  String get llmAccountUiTheAccountOr => '账号或模型组无法读取。';
+
+  @override
+  String get llmAccountUiQuotaAnd => '额度与并发策略';
+
+  @override
+  String get llmAccountUiAvailableModels =>
+      '可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。';
+
+  @override
+  String get llmAccountUiNoRecord => '无记录';
+
+  @override
+  String get llmAccountUiChatAdapterDoes => 'ChatAdapter 暂不支持此连接器。';
+
+  @override
+  String get llmAccountUiThisAccount => '该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。';
+
+  @override
+  String get llmAccountUiModelsAnd => '模型与能力';
+
+  @override
+  String get llmAccountUiLocalObservation => '本地观测用量';
+
+  @override
+  String get llmAccountUiNoLocal => '暂无本地记录（最近 62 天）';
+
+  @override
+  String get llmAccountUiLocalObservationUsage => '本地观测用量未知（路由记录无法读取）';
+
+  @override
+  String get llmAccountUiLocalStatistics => '最近 62 天的本地统计，不代表账号余额。';
+
+  @override
+  String get llmAccountUiQuotaAndFallback => '额度与回退策略';
+
+  @override
+  String get llmAccountUiKeepOld => '保留旧会话模型组';
+
+  @override
+  String get llmAccountUiDeleteModel => '删除模型组';
+
+  @override
+  String get llmAccountUiModelGroupLocal => '模型组本地累计用量：未知';
+
+  @override
+  String get llmAccountUiModelGroupLocalCumulative => '模型组本地累计用量：未知（路由记录无法读取）';
+
+  @override
+  String get llmAccountUiTheCorresponding => '需保留旧会话模型引用对应的成员及本地引用 ID。';
+
+  @override
+  String get llmAccountUiThereAre => '没有可路由的账号成员';
+
+  @override
+  String get llmAccountUiHoursText => '5 小时';
+
+  @override
+  String get llmAccountUiDailyText => '每日';
+
+  @override
+  String get llmAccountUiWeeklyText => '每周';
+
+  @override
+  String get llmAccountUiMonthlyText => '每月';
+
+  @override
+  String get llmAccountUiMainWindow => '主窗口额度剩余';
+
+  @override
+  String get llmAccountUiTheRemaining => '次窗口额度剩余';
+
+  @override
+  String get llmAccountUiDailyQuota => '每日额度剩余';
+
+  @override
+  String get llmAccountUiWeeklyQuota => '每周额度剩余';
+
+  @override
+  String get llmAccountUiMonthlyQuota => '每月额度剩余';
+
+  @override
+  String get llmAccountUiCodeReview => '代码审查额度剩余';
+
+  @override
+  String get llmAccountUiRequestText => '请求';
+
+  @override
+  String get llmAccountUiAbilityUnknown => '能力未知';
+
+  @override
+  String get llmAccountUiConnectionStatus => '连接状态未知';
+
+  @override
+  String get llmAccountUiReadyText => '就绪';
+
+  @override
+  String get llmAccountUiSuspendedText => '已暂停';
+
+  @override
+  String get llmAccountUiReAuthentication => '需要重新认证';
+
+  @override
+  String get llmAccountUiTheConnection => '连接状态未知；路由仍可尝试请求，请根据请求结果更新状态。';
+
+  @override
+  String get llmAccountUiAccountsCan => '账号可参与其模型组路由。';
+
+  @override
+  String get llmAccountUiTheAccountHas => '账号已暂停，不会参与路由。';
+
+  @override
+  String get llmAccountUiTheAccountNeeds => '账号需要重新认证后才会参与路由。';
+
+  @override
+  String get llmAccountUiPasteCloud => '粘贴 Cloud-IDE-JWT';
+
+  @override
+  String get llmAccountUiKiloCodeDevice => 'Kilo Code 设备 OAuth';
+
+  @override
+  String get llmAccountUiAnonymousFree => '匿名（仅免费模型）';
+
+  @override
+  String get llmAccountUiQoderAdministrator => 'Qoder 管理员配置 OAuth';
+
+  @override
+  String get llmAccountUiCodeBuddyDomestic => 'CodeBuddy 国内设备 OAuth';
+
+  @override
+  String get llmAccountUiCodeBuddyInternational =>
+      'CodeBuddy International 设备 OAuth';
+
+  @override
+  String get llmAccountUiWorkBuddyCLI => 'WorkBuddy CLI 设备 OAuth';
+
+  @override
+  String get llmAccountUiLegacyOAuth => '旧版 OAuth（不支持）';
+
+  @override
+  String get llmAccountUiSubscribeTo => '订阅 OAuth';
+
+  @override
+  String get llmAccountUiGoogleService => 'Google 服务账号';
+
+  @override
+  String get llmAccountUiAWSAccess =>
+      'AWS Access + Secret Key（Session Token 可选）';
+
+  @override
+  String get llmAccountUiAWSDefault => 'AWS 默认凭据链';
+
+  @override
+  String get llmAccountUiSessionToken => '会话令牌';
+
+  @override
+  String get llmAccountUiOfficialDevin => '官方 Devin CLI 独立登录';
+
+  @override
+  String get llmAccountUiLegacyAI => '旧版 AI Studio relay（已停用）';
+
+  @override
+  String get llmAccountUiNoCertification => '无认证';
+
+  @override
+  String get llmAccountUiOpenVerification => '打开验证页面';
+
+  @override
+  String get llmAccountUiUserProvided => '用户提供的上游 API Key';
+
+  @override
+  String get llmAccountUiAWSBedrock => 'AWS Bedrock 用户提供的静态凭据';
+
+  @override
+  String get llmAccountUiStroomDevin => 'Stroom 为此账号单独创建的 Devin CLI 登录配置';
+
+  @override
+  String get llmAccountUiTheLegacy =>
+      '旧版 AI Studio relay 已停用；请改用 API Key 或受支持的 OAuth。';
+
+  @override
+  String get llmAccountUiNativeCompatible => '本地兼容端点，无凭据';
+
+  @override
+  String get llmAccountUiUpstreamAuthentication => '上游认证失败';
+
+  @override
+  String get llmAccountUiInsufficientUpstream => '上游额度不足';
+
+  @override
+  String get llmAccountUiUpstreamRequests => '上游请求受限';
+
+  @override
+  String get llmAccountUiUpstreamConnection => '上游连接失败';
+
+  @override
+  String get llmAccountUiUpstreamService => '上游服务错误';
+
+  @override
+  String get llmAccountUiUpstreamRejects => '上游拒绝请求';
+
+  @override
+  String get llmAccountUiRequestCanceled => '请求已取消';
+
+  @override
+  String get llmAccountUiUpstreamRequest => '上游请求失败';
+
+  @override
+  String get llmAccountUiSameConnector => '同一连接器账号';
+
+  @override
+  String get llmAccountUiCurrentModel => '当前模型组';
+
+  @override
+  String get llmAccountUiLeastUsed => '最少使用';
+
+  @override
+  String get llmAccountUiPollingText => '轮询';
+
+  @override
+  String get llmAccountUiPrioritizeHigher => '优先较高余额';
+
+  @override
+  String get llmAccountUiPrioritizeConsumption => '优先消耗较低余额';
+
+  @override
+  String get llmAccountUiAddLLM => '添加 LLM 账号';
+
+  @override
+  String get llmAccountUiEditLLM => '编辑 LLM 账号';
+
+  @override
+  String get llmAccountUiServiceProvider => '服务商预设';
+
+  @override
+  String get llmAccountUiCustomOpenAI => '自定义 OpenAI 兼容端点';
+
+  @override
+  String get llmAccountUiLogIn => '在 Stroom 内登录 Trae SOLO';
+
+  @override
+  String get llmAccountUiLoginCallbacks => '登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。';
+
+  @override
+  String get llmAccountUiChatAdapterDoesNot =>
+      'ChatAdapter 暂不支持此连接器；保存后，该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。';
+
+  @override
+  String get llmAccountUiAuthenticationMethod => '认证方式';
+
+  @override
+  String get llmAccountUiFindThe => '在 Cloudflare Dashboard 右侧找到 Account ID。';
+
+  @override
+  String get llmAccountUiAPIKeys =>
+      'API Key 可添加为多个独立连接并通过模型组轮询。匿名模式只显示并调用已确认的免费模型；不会使用账号目录。';
+
+  @override
+  String get llmAccountUiEachCline =>
+      '每个 Cline API Key 需保存为独立账号。模型目录按 Cline 或 ClinePass 分开刷新；目录本身不代表账号拥有订阅授权。';
+
+  @override
+  String get llmAccountUiOnlyLaunch =>
+      '仅启动官方 devin CLI。登录配置保存在此账号独立的 Stroom 应用目录；不会读取主机 Devin 登录或 API key。';
+
+  @override
+  String get llmAccountUiUseThe =>
+      '使用本机 Codex CLI。请先在终端运行 codex login；Stroom 不读取或保存 CLI 登录数据。';
+
+  @override
+  String get llmAccountUiUseTheNative =>
+      '使用本机 ZCode app-server 和 GLM Coding Plan。需要时请先在官方 ZCode 应用中登录；Stroom 不读取或保存 ZCode 登录数据。';
+
+  @override
+  String get llmAccountUiOfficialDevinCLI => '官方 Devin CLI 可执行文件绝对路径';
+
+  @override
+  String get llmAccountUiCopyThe => '从 Devin 官方安装位置复制 devin 可执行文件的完整路径。';
+
+  @override
+  String get llmAccountUiRetrustCurrent => '重新信任当前 CLI 可执行文件并更新 SHA-256';
+
+  @override
+  String get llmAccountUiIHave => '我已从 Devin 官方渠道安装并信任此可执行文件';
+
+  @override
+  String get llmAccountUiStroomFixes => 'Stroom 固定当前文件的 SHA-256；文件改变后会拒绝启动。';
+
+  @override
+  String get llmAccountUiLogBack => '重新登录官方 Devin CLI';
+
+  @override
+  String get llmAccountUiReauthenticateThe => '重新认证此账号的独立 CLI 登录配置。';
+
+  @override
+  String get llmAccountUiPleaseSelect => '请选择受支持的认证方式后再保存此账号。';
+
+  @override
+  String get llmAccountUiTheLegacyAI =>
+      '旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。';
+
+  @override
+  String get llmAccountUiQoderOAuth =>
+      'Qoder OAuth 需要服务管理员提供完整的 OAuth authorize、token、user-info URL 和 client credentials。授权后只将 DashScope API key 与敏感 OAuth 凭据保存在平台安全存储中；不会使用浏览器 Cookie。上游未定义 refresh grant；凭据失效时请重新授权。';
+
+  @override
+  String get llmAccountUiSubmitTo => '只提交到平台安全存储；留空以保留现有 OAuth client secret。';
+
+  @override
+  String get llmAccountUiEnterThe =>
+      '输入以 pt- 开头的 Qoder Personal Access Token。通过本机 qodercli 调用；仅支持文本聊天，不支持调用方 tools，响应会缓冲后返回，单次请求最多 45 秒。';
+
+  @override
+  String get llmAccountUiGitLabUser => 'GitLab 用户设置 → Applications';
+
+  @override
+  String get llmAccountUiOnlySaved => '仅保存在平台安全存储；公开客户端可留空。';
+
+  @override
+  String get llmAccountUiOnlyStored => '只保存在平台安全存储中。';
+
+  @override
+  String get llmAccountUiGitHubEnterprise =>
+      'GitHub Enterprise Cloud 或 Server 必须启用 Copilot，并允许 device OAuth。使用 HTTPS 实例地址；OAuth 应用客户端 ID 可由管理员提供，留空时使用公开客户端 ID。';
+
+  @override
+  String get llmAccountUiClineUses => 'Cline 使用固定服务端点';
+
+  @override
+  String get llmAccountUiAIHorde => 'AI Horde 使用固定 HTTPS Chat 端点';
+
+  @override
+  String get llmAccountUiUncloseAIUses =>
+      'UncloseAI 使用固定 OpenAI Chat Completions 端点';
+
+  @override
+  String get llmAccountUiKiloCodeUses => 'Kilo Code 使用固定服务端点';
+
+  @override
+  String get llmAccountUiFixedService => '固定服务端点';
+
+  @override
+  String get llmAccountUiEndpointAddress => '端点地址（连接器需要时填写）';
+
+  @override
+  String get llmAccountUiEnterAzure =>
+      '输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。';
+
+  @override
+  String get llmAccountUiLeaveBlank => '留空以使用此账号类型的官方模型目录和 API 端点。';
+
+  @override
+  String get llmAccountUiFixedHTTPS => '使用 Command Code 的固定 HTTPS API 端点。';
+
+  @override
+  String get llmAccountUiFixedHTTPSEndpoint => '使用 Kilo Code 模型网关的固定 HTTPS 端点。';
+
+  @override
+  String get llmAccountUiFixedHTTPSChat =>
+      '使用 Cline 的固定 HTTPS Chat Completions 端点。';
+
+  @override
+  String get llmAccountUiNoAPI => '无需 API key；可选 key 仅用于身份标识。';
+
+  @override
+  String get llmAccountUiAIHordeS => 'AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。';
+
+  @override
+  String get llmAccountUiSOLOUses =>
+      'SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。';
+
+  @override
+  String get llmAccountUiTheDeployment => '部署 ID 会作为该账号唯一的上游模型 ID。';
+
+  @override
+  String get llmAccountUiTheDefault => '默认值根据 Azure 模型目录配置。';
+
+  @override
+  String get llmAccountUiAmazonQ => 'Amazon Q Developer 区域';
+
+  @override
+  String get llmAccountUiAWSRegion => 'AWS 区域';
+
+  @override
+  String get llmAccountUiVertexArea => 'Vertex 区域';
+
+  @override
+  String get llmAccountUiQwenCloud => 'Qwen Cloud 区域 ID';
+
+  @override
+  String get llmAccountUiGoogleCloud => 'Google Cloud 项目 ID';
+
+  @override
+  String get llmAccountUiThePartner =>
+      '伙伴模型需要项目 ID；服务账号可从 JSON 的 project_id 自动读取。';
+
+  @override
+  String get llmAccountUiCanBe => '可留空以使用服务账号 JSON 中的 project_id。';
+
+  @override
+  String get llmAccountUiAWSBuilder => 'AWS Builder ID OAuth 凭据 JSON';
+
+  @override
+  String get llmAccountUiThisAuthentication => '该认证方式无需输入凭据';
+
+  @override
+  String get llmAccountUiAWSCredentials => 'AWS 凭据 JSON';
+
+  @override
+  String get llmAccountUiServiceAccount => '服务账号 JSON';
+
+  @override
+  String get llmAccountUiAIHordeAPI => 'AI Horde API Key（可选优先级）';
+
+  @override
+  String get llmAccountUiCredentialsText => '凭据';
+
+  @override
+  String get llmAccountUiPasteThe =>
+      '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。';
+
+  @override
+  String get llmAccountUiGetThe =>
+      '从 cursor.com/dashboard/api 获取 User API Key（crsr_… 或 grok_…）。不会读取 Cursor IDE 登录。';
+
+  @override
+  String get llmAccountUiTheOptional =>
+      '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。';
+
+  @override
+  String get llmAccountUiUsingThe => '使用运行环境的 AWS 默认凭据链';
+
+  @override
+  String get llmAccountUiSavedIn => '保存在平台安全存储中';
+
+  @override
+  String get llmAccountUiLeaveBlankTo => '留空以保留当前安全凭据';
+
+  @override
+  String get llmAccountUiDefaultAPI => '默认 API 协议';
+
+  @override
+  String get llmAccountUiConnectionStatusText => '连接状态';
+
+  @override
+  String get llmAccountUiModelTo => '要配置的模型';
+
+  @override
+  String get llmAccountUiModelAPI => '模型 API 协议';
+
+  @override
+  String get llmAccountUiInheritAccount => '继承账号默认协议';
+
+  @override
+  String get llmAccountUiUpstreamModels => '上游模型与能力';
+
+  @override
+  String get llmAccountUiOnePer => '每行一个：模型 ID,streaming,vision,tools';
+
+  @override
+  String get llmAccountUiModelID => '模型 ID 和上下文长度来自固定目录；其他能力保持未知。';
+
+  @override
+  String get llmAccountUiAnonymousMode =>
+      '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。';
+
+  @override
+  String get llmAccountUiModelsCome =>
+      '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。';
+
+  @override
+  String get llmAccountUiModelsAndCapabilities =>
+      '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。';
+
+  @override
+  String get llmAccountUiACPDoes => 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。';
+
+  @override
+  String get llmAccountUiKimiCodeCLI =>
+      'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。';
+
+  @override
+  String get llmAccountUiGrokBuild => 'Grok Build 仅开放已验证的订阅模型目录。';
+
+  @override
+  String get llmAccountUiXAIOAuth => 'xAI OAuth 仅开放该账号从 API 获取的模型目录。';
+
+  @override
+  String get llmAccountUiMetaMuseOAuth =>
+      'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。';
+
+  @override
+  String get llmAccountUiModelsComeFrom =>
+      '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。';
+
+  @override
+  String get llmAccountUiTheAbility => '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。';
+
+  @override
+  String get llmAccountUiRefreshModel => '刷新模型目录';
+
+  @override
+  String get llmAccountUiTestThe => '测试本地 Auggie CLI';
+
+  @override
+  String get llmAccountUiCheckLocal => '检查本地 Codex CLI 登录状态';
+
+  @override
+  String get llmAccountUiTheModelDirectory => '保存账号和修改后可刷新模型目录。';
+
+  @override
+  String get llmAccountUiAuggieCLI => 'Auggie CLI model list 未返回目录；已保留固定模型目录。';
+
+  @override
+  String get llmAccountUiVertexAI =>
+      'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。';
+
+  @override
+  String get llmAccountUiFailedTo => '模型目录读取失败，请检查账号认证和连接设置。';
+
+  @override
+  String get llmAccountUiAuggieCLIIs => 'Auggie CLI 已安装并可运行。';
+
+  @override
+  String get llmAccountUiCodexCLI => 'Codex CLI 已登录并可运行。';
+
+  @override
+  String get llmAccountUiVertexAIPartners =>
+      'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。';
+
+  @override
+  String get llmAccountUiFailedToSave => '保存账号失败，请检查连接设置后重试。';
+
+  @override
+  String get llmAccountUiTraeThe => 'Trae 登录未完成，请重试或使用 Cloud-IDE-JWT 手动导入。';
+
+  @override
+  String get llmAccountUiPleaseEnter => '请输入账号名称。';
+
+  @override
+  String get llmAccountUiPleaseEnterThe =>
+      '请输入以 crsr_ 开头的 Cursor User API Key。';
+
+  @override
+  String get llmAccountUiPleaseEnterYour => '请输入 GitLab Duo OAuth client ID。';
+
+  @override
+  String get llmAccountUiPleaseEnterA => '请输入有效的 HTTPS Qoder OAuth 管理员端点。';
+
+  @override
+  String get llmAccountUiPleaseEnterQODER =>
+      '请输入 QODER_OAUTH_CLIENT_ID 和 client secret。';
+
+  @override
+  String get llmAccountUiPleaseEnterAValid =>
+      '请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidCloudflare =>
+      '请输入有效的 Cloudflare Account ID。';
+
+  @override
+  String get llmAccountUiCloudflareWorkers =>
+      'Cloudflare Workers AI 仅提供已验证的固定模型目录。';
+
+  @override
+  String get llmAccountUiKimiCodeAccounts =>
+      'Kimi Code 账号只能使用已验证的 Coding Plan 模型。';
+
+  @override
+  String get llmAccountUiPleaseRefresh =>
+      '请先刷新该模型目录，并选择其 supportedApiProtocols 中的协议。';
+
+  @override
+  String get llmAccountUiAbilityValues => '能力值只能是 true 或 false。';
+
+  @override
+  String get llmAccountUiCommandCode => 'Command Code 模型能力只能由上游目录声明。';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidGitHub =>
+      '请输入有效的 GitHub Enterprise HTTPS 实例地址。';
+
+  @override
+  String get llmAccountUiPleaseFill => '请填写官方 Devin CLI 可执行文件的完整路径。';
+
+  @override
+  String get llmAccountUiPleaseConfirm => '请确认此可执行文件来自 Devin 官方安装渠道。';
+
+  @override
+  String get llmAccountUiTheSelected => '所选 CLI 路径无效或不可执行。';
+
+  @override
+  String get llmAccountUiPleaseEnterTheAmazon =>
+      '请输入包含 AWS Builder ID refresh token 的 Amazon Q 凭据 JSON。';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidAmazon =>
+      '请输入有效的 Amazon Q OAuth 凭据 JSON 和受支持区域。';
+
+  @override
+  String get llmAccountUiLegacyAIStudio =>
+      '旧版 AI Studio 网页会话连接已停用，请改用 API Key 或受支持的 OAuth。';
+
+  @override
+  String get llmAccountUiPleaseProvide =>
+      '请提供 Google OAuth Desktop client ID 和对应的 client secret。';
+
+  @override
+  String get llmAccountUiPleaseEnterYourCredentials => '请输入凭据。';
+
+  @override
+  String get llmAccountUiModelGroupName => '模型组名称';
+
+  @override
+  String get llmAccountUiAccountAnd => '账号与上游模型';
+
+  @override
+  String get llmAccountUiTheModelGroup => '模型组当前没有成员。';
+
+  @override
+  String get llmAccountUiLocalReferences =>
+      '本地引用用于兼容已有会话模型 ID；账号成员只会在这个稳定组内参与选择。';
+
+  @override
+  String get llmAccountUiGroupMembers => '同一模型引用下的组成员必须使用相同聊天协议。';
+
+  @override
+  String get llmAccountUiAccountHas => '账号已删除';
+
+  @override
+  String get llmAccountUiOldSession => '旧会话引用所需成员';
+
+  @override
+  String get llmAccountUiRemoveMember => '移除成员';
+
+  @override
+  String get llmAccountUiLocalModel => '本地模型引用 ID';
+
+  @override
+  String get llmAccountUiSamePriority => '同优先级选择';
+
+  @override
+  String get llmAccountUiCrossAccount => '跨账号回退范围';
+
+  @override
+  String get llmAccountUiConcurrencyLimit => '并发上限';
+
+  @override
+  String get llmAccountUiLeaveBlankToIndicate => '留空表示不限制；账号和模型组分别配置。';
+
+  @override
+  String get llmAccountUiRollingWindow => '滚动窗口';
+
+  @override
+  String get llmAccountUiCalendarWindow => '日历窗口';
+
+  @override
+  String get llmAccountUiCalendarTime => '日历时区';
+
+  @override
+  String get llmAccountUiForExample => '例如 Asia/Taipei 或 UTC';
+
+  @override
+  String get llmAccountUiRemainingCredit => '剩余额度保留线';
+
+  @override
+  String get llmAccountUiWindowUsage => '窗口使用量上限';
+
+  @override
+  String get llmAccountUiFixedValue => '固定值';
+
+  @override
+  String get llmAccountUiPercentageText => '百分比';
+
+  @override
+  String get llmAccountUiUnitText => '单位';
+
+  @override
+  String get llmAccountUiTheConcurrency => '并发上限必须是正整数，或留空表示不限。';
+
+  @override
+  String get llmAccountUiTheCalendar => '日历窗口需要填写时区。';
+
+  @override
+  String get llmAccountUiQuotaAndUsage => '额度和使用上限必须是非负数；百分比不能超过 100。';
+
+  @override
+  String get llmAccountUiHourWindow => '5 小时窗口';
+
+  @override
+  String get llmAccountUiDayWindow => '日窗口';
+
+  @override
+  String get llmAccountUiWeeklyWindow => '周窗口';
+
+  @override
+  String get llmAccountUiMonthWindow => '月窗口';
+
+  @override
+  String llmImportStoppedAfterLegacySyncFailure(int count) {
+    return '已导入 $count 个账号，但旧配置同步失败。';
+  }
+
+  @override
+  String llmImportStoppedAfterCredentialFailure(int count) {
+    return '已导入 $count 个账号；后续凭据未导入，因为钥匙串项目已更改、访问被拒绝或安全存储不可用。';
+  }
+
+  @override
+  String get llmRequestUsedAccount => '本轮使用账号';
+
+  @override
+  String get llmLastAttemptedAccount => '最后尝试账号';
+
+  @override
+  String get llmRouteDecisionSessionAffinity => '沿用此对话最近成功的账号';
+
+  @override
+  String get llmRouteDecisionSessionAffinityPersistenceFailed => '本次账号连续性未能保存';
+
+  @override
+  String get llmRouteDecisionExplicitAccountSelection => '按用户选择的账号路由';
+
+  @override
+  String get llmRouteDecisionSelectedAccountOutsideGroup => '所选账号不属于当前模型组';
+
+  @override
+  String get llmRouteDecisionConversationIdInvalid => '对话标识无效，未使用会话亲和';
+
+  @override
+  String get llmRouteDecisionModelGroupMissing => '没有找到此模型的稳定模型组';
+
+  @override
+  String get llmRouteDecisionModelGroupAmbiguous => '此模型同时关联多个模型组';
+
+  @override
+  String get llmRouteDecisionConnectorProtocolIncompatible => '连接器协议不适用于此聊天模型';
+
+  @override
+  String get llmRouteDecisionConnectionUnknown => '连接状态未知';
+
+  @override
+  String get llmRouteDecisionAccountMissing => '账号已删除';
+
+  @override
+  String get llmRouteDecisionAccountIdInvalid => '账号标识无效';
+
+  @override
+  String get llmRouteDecisionAccountUnavailable => '账号已暂停或需要重新认证';
+
+  @override
+  String get llmRouteDecisionModelMappingMismatch => '账号没有映射到所选模型';
+
+  @override
+  String get llmRouteDecisionModelNotMapped => '账号中找不到对应的上游模型';
+
+  @override
+  String get llmRouteDecisionCapabilityMismatch => '账号模型不支持此请求所需能力';
+
+  @override
+  String get llmRouteDecisionFallbackScope => '回退范围不允许切换到此连接器';
+
+  @override
+  String get llmRouteDecisionCooldown => '账号仍在故障冷却期';
+
+  @override
+  String get llmRouteDecisionConcurrencyLimit => '账号或模型组已达到并发上限';
+
+  @override
+  String get llmRouteDecisionBalanceUnknownOrIncomparable => '额度未知或计量单位不可比较';
+
+  @override
+  String get llmRouteDecisionBalanceAtOrBelowReserve => '余额已达到或低于保留线';
+
+  @override
+  String get llmRouteDecisionUsageUnknown => '使用量未知，无法判断限制';
+
+  @override
+  String get llmRouteDecisionReserveBalanceUnknown => '剩余额度未知，无法判断保留线';
+
+  @override
+  String get llmRouteDecisionReserveUnitUnknownOrIncomparable =>
+      '保留线计量单位未知或不可比较';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknownOrIncomparable => '额度总量未知或不可比较';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknown => '额度总量未知，无法计算保留线';
+
+  @override
+  String get llmRouteDecisionReserveUsageEstimateUnknown => '请求用量估算未知，无法判断保留线';
+
+  @override
+  String get llmRouteDecisionReserveInFlightUsageUnknown =>
+      '进行中的请求用量未知，无法判断保留线';
+
+  @override
+  String get llmRouteDecisionReserveFloorReached => '剩余额度低于保留线';
+
+  @override
+  String get llmRouteDecisionUsageCeilingReached => '已达到使用上限';
+
+  @override
+  String get llmRouteDecisionUsageCeilingTotalUnknown => '使用总额未知，无法判断上限';
+
+  @override
+  String get llmRouteDecisionUsageUnitMismatch => '使用量计量单位不匹配';
+
+  @override
+  String get llmRouteDecisionUsageSourceMismatch => '使用量与额度数据来源不匹配';
+
+  @override
+  String get llmRouteDecisionUsageInFlightUnknown => '进行中的请求用量未知，无法判断上限';
+
+  @override
+  String get llmRouteDecisionUsageEstimateUnknown => '请求用量估算未知，无法判断上限';
+
+  @override
+  String get llmRouteDecisionInvalidWindowTimezone => '额度窗口时区配置无效';
+
+  @override
+  String get llmRouteDecisionReserveFloor => '剩余额度低于保留线';
+
+  @override
+  String get llmRouteDecisionUsageCeiling => '已达到使用上限';
+
+  @override
+  String get llmRouteDecisionRequestAuthentication => '上游拒绝了认证';
+
+  @override
+  String get llmRouteDecisionRequestQuotaExhausted => '上游报告额度耗尽';
+
+  @override
+  String get llmRouteDecisionRequestRateLimited => '上游限流';
+
+  @override
+  String get llmRouteDecisionRequestConnection => '连接上游失败';
+
+  @override
+  String get llmRouteDecisionRequestServer => '上游服务错误';
+
+  @override
+  String get llmRouteDecisionRequestInvalidRequest => '上游拒绝了请求参数';
+
+  @override
+  String get llmRouteDecisionRequestCancelled => '请求已取消';
+
+  @override
+  String get llmRouteDecisionRequestOther => '上游请求失败';
+
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
@@ -1561,6 +3034,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatSearchAll => '搜索所有对话...';
+
+  @override
+  String get chatSearchCurrentMode => '当前对话';
+
+  @override
+  String get chatSearchAllMode => '所有对话';
+
+  @override
+  String get chatSearchRetry => '重试搜索';
+
+  @override
+  String get chatSearchError => '搜索失败';
 
   @override
   String get searchPrevious => '上一个';
@@ -13022,6 +14507,18 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatSearchAll => '搜索所有对话...';
+
+  @override
+  String get chatSearchCurrentMode => '当前对话';
+
+  @override
+  String get chatSearchAllMode => '所有对话';
+
+  @override
+  String get chatSearchRetry => '重试搜索';
+
+  @override
+  String get chatSearchError => '搜索失败';
 
   @override
   String get searchPrevious => '上一个';

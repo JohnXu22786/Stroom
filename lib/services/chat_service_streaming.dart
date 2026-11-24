@@ -28,6 +28,8 @@ extension ChatServiceStreamingExt on ChatService {
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer.clear();
+    _lastInputTranscript = null;
+    _lastMediaAttachments = const [];
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -69,10 +71,7 @@ extension ChatServiceStreamingExt on ChatService {
                 if (_effectiveTemperature != null)
                   'temperature': _effectiveTemperature,
                 if (reasoning)
-                  'reasoning': {
-                    'effort': reasoningEffort,
-                    'summary': 'auto',
-                  },
+                  'reasoning': {'effort': reasoningEffort, 'summary': 'auto'},
                 'stream': true,
                 ...extraParams,
               }
@@ -103,6 +102,27 @@ extension ChatServiceStreamingExt on ChatService {
           isCancelled: () => cancelToken.isCancelled,
         ).listen(
           (event) {
+            final transcript = event.inputTranscript?.trim();
+            if (transcript != null && transcript.isNotEmpty) {
+              _lastInputTranscript = transcript;
+              final userIndex = history.lastIndexWhere(
+                (message) => message.role == 'user',
+              );
+              if (userIndex >= 0) {
+                final userMessage = history[userIndex];
+                final content = userMessage.content.trim();
+                if (content != transcript && !content.endsWith(transcript)) {
+                  history[userIndex] = userMessage.copyWith(
+                    content:
+                        content.isEmpty ? transcript : '$content\n$transcript',
+                  );
+                }
+              }
+            }
+            final mediaAttachments = event.mediaAttachments;
+            if (mediaAttachments != null && mediaAttachments.isNotEmpty) {
+              _captureMediaAttachments(mediaAttachments);
+            }
             if (event.isReasoning) {
               _reasoningBuffer.write(event.text);
             } else if (event.usage != null) {
@@ -113,7 +133,7 @@ extension ChatServiceStreamingExt on ChatService {
                 recordInput: true,
                 costIncrement: event.usageCostIncrement,
               );
-            } else if (!_controller!.isClosed) {
+            } else if (event.text.isNotEmpty && !_controller!.isClosed) {
               _controller!.add(event.text);
             }
           },
@@ -176,6 +196,8 @@ extension ChatServiceStreamingExt on ChatService {
     _isCancelledByUser = false;
     _reasoningBuffer.clear();
     _contentBuffer.clear();
+    _lastInputTranscript = null;
+    _lastMediaAttachments = const [];
     _lastReasoningLength = 0;
     _thinkingSignature = '';
 
@@ -237,10 +259,7 @@ extension ChatServiceStreamingExt on ChatService {
                   'temperature': _effectiveTemperature,
                 if (toolDefs.isNotEmpty) 'tools': toolDefs,
                 if (reasoning)
-                  'reasoning': {
-                    'effort': reasoningEffort,
-                    'summary': 'auto',
-                  },
+                  'reasoning': {'effort': reasoningEffort, 'summary': 'auto'},
                 'stream': true,
                 ...extraParams,
               }
@@ -343,6 +362,19 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
+              final inputTranscript = event.inputTranscript?.trim();
+              if (inputTranscript != null && inputTranscript.isNotEmpty) {
+                controller.add(InputTranscriptEvent(inputTranscript));
+              }
+              final mediaAttachments = event.mediaAttachments;
+              if (mediaAttachments != null && mediaAttachments.isNotEmpty) {
+                controller.add(
+                  MediaAttachmentsEvent(
+                    mediaAttachments,
+                    contentOrder: event.contentOrder,
+                  ),
+                );
+              }
               if (event.images != null) {
                 for (final image in event.images!) {
                   controller.add(
@@ -354,6 +386,7 @@ extension ChatServiceStreamingExt on ChatService {
                 }
               }
               if (event.isReasoning) {
+                _reasoningBuffer.write(event.text);
                 if (toolDefs.isNotEmpty) {
                   roundReasoningBuffer?.write(event.text);
                 }
@@ -372,6 +405,7 @@ extension ChatServiceStreamingExt on ChatService {
                 controller.add(
                   TextEvent(
                     event.text,
+                    contentOrder: event.contentOrder,
                     alreadyAccumulated: onTextDelta != null,
                   ),
                 );
@@ -587,7 +621,6 @@ extension ChatServiceStreamingExt on ChatService {
 
   void _releaseResponseBuffers() {
     _contentBuffer.clear();
-    _reasoningBuffer.clear();
     _lastReasoningLength = 0;
     _thinkingSignature = '';
   }

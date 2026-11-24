@@ -30,15 +30,6 @@ class _DocumentsPathProvider extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() async => path;
 }
 
-class _GatedDocumentsPathProvider extends PathProviderPlatform {
-  _GatedDocumentsPathProvider(this.path);
-
-  final Future<String?> path;
-
-  @override
-  Future<String?> getApplicationDocumentsPath() => path;
-}
-
 class _RollbackObserver {
   _RollbackObserver(ProviderContainer container) {
     _previousLength = container.read(conversationsProvider).length;
@@ -137,36 +128,37 @@ Directory _blockConversationJournal() {
 Widget _app({
   required Widget home,
   List<Conversation>? conversations,
-}) =>
-    ProviderScope(
-      overrides: [
-        assistantProvider.overrideWith((ref) {
-          final notifier = AssistantsNotifier();
-          notifier.state = [
-            Assistant(
-              id: 'assistant',
-              name: 'Assistant',
-              prompt: 'Prompt',
-              emoji: '🤖',
-            ),
-          ];
-          return notifier;
-        }),
-        selectedAssistantIdProvider.overrideWith((ref) => 'assistant'),
-        conversationsInitialLoadProvider.overrideWith((ref) async {}),
-        conversationsProvider.overrideWith((ref) {
-          final notifier = ConversationsNotifier(ref);
-          notifier.state = conversations ?? [_conversation()];
-          return notifier;
-        }),
-      ],
-      child: MaterialApp(
-        locale: const Locale('en', 'US'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: home,
-      ),
-    );
+}) {
+  final initialConversations = conversations ?? [_conversation()];
+  SharedPreferences.setMockInitialValues({
+    'conversations': jsonEncode(
+      initialConversations.map((conversation) => conversation.toMap()).toList(),
+    ),
+  });
+  return ProviderScope(
+    overrides: [
+      assistantProvider.overrideWith((ref) {
+        final notifier = AssistantsNotifier();
+        notifier.state = [
+          Assistant(
+            id: 'assistant',
+            name: 'Assistant',
+            prompt: 'Prompt',
+            emoji: '🤖',
+          ),
+        ];
+        return notifier;
+      }),
+      selectedAssistantIdProvider.overrideWith((ref) => 'assistant'),
+    ],
+    child: MaterialApp(
+      locale: const Locale('en', 'US'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: home,
+    ),
+  );
+}
 
 Future<void> _pumpUi(WidgetTester tester) async {
   for (var frame = 0; frame < 5; frame++) {
@@ -762,13 +754,18 @@ void main() {
     'conversation deletion still cleans files if the page is disposed',
     (tester) async {
       final root = Directory.systemTemp.createTempSync('stroom_delete_test_');
-      final documentsPath = Completer<String?>();
-      PathProviderPlatform.instance =
-          _GatedDocumentsPathProvider(documentsPath.future);
+      PathProviderPlatform.instance = _DocumentsPathProvider(root.path);
       AppStorage.resetCache();
       addTearDown(() => root.deleteSync(recursive: true));
       final deletedPaths = <String>[];
       final cleanupComplete = Completer<void>();
+      final readStarted = Completer<void>();
+      final allowRead = Completer<void>();
+      AttachmentStorage.readFileOverrideForTesting = (path) async {
+        if (!readStarted.isCompleted) readStarted.complete();
+        await allowRead.future;
+        return Uint8List.fromList([1, 2, 3]);
+      };
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deletedPaths.add(path);
         if (deletedPaths.length == 2 && !cleanupComplete.isCompleted) {
@@ -783,9 +780,9 @@ void main() {
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await tester.pump();
+      await _awaitSignal(tester, readStarted);
       await tester.pumpWidget(const SizedBox.shrink());
-      documentsPath.complete(root.path);
+      allowRead.complete();
       await _awaitSignal(tester, cleanupComplete);
       await _pumpUi(tester);
 

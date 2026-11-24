@@ -1,5 +1,8 @@
 import 'package:uuid/uuid.dart';
 
+import '../utils/credential_field_sanitizer.dart';
+import '../services/api_protocol_config.dart';
+
 // ============================================================================
 // 参数类型枚举
 // ============================================================================
@@ -18,10 +21,7 @@ class ParamType {
   static const List<ParamType> values = [string, number, boolean, json];
 
   static ParamType fromValue(String? value) {
-    return values.firstWhere(
-      (t) => t.value == value,
-      orElse: () => string,
-    );
+    return values.firstWhere((t) => t.value == value, orElse: () => string);
   }
 
   bool get needsQuotes => this == string;
@@ -71,6 +71,7 @@ class CustomParam {
   /// 由 [mergeOptionBlocks] 按「供应商顺序在前」回退。仅模型页写入；
   /// 供应商面板直接编辑 [options]，不产生该字段。
   List<String> optionOrder;
+  final Map<String, dynamic> legacyFields;
 
   CustomParam({
     required this.paramName,
@@ -79,11 +80,14 @@ class CustomParam {
     this.typeDefaultOverridden = false,
     List<String>? options,
     this.optionOrder = const [],
-  }) : options = options ?? [];
+    Map<String, dynamic>? legacyFields,
+  })  : options = options ?? [],
+        legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
   ParamType get paramType => ParamType.fromValue(type);
 
   Map<String, dynamic> toMap() => {
+        ...legacyFields,
         'paramName': paramName,
         'defaultValue': defaultValue,
         'type': type,
@@ -99,6 +103,13 @@ class CustomParam {
         typeDefaultOverridden: map['typeDefaultOverridden'] as bool? ?? false,
         options: (map['options'] as List?)?.cast<String>() ?? const [],
         optionOrder: (map['optionOrder'] as List?)?.cast<String>() ?? const [],
+        legacyFields: _unknownFields(map, {
+          'paramName',
+          'defaultValue',
+          'type',
+          'options',
+          'optionOrder',
+        }),
       );
 
   CustomParam copy() => CustomParam(
@@ -108,6 +119,7 @@ class CustomParam {
         typeDefaultOverridden: typeDefaultOverridden,
         options: List.of(options),
         optionOrder: List<String>.from(optionOrder),
+        legacyFields: Map<String, dynamic>.from(legacyFields),
       );
 }
 
@@ -173,13 +185,16 @@ class TrimPreset {
 class VoiceEntry {
   String name;
   String id;
+  final Map<String, dynamic> legacyFields;
 
   VoiceEntry({
     required this.name,
     this.id = '',
-  });
+    Map<String, dynamic>? legacyFields,
+  }) : legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
   Map<String, dynamic> toMap() => {
+        ...legacyFields,
         'name': name,
         'id': id,
       };
@@ -187,9 +202,14 @@ class VoiceEntry {
   factory VoiceEntry.fromMap(Map<String, dynamic> map) => VoiceEntry(
         name: map['name'] as String? ?? '',
         id: map['id'] as String? ?? '',
+        legacyFields: _unknownFields(map, {'name', 'id'}),
       );
 
-  VoiceEntry copy() => VoiceEntry(name: name, id: id);
+  VoiceEntry copy() => VoiceEntry(
+        name: name,
+        id: id,
+        legacyFields: Map<String, dynamic>.from(legacyFields),
+      );
 }
 
 // ============================================================================
@@ -228,6 +248,7 @@ class ReasoningParam {
   String? offValue;
 
   String type; // 'string', 'number', 'boolean', 'json'
+  final Map<String, dynamic> legacyFields;
 
   ReasoningParam({
     required this.paramName,
@@ -240,9 +261,12 @@ class ReasoningParam {
     List<String>? options,
     this.optionOrder = const [],
     this.type = 'string',
-  }) : options = options ?? [];
+    Map<String, dynamic>? legacyFields,
+  })  : options = options ?? [],
+        legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
   Map<String, dynamic> toMap() => {
+        ...legacyFields,
         'paramName': paramName,
         'options': options,
         'enabled': enabled,
@@ -260,6 +284,17 @@ class ReasoningParam {
         paramName: map['paramName'] as String? ?? '',
         options: [],
         hasExplicitEffortFlag: map.containsKey('isEffortParam'),
+        legacyFields: _unknownFields(map, {
+          'paramName',
+          'options',
+          'enabled',
+          'isReasoningToggle',
+          'isEffortParam',
+          'onValue',
+          'offValue',
+          'type',
+          'optionOrder',
+        }),
       );
     }
     return ReasoningParam(
@@ -276,6 +311,17 @@ class ReasoningParam {
           (map['optionOrder'] as List?)?.map((e) => e.toString()).toList() ??
               const [],
       type: map['type'] as String? ?? 'string',
+      legacyFields: _unknownFields(map, {
+        'paramName',
+        'options',
+        'enabled',
+        'isReasoningToggle',
+        'isEffortParam',
+        'onValue',
+        'offValue',
+        'type',
+        'optionOrder',
+      }),
     );
   }
 
@@ -290,6 +336,7 @@ class ReasoningParam {
         options: List<String>.from(options),
         optionOrder: List<String>.from(optionOrder),
         type: type,
+        legacyFields: Map<String, dynamic>.from(legacyFields),
       );
 
   bool get isFilledToggle {
@@ -544,10 +591,14 @@ class ModelConfig {
   Map<String, dynamic> typeConfig;
   String? selectedTrimPresetId;
 
-  /// 端点类型覆盖（'openai' | 'anthropic'）。
-  /// null 表示继承所在供应商的端点类型（默认）。
+  /// Legacy endpoint selector. New protocol selection lives in
+  /// [apiProtocolOverride]; null means inherit the supplier default.
   /// v3 原位演进：旧数据缺省 null = 继承，无需迁移步骤。
   String? endpointType;
+
+  /// Explicit upstream API protocol override; null inherits the supplier.
+  String? apiProtocolOverride;
+  final Map<String, dynamic> legacyFields;
 
   ModelConfig({
     String? id,
@@ -568,12 +619,16 @@ class ModelConfig {
     this.typeConfig = const {},
     this.selectedTrimPresetId,
     this.endpointType,
+    this.apiProtocolOverride,
+    Map<String, dynamic>? legacyFields,
   })  : id = id ?? 'model_${const Uuid().v4()}',
         voices = voices ?? [],
         customParams = customParams ?? [],
-        reasoningParams = reasoningParams ?? [];
+        reasoningParams = reasoningParams ?? [],
+        legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
   Map<String, dynamic> toMap() => {
+        ...legacyFields,
         'id': id,
         'name': name,
         'modelId': modelId,
@@ -592,6 +647,8 @@ class ModelConfig {
         'typeConfig': typeConfig,
         'selectedTrimPresetId': selectedTrimPresetId,
         if (endpointType != null) 'endpointType': endpointType,
+        if (apiProtocolOverride != null)
+          'apiProtocolOverride': apiProtocolOverride,
       };
 
   factory ModelConfig.fromMap(Map<String, dynamic> map) => ModelConfig(
@@ -599,8 +656,10 @@ class ModelConfig {
         name: map['name'] as String? ?? '',
         modelId: map['modelId'] as String? ?? '',
         voices: (map['voices'] as List?)
-                ?.map((e) =>
-                    VoiceEntry.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) =>
+                      VoiceEntry.fromMap(Map<String, dynamic>.from(e as Map)),
+                )
                 .toList() ??
             [],
         volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.1,
@@ -610,13 +669,17 @@ class ModelConfig {
         hasVolume: map['hasVolume'] as bool? ?? false,
         hasSpeed: map['hasSpeed'] as bool? ?? false,
         customParams: (map['customParams'] as List?)
-                ?.map((e) =>
-                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) =>
+                      CustomParam.fromMap(Map<String, dynamic>.from(e as Map)),
+                )
                 .toList() ??
             [],
         reasoningParams: (map['reasoningParams'] as List?)
-                ?.map((e) =>
-                    ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) => ReasoningParam.fromMap(
+                      Map<String, dynamic>.from(e as Map)),
+                )
                 .toList() ??
             [],
         maxWordsPerRequest: (map['maxWordsPerRequest'] as num?)?.toInt() ?? 0,
@@ -625,6 +688,33 @@ class ModelConfig {
         typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
         endpointType: map['endpointType'] as String?,
+        apiProtocolOverride: map['apiProtocolOverride'] as String? ??
+            (map['endpointType'] is String
+                ? apiProtocolFromLegacyEndpointType(
+                    map['endpointType'] as String,
+                  )
+                : null),
+        legacyFields: _unknownFields(map, {
+          'id',
+          'name',
+          'modelId',
+          'voices',
+          'volumeMin',
+          'volumeMax',
+          'speedMin',
+          'speedMax',
+          'hasVolume',
+          'hasSpeed',
+          'customParams',
+          'reasoningParams',
+          'maxWordsPerRequest',
+          'supportStream',
+          'supportInstruction',
+          'typeConfig',
+          'selectedTrimPresetId',
+          'endpointType',
+          'apiProtocolOverride',
+        }),
       );
 
   ModelConfig copy() => ModelConfig(
@@ -646,6 +736,8 @@ class ModelConfig {
         selectedTrimPresetId: selectedTrimPresetId,
         typeConfig: Map<String, dynamic>.from(typeConfig),
         endpointType: endpointType,
+        apiProtocolOverride: apiProtocolOverride,
+        legacyFields: Map<String, dynamic>.from(legacyFields),
       );
 }
 
@@ -660,18 +752,24 @@ class ProviderConfigItem {
   String? groupId;
   String host;
   String key;
+  String? credentialRef;
   List<ModelConfig> models;
   Map<String, dynamic> typeConfig;
   List<CustomParam> customParams;
   List<ReasoningParam> reasoningParams;
+  final Map<String, dynamic> legacyFields;
 
   /// Whether this MCP service is available to assistants. Group and master
   /// switches act as parents and never change this preference.
   bool enabled;
 
+  /// Legacy endpoint selector retained for v0.5/v0.6 configuration reads.
   /// 端点类型（'openai' | 'anthropic'），该供应商下所有对话统一走此协议。
   /// 旧配置缺省 'openai'（v3 原位演进，无需迁移步骤）。
   String endpointType;
+
+  /// Supplier default upstream API protocol. Null uses its declared default.
+  String? apiProtocol;
 
   ProviderConfigItem({
     String? id,
@@ -679,30 +777,94 @@ class ProviderConfigItem {
     this.groupId,
     this.host = '',
     this.key = '',
+    this.credentialRef,
     List<ModelConfig>? models,
     this.typeConfig = const {},
     List<CustomParam>? customParams,
     List<ReasoningParam>? reasoningParams,
     this.endpointType = 'openai',
+    this.apiProtocol,
+    Map<String, dynamic>? legacyFields,
     this.enabled = true,
   })  : id = id ?? 'config_${const Uuid().v4()}',
         models = models ?? [],
         customParams = customParams ?? [],
-        reasoningParams = reasoningParams ?? [];
+        reasoningParams = reasoningParams ?? [],
+        legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
-  Map<String, dynamic> toMap() => {
+  Map<String, dynamic> toMap({
+    bool includeKey = false,
+    bool redactCredentialFields = true,
+  }) {
+    final serialized = <String, dynamic>{
+      ..._legacyFieldsForPersistence(
+        redactCredentialFields: redactCredentialFields,
+      ),
+      'id': id,
+      'providerName': providerName,
+      if (groupId != null) 'groupId': groupId,
+      'host': host,
+      if (credentialRef != null) 'credentialRef': credentialRef,
+      'models': models.map((m) => m.toMap()).toList(),
+      'typeConfig': typeConfig,
+      'customParams': customParams.map((p) => p.toMap()).toList(),
+      'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
+      'endpointType': endpointType,
+      if (apiProtocol != null) 'apiProtocol': apiProtocol,
+      'enabled': enabled,
+    };
+    final sanitized = redactCredentialFields
+        ? Map<String, dynamic>.from(
+            sanitizeCredentialFields(serialized) as Map,
+          )
+        : serialized;
+    if (includeKey && credentialRef == null) sanitized['key'] = key;
+    return sanitized;
+  }
+
+  Map<String, dynamic> _legacyFieldsForPersistence({
+    required bool redactCredentialFields,
+  }) {
+    if (!redactCredentialFields) return legacyFields;
+    return Map<String, dynamic>.from(
+      sanitizeCredentialFields(legacyFields) as Map,
+    );
+  }
+
+  /// Transient serialization used only as migration input. Callers must never
+  /// persist or export this map directly; it contains the in-memory key so a
+  /// rotated value can be copied to secure storage before preferences change.
+  Map<String, dynamic> toCredentialMigrationMap({
+    bool preserveUnknownCredentialFields = false,
+  }) =>
+      {
+        ..._legacyFieldsForCredentialMigration(
+          preserveUnknownCredentialFields: preserveUnknownCredentialFields,
+        ),
         'id': id,
         'providerName': providerName,
         if (groupId != null) 'groupId': groupId,
         'host': host,
         'key': key,
+        if (credentialRef != null) 'credentialRef': credentialRef,
         'models': models.map((m) => m.toMap()).toList(),
         'typeConfig': typeConfig,
         'customParams': customParams.map((p) => p.toMap()).toList(),
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'endpointType': endpointType,
+        if (apiProtocol != null) 'apiProtocol': apiProtocol,
         'enabled': enabled,
       };
+
+  Map<String, dynamic> _legacyFieldsForCredentialMigration({
+    required bool preserveUnknownCredentialFields,
+  }) {
+    if (preserveUnknownCredentialFields) return legacyFields;
+    return Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where(
+          (entry) => entry.key == 'key' || !isCredentialFieldName(entry.key)),
+    );
+  }
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
       ProviderConfigItem(
@@ -711,23 +873,50 @@ class ProviderConfigItem {
         groupId: map['groupId'] is String ? map['groupId'] as String : null,
         host: map['host'] as String? ?? '',
         key: map['key'] as String? ?? '',
+        credentialRef: map['credentialRef'] is String
+            ? map['credentialRef'] as String
+            : null,
         models: (map['models'] as List?)
-                ?.map((e) =>
-                    ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) =>
+                      ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)),
+                )
                 .toList() ??
             [],
         typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         customParams: (map['customParams'] as List?)
-                ?.map((e) =>
-                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) =>
+                      CustomParam.fromMap(Map<String, dynamic>.from(e as Map)),
+                )
                 .toList() ??
             [],
         reasoningParams: (map['reasoningParams'] as List?)
-                ?.map((e) =>
-                    ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) => ReasoningParam.fromMap(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
                 .toList() ??
             [],
         endpointType: map['endpointType'] as String? ?? 'openai',
+        apiProtocol: map['apiProtocol'] as String? ??
+            apiProtocolFromLegacyEndpointType(map['endpointType'] as String?),
+        legacyFields: _unknownFields(map, {
+          'id',
+          'providerName',
+          'groupId',
+          'host',
+          'key',
+          'credentialRef',
+          'models',
+          'typeConfig',
+          'customParams',
+          'reasoningParams',
+          'endpointType',
+          'apiProtocol',
+          'enabled',
+        }),
         enabled: map['enabled'] as bool? ?? true,
       );
 
@@ -737,11 +926,14 @@ class ProviderConfigItem {
         groupId: groupId,
         host: host,
         key: key,
+        credentialRef: credentialRef,
         models: models.map((m) => m.copy()).toList(),
         typeConfig: Map<String, dynamic>.from(typeConfig),
         customParams: customParams.map((p) => p.copy()).toList(),
         reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
         endpointType: endpointType,
+        apiProtocol: apiProtocol,
+        legacyFields: Map<String, dynamic>.from(legacyFields),
         enabled: enabled,
       );
 }
@@ -760,6 +952,7 @@ class ProviderEntry {
   /// 关闭后 MCP 服务器工具和内置搜索工具不再提供给助手与对话。
   /// 其它类型条目不使用该字段，缺省为 true 保持原有行为。
   final bool enabled;
+  final Map<String, dynamic> legacyFields;
 
   ProviderEntry({
     String? id,
@@ -767,14 +960,54 @@ class ProviderEntry {
     required this.name,
     List<ProviderConfigItem>? configs,
     this.enabled = true,
+    Map<String, dynamic>? legacyFields,
   })  : id = id ?? 'provider_${const Uuid().v4()}',
-        configs = configs ?? [];
+        configs = configs ?? [],
+        legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
   Map<String, dynamic> toMap() => {
+        ..._legacyFieldsForPersistence(),
         'id': id,
         'type': type,
         'name': name,
-        'configs': configs.map((c) => c.toMap()).toList(),
+        'configs': configs
+            .map((c) => c.toMap(
+                  includeKey: type != 'llm',
+                  redactCredentialFields: type == 'llm',
+                ))
+            .toList(),
+        'enabled': enabled,
+      };
+
+  Map<String, dynamic> _legacyFieldsForPersistence() {
+    if (type != 'llm') return legacyFields;
+    final fields = Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where((entry) => !isCredentialFieldName(entry.key)),
+    );
+    return Map<String, dynamic>.from(
+      sanitizeCredentialFields(fields) as Map,
+    );
+  }
+
+  Map<String, dynamic> _legacyFieldsForCredentialMigration() {
+    if (type != 'llm') return legacyFields;
+    return Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where(
+          (entry) => entry.key == 'key' || !isCredentialFieldName(entry.key)),
+    );
+  }
+
+  /// Transient serializer for the migration boundary; never use for exports.
+  Map<String, dynamic> toCredentialMigrationMap() => {
+        ..._legacyFieldsForCredentialMigration(),
+        'id': id,
+        'type': type,
+        'name': name,
+        'configs': configs
+            .map((config) => config.toCredentialMigrationMap(
+                  preserveUnknownCredentialFields: type != 'llm',
+                ))
+            .toList(),
         'enabled': enabled,
       };
 
@@ -785,23 +1018,67 @@ class ProviderEntry {
         type: map['type'] as String? ?? 'tts',
         name: map['name'] as String? ?? '',
         configs: (map['configs'] as List?)
-                ?.map((e) => ProviderConfigItem.fromMap(
-                    Map<String, dynamic>.from(e as Map)))
+                ?.map(
+                  (e) => ProviderConfigItem.fromMap(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
                 .toList() ??
             [],
         // 旧数据缺省为启用（v3 原位演进，无需迁移步骤）。
         enabled: map['enabled'] as bool? ?? true,
+        legacyFields: _unknownFields(map, {
+          'id',
+          'type',
+          'name',
+          'configs',
+          'enabled',
+        }),
       );
     }
     final config = ProviderConfigItem(
       providerName: map['providerName'] as String? ?? '',
       host: map['host'] as String? ?? '',
       key: map['key'] as String? ?? '',
+      credentialRef: map['credentialRef'] is String
+          ? map['credentialRef'] as String
+          : null,
       models: (map['models'] as List?)
-              ?.map((e) =>
-                  ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)))
+              ?.map(
+                (e) => ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)),
+              )
               .toList() ??
           [],
+      typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
+      customParams: (map['customParams'] as List?)
+              ?.map(
+                (e) => CustomParam.fromMap(Map<String, dynamic>.from(e as Map)),
+              )
+              .toList() ??
+          [],
+      reasoningParams: (map['reasoningParams'] as List?)
+              ?.map(
+                (e) =>
+                    ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)),
+              )
+              .toList() ??
+          [],
+      endpointType: map['endpointType'] as String? ?? 'openai',
+      legacyFields: _unknownFields(map, {
+        'id',
+        'type',
+        'name',
+        'providerName',
+        'host',
+        'key',
+        'credentialRef',
+        'models',
+        'typeConfig',
+        'customParams',
+        'reasoningParams',
+        'endpointType',
+        'enabled',
+      }),
     );
     return ProviderEntry(
       id: map['id'] as String,
@@ -812,6 +1089,31 @@ class ProviderEntry {
               config.key.isEmpty
           ? []
           : [config],
+      enabled: map['enabled'] as bool? ?? true,
+      legacyFields: _unknownFields(map, {
+        'id',
+        'type',
+        'name',
+        'providerName',
+        'host',
+        'key',
+        'credentialRef',
+        'models',
+        'enabled',
+        'typeConfig',
+        'customParams',
+        'reasoningParams',
+        'endpointType',
+      }),
     );
   }
 }
+
+Map<String, dynamic> _unknownFields(
+  Map<String, dynamic> map,
+  Set<String> knownFields,
+) =>
+    {
+      for (final entry in map.entries)
+        if (!knownFields.contains(entry.key)) entry.key: entry.value,
+    };

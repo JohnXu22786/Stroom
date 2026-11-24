@@ -58,12 +58,13 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
           if (_isLlmType) ...[
             const SizedBox(height: 16),
-            // 端点类型：该供应商下所有对话统一使用的协议格式
+            // The supplier default is an upstream protocol choice independent
+            // of the account's authentication mode.
             DropdownButtonFormField<String>(
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
               isExpanded: true,
-              initialValue: _endpointType,
+              initialValue: _apiProtocol,
               decoration: InputDecoration(
                 label: _buildProviderInputLabel(
                   AppLocalizations.of(context)!.providerEndpointTypeLabel,
@@ -71,45 +72,33 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
-              items: [
-                DropdownMenuItem(
-                  value: 'openai',
+              items: supportedApiProtocolsForSupplier(
+                _apiProtocol,
+                connectorType:
+                    widget.config.legacyFields['connectorType'] as String?,
+              ).map((protocol) {
+                final l10n = AppLocalizations.of(context)!;
+                final label = switch (protocol) {
+                  'openai.responses' => l10n.endpointResponsesApi,
+                  'anthropic.messages' => l10n.providerEndpointAnthropic,
+                  _ => l10n.providerEndpointOpenAi,
+                };
+                return DropdownMenuItem(
+                  value: protocol,
                   child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerEndpointOpenAi,
+                    label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                DropdownMenuItem(
-                  value: 'anthropic',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerEndpointAnthropic,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'responses',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.endpointResponsesApi,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+                );
+              }).toList(),
               onChanged: (v) {
-                if (v != null) setState(() => _endpointType = v);
+                if (v != null) setState(() => _apiProtocol = v);
               },
             ),
             const SizedBox(height: 8),
             Text(
-              _endpointType == 'anthropic'
-                  ? AppLocalizations.of(context)!.providerAnthropicEndpointHelp
-                  : _endpointType == 'responses'
-                      ? AppLocalizations.of(context)!
-                          .providerResponsesEndpointHelp
-                      : AppLocalizations.of(context)!
-                          .providerOpenAiEndpointHelp,
+              AppLocalizations.of(context)!.llmEndpointHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],

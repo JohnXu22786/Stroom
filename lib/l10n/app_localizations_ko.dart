@@ -7,6 +7,1545 @@ import 'app_localizations.dart';
 
 /// The translations for Korean (`ko`).
 class AppLocalizationsKo extends AppLocalizations {
+
+  @override
+  String get llmAccountLabel => '계정';
+
+  @override
+  String get llmAccountForThisRequest => '이번 요청에 사용할 계정';
+
+  @override
+  String get llmAccountUseModelGroup => '모델 그룹 라우팅 사용';
+
+  @override
+  String get llmAccountManagementTitle => 'LLM 계정 및 모델 그룹';
+
+  @override
+  String get llmAccountAdd => '계정 추가';
+
+  @override
+  String get llmAccountEmpty => 'LLM 계정이 없습니다.';
+
+  @override
+  String get llmAccountEditTitleAdd => 'LLM 계정 추가';
+
+  @override
+  String get llmAccountEditTitleEdit => 'LLM 계정 편집';
+
+  @override
+  String get traeAuthorizationTitle => 'Trae SOLO 연결';
+
+  @override
+  String get traeAuthorizationLoadError =>
+      '로그인 페이지를 불러오지 못했습니다. 취소한 후 다시 시도하세요.';
+
+  @override
+  String get llmOcrAccountSyncFailed =>
+      'OCR 계정을 동기화하지 못했습니다. 계정 관리에서 설정을 확인하세요.';
+
+  @override
+  String get llmOcrAccountMigrationFailed =>
+      'OCR 계정을 마이그레이션하지 못했습니다. 기존 구성이 유지됩니다.';
+
+  @override
+  String get llmAccountsTab => '계정';
+
+  @override
+  String get llmModelGroupsTab => '모델 그룹';
+
+  @override
+  String get llmAccountsSummary =>
+      '각 계정은 자격 증명, 모델 기능, 할당량 및 동시성 제한을 따로 저장합니다. 알 수 없는 할당량은 알 수 없음으로 유지됩니다.';
+
+  @override
+  String get llmModelGroupsSummary =>
+      '안정적인 모델 그룹은 Stroom 모델 이름을 계정 및 상위 모델에 연결합니다. 대체 라우팅은 그룹 내부로 제한됩니다.';
+
+  @override
+  String get llmAccountName => '계정 이름';
+
+  @override
+  String get llmConnectorLabel => '커넥터';
+
+  @override
+  String get llmProviderPresetLabel => '공급자 프리셋';
+
+  @override
+  String get llmAuthenticationMethodLabel => '인증 방식';
+
+  @override
+  String get llmDefaultApiProtocolLabel => '기본 API 프로토콜';
+
+  @override
+  String get llmConnectionStatusLabel => '연결 상태';
+
+  @override
+  String get llmConfigureModelLabel => '구성할 모델';
+
+  @override
+  String get llmModelApiProtocolLabel => '모델 API 프로토콜';
+
+  @override
+  String get llmUpstreamModelsCapabilitiesLabel => '상위 모델 및 기능';
+
+  @override
+  String get llmModelGroupNameLabel => '모델 그룹 이름';
+
+  @override
+  String get llmStableModelIdLabel => 'Stroom 안정 모델 ID';
+
+  @override
+  String get llmPriorityTierLabel => '우선순위 단계';
+
+  @override
+  String get llmUpstreamModelLabel => '상위 모델';
+
+  @override
+  String get llmSamePrioritySelectionLabel => '같은 우선순위 계정 선택';
+
+  @override
+  String get llmFallbackScopeLabel => '계정 간 대체 범위';
+
+  @override
+  String get llmConcurrencyLimitLabel => '동시성 제한';
+
+  @override
+  String get llmWindowModeLabel => '기간 모드';
+
+  @override
+  String get llmCalendarTimezoneLabel => '달력 시간대';
+
+  @override
+  String get llmValueLabel => '값';
+
+  @override
+  String get llmTypeLabel => '유형';
+
+  @override
+  String get llmRemainingQuotaFloorLabel => '최소 잔여 할당량';
+
+  @override
+  String get llmWindowUsageCeilingLabel => '기간 사용량 한도';
+
+  @override
+  String get llmImportZedCredentials => 'Zed에서 API 자격 증명 가져오기';
+
+  @override
+  String get llmAddModelGroupTooltip => '모델 그룹 추가';
+
+  @override
+  String get llmNoModelGroups => '모델 그룹이 없습니다.';
+
+  @override
+  String get llmAccountPolicies => '계정 정책';
+
+  @override
+  String get llmQuotaConcurrencyPolicy => '할당량 및 동시성 정책';
+
+  @override
+  String llmAccountAuthSource(Object source) {
+    return '인증 출처: $source';
+  }
+
+  @override
+  String llmAccountRecentError(Object error) {
+    return '최근 오류: $error';
+  }
+
+  @override
+  String get llmNoRecord => '기록 없음';
+
+  @override
+  String get llmConnectorUnavailableForChat => '이 커넥터는 Chat에서 지원되지 않습니다.';
+
+  @override
+  String get llmAccountUnavailableInSelectors =>
+      '이 계정의 모델은 Chat 또는 Task Flow 선택기에 표시되지 않습니다.';
+
+  @override
+  String get llmModelsCapabilitiesHeading => '모델 및 기능';
+
+  @override
+  String get llmNoModelsConfigured => '구성된 모델 없음';
+
+  @override
+  String get llmUsageQuotaHeading => '사용량 및 할당량';
+
+  @override
+  String get llmQuotaUnknown => '할당량 알 수 없음';
+
+  @override
+  String get llmQuotaLimitsHeading => '할당량 제한';
+
+  @override
+  String get llmLocalObservedUsageHeading => '로컬 관측 사용량';
+
+  @override
+  String get llmUsageHistoryDisclaimer => '최근 62일간의 로컬 통계이며 공급자 잔액을 나타내지 않습니다.';
+
+  @override
+  String get llmLastRouteHeading => '최근 라우팅';
+
+  @override
+  String get llmMembersHeading => '구성원';
+
+  @override
+  String get llmNoRoutableMembers => '라우팅 가능한 계정 구성원이 없습니다';
+
+  @override
+  String get llmLegacyMemberRequired =>
+      '기존 대화 모델 참조와 로컬 ID를 보존하려면 이 구성원을 유지해야 합니다.';
+
+  @override
+  String get llmAccountGroupLoadError => '계정 또는 모델 그룹을 불러오지 못했습니다.';
+
+  @override
+  String get llmRetryLoad => '다시 시도';
+
+  @override
+  String get llmGroupFallbackWithinMembers => '저장된 그룹은 구성원 내에서만 대체 라우팅을 허용합니다.';
+
+  @override
+  String get llmMixedGroupProtocolError =>
+      '같은 모델 참조의 모든 구성원은 동일한 채팅 프로토콜을 사용해야 합니다.';
+
+  @override
+  String get llmAddMember => '구성원 추가';
+
+  @override
+  String get llmNoGroupMembers => '이 모델 그룹에는 구성원이 없습니다.';
+
+  @override
+  String get llmStableModelGroupHelp =>
+      '로컬 모델 ID는 기존 대화와의 호환성을 유지합니다. 대체 라우팅은 이 안정적인 그룹 안에서만 이뤄집니다.';
+
+  @override
+  String llmSignInProvider(Object provider) {
+    return '$provider 로그인';
+  }
+
+  @override
+  String llmOAuthInstructions(Object provider) {
+    return '$provider 인증을 열고 아래 코드를 입력하세요. 인증 후 Stroom이 계정을 저장합니다.';
+  }
+
+  @override
+  String llmOpenProviderAuthorization(Object provider) {
+    return '$provider 열기';
+  }
+
+  @override
+  String llmAuthorizationSource(Object source) {
+    return '인증 출처: $source';
+  }
+
+  @override
+  String get llmAccountDeleteFailed => '계정을 삭제하지 못했습니다.';
+
+  @override
+  String get llmAccountDeleteCleanupFailed => '계정은 삭제했지만 이전 구성을 정리하지 못했습니다.';
+
+  @override
+  String get llmSaveBeforeModelRefresh =>
+      '모델 카탈로그를 새로 고치기 전에 계정과 변경 사항을 저장하세요.';
+
+  @override
+  String get llmRefreshModelCatalog => '모델 카탈로그 새로 고침';
+
+  @override
+  String get llmReauthorize => '재인증';
+
+  @override
+  String get llmSave => '저장';
+
+  @override
+  String get llmCancel => '취소';
+
+  @override
+  String get llmDelete => '삭제';
+
+  @override
+  String get llmEdit => '편집';
+
+  @override
+  String get llmContinueKeychainScan => '계속 확인';
+
+  @override
+  String llmImportCredentialsConfirmTitle(Object provider) {
+    return '$provider 자격 증명을 가져오시겠습니까?';
+  }
+
+  @override
+  String get llmImportThisAccount => '이 계정 가져오기';
+
+  @override
+  String llmImportedAccounts(Object count) {
+    return '공급자 계정 $count개를 안전하게 가져왔습니다.';
+  }
+
+  @override
+  String llmSamePriorityStrategySummary(Object strategy) {
+    return '동일 우선순위 정책: $strategy';
+  }
+
+  @override
+  String get llmKeepLegacyGroup => '이전 대화를 위해 모델 그룹 유지';
+
+  @override
+  String llmGroupUsageSummary(Object usage) {
+    return '그룹 사용량: $usage';
+  }
+
+  @override
+  String get llmModelGroupSettings => '모델 그룹 설정';
+
+  @override
+  String get llmAddModelGroupMemberTitle => '모델 그룹 구성원 추가';
+
+  @override
+  String get llmSavePolicy => '정책 저장';
+
+  @override
+  String get llmOpenferenceCatalogNote =>
+      '사용 가능한 모델은 Openference 계정 요금제에 따라 달라집니다. 오프라인 카탈로그는 이용 권한을 의미하지 않습니다.';
+
+  @override
+  String llmTestLocalCli(Object cli) {
+    return '로컬 $cli CLI 테스트';
+  }
+
+  @override
+  String get llmCheckLocalCodexCli => '로컬 Codex CLI 로그인 확인';
+
+  @override
+  String llmCliReady(Object cli) {
+    return '$cli CLI가 설치되어 사용할 수 있습니다.';
+  }
+
+  @override
+  String get llmCodexCliReady => 'Codex CLI에 로그인되어 사용할 수 있습니다.';
+
+  @override
+  String get llmCheckZedKeychain => 'Zed 키체인을 확인할까요?';
+
+  @override
+  String llmRoutingPolicyTitle(Object target) {
+    return '$target 라우팅 정책';
+  }
+
+  @override
+  String get llmSupportedAuthRequired => '계정을 저장하기 전에 지원되는 인증 방식을 선택하세요.';
+
+  @override
+  String get llmTraeCallbackPrivacy =>
+      '로그인 콜백은 이 기기에서만 수신해 보안 자격 증명 저장소에 저장합니다. 콜백 URL과 검색 기록은 저장하지 않습니다.';
+
+  @override
+  String get llmCloudflareAccountIdLabel => 'Cloudflare 계정 ID';
+
+  @override
+  String get llmCloudflareAccountIdHint => 'Cloudflare 대시보드 오른쪽에서 계정 ID를 찾으세요.';
+
+  @override
+  String get llmDevinExecutablePathLabel => '공식 Devin CLI 실행 파일 경로';
+
+  @override
+  String get llmDevinExecutablePathHelp =>
+      '공식 설치 위치에서 Devin 실행 파일의 전체 경로를 복사하세요.';
+
+  @override
+  String get llmExecutableIntegrityHint =>
+      'Stroom은 이 파일의 SHA-256을 기록하며 파일이 변경되면 실행을 거부합니다.';
+
+  @override
+  String get llmDevinReauthTitle => '공식 Devin CLI 다시 로그인';
+
+  @override
+  String get llmDevinReauthSubtitle => '이 계정의 별도 CLI 로그인을 다시 인증합니다.';
+
+  @override
+  String get llmKeepOAuthClientSecretHelp =>
+      '플랫폼 보안 저장소에만 저장됩니다. 기존 OAuth 클라이언트 암호를 유지하려면 비워 두세요.';
+
+  @override
+  String get llmPublicOauthClientSecretHelp =>
+      '플랫폼 보안 저장소에만 저장됩니다. 공개 클라이언트는 비워 둘 수 있습니다.';
+
+  @override
+  String get llmGitlabApplicationsHint => 'GitLab 사용자 설정 → Applications';
+
+  @override
+  String get llmAzureDeploymentIdHelp => '배포 ID는 이 계정의 고유한 상위 모델 ID로 사용됩니다.';
+
+  @override
+  String get llmAzureApiVersionHelp => '기본값은 Azure 모델 카탈로그 구성을 따릅니다.';
+
+  @override
+  String get llmAmazonQRegionLabel => 'Amazon Q Developer 리전';
+
+  @override
+  String get llmQwenCloudRegionLabel => 'Qwen Cloud 리전 ID';
+
+  @override
+  String get llmQwenCloudRegionHelp =>
+      'API 키는 리전에 연결됩니다. 지원: ap-southeast-1, cn-beijing, eu-central-1, cn-hongkong, ap-northeast-1, us-east-1.';
+
+  @override
+  String get llmGoogleCloudProjectLabel => 'Google Cloud 프로젝트 ID';
+
+  @override
+  String get llmModelCapabilitiesInputHint =>
+      '한 줄에 하나: 모델 ID,streaming,vision,tools';
+
+  @override
+  String get llmGoogleOAuthPrerequisites =>
+      '이 연결은 Google Generative Language API OAuth를 사용합니다. 사용자가 관리하는 Google Cloud 프로젝트, Generative Language API 활성화, 구성된 Desktop OAuth 클라이언트가 필요합니다. 요청은 해당 프로젝트에 청구되며 Code Assist나 AI Studio 웹 로그인을 사용하지 않습니다.';
+
+  @override
+  String get llmGitlabOAuthPrerequisites =>
+      'GitLab Duo OAuth에는 콜백 http://localhost:20128/callback 및 ai_features read_user 권한으로 등록된 GitLab 앱이 필요합니다. client ID와 앱 유형에 따라 client secret을 입력하세요. 토큰은 안전하게 저장되며 지원되는 경우 갱신됩니다. PAT도 별도로 선택할 수 있습니다.';
+
+  @override
+  String get llmAmazonQOAuthPrerequisites =>
+      'refresh_token이 포함된 AWS Builder ID OAuth 자격 증명 JSON을 가져오세요. access_token, clientId, clientSecret은 선택 항목입니다. 클라이언트 정보가 없으면 Stroom이 AWS OIDC로 클라이언트를 등록해 토큰을 갱신합니다. 토큰은 보안 저장소에 저장하며 브라우저 쿠키는 읽지 않습니다. 지원 리전: us-east-1, eu-central-1.';
+
+  @override
+  String get llmTraeTokenSecurity =>
+      'SOLO는 고정 Trae 서비스 엔드포인트를 사용하며 Cloud-IDE-JWT만 전송합니다. 가져온 토큰은 약 14일 후 만료되어 다시 입력해야 합니다.';
+
+  @override
+  String get llmAccountUsageUsedLabel => '사용됨';
+
+  @override
+  String get llmAccountUsageRemainingLabel => '남음';
+
+  @override
+  String get llmAccountUsageTotalLabel => '합계';
+
+  @override
+  String get llmAccountRemainingQuotaLabel => '잔여 할당량:';
+
+  @override
+  String get llmAccountMetricUnitUnknown => '알 수 없는 단위';
+
+  @override
+  String get llmAccountCapabilitySupported => '지원됨';
+
+  @override
+  String get llmAccountCapabilityUnsupported => '지원되지 않음';
+
+  @override
+  String get llmAccountCapabilityUnknown => '알 수 없음';
+
+  @override
+  String llmAccountQuotaReserveThreshold(String window, String threshold) {
+    return '$window 남은 할당량 예약 기준: $threshold';
+  }
+
+  @override
+  String llmAccountUsageCeilingThreshold(String window, String threshold) {
+    return '$window 사용량 한도: $threshold';
+  }
+
+  @override
+  String llmConfirmDeleteAccountWithOAuth(String account) {
+    return '“$account” 계정을 삭제하고 OAuth 승인을 취소하며 모델 그룹에서 제거할까요?';
+  }
+
+  @override
+  String llmConfirmDeleteAccount(String account) {
+    return '“$account” 계정을 삭제하고 모델 그룹에서 제거할까요?';
+  }
+
+  @override
+  String llmConfirmDeleteModelGroup(String group) {
+    return '“$group” 라우팅을 삭제할까요? 기존 대화의 모델 참조는 변경되지 않습니다.';
+  }
+
+  @override
+  String llmKeychainImportAccountSource(String account, String provider) {
+    return '로컬 키체인에서 “$account”을(를) Stroom $provider API 계정으로 가져옵니다.';
+  }
+
+  @override
+  String get llmKeychainImportExistingAccountNotice =>
+      'Stroom 계정 키를 업데이트하고 이름, 모델, 라우팅 설정은 유지합니다.';
+
+  @override
+  String get llmKeychainImportSecurityNote =>
+      '확인 후 Stroom이 자격 증명을 다시 읽어 검증합니다. 키는 인터페이스에 표시되지 않습니다.';
+
+  @override
+  String llmProviderAuthorizationFailed(String provider) {
+    return '$provider 인증에 실패했습니다. 다시 로그인을 시작하세요.';
+  }
+
+  @override
+  String llmAccountConcurrencySummary(String value) {
+    return '계정 동시 실행 수: $value';
+  }
+
+  @override
+  String llmAccountGroupUsageSummary(String usage) {
+    return '모델 그룹 로컬 사용량: $usage';
+  }
+
+  @override
+  String llmPriorityTierValue(int tier) {
+    return '우선순위 $tier';
+  }
+
+  @override
+  String llmGroupMemberSummary(String upstream, int priority, String localId) {
+    return '$upstream · 우선순위 $priority · 로컬 ID $localId';
+  }
+
+  @override
+  String llmNoAccountCanProcessModel(String model) {
+    return '$model을(를) 처리할 수 있는 계정이 없습니다.';
+  }
+
+  @override
+  String llmOAuthLimitationSaveMessage(String limitation) {
+    return '$limitation\n이 계정을 저장하기 전에 지원되는 인증 방식을 선택하세요.';
+  }
+
+  @override
+  String llmProviderEnterpriseCredentials(String provider) {
+    return '$provider에서 제공한 기업 자격 증명';
+  }
+
+  @override
+  String llmProviderSessionToken(String provider) {
+    return '$provider에서 제공한 세션 토큰';
+  }
+
+  @override
+  String llmProviderCredential(String provider) {
+    return '$provider에서 제공한 자격 증명';
+  }
+
+  @override
+  String get llmAccountUiAccountSaving =>
+      '계정 저장에 실패했습니다. 귀하의 계정 정보와 보안 보관 상태를 확인하시기 바랍니다.';
+
+  @override
+  String get llmAccountUiAccountDeletion => '계정 삭제에 실패했습니다.';
+
+  @override
+  String get llmAccountUiTheAccount => '계정이 삭제되었지만 이전 구성을 정리하지 못했습니다.';
+
+  @override
+  String get llmAccountUiTheAccountWas =>
+      '계정이 삭제되었지만 OAuth 취소에 실패했습니다. 승인을 취소하려면 공급자 계정 설정으로 이동하세요.';
+
+  @override
+  String get llmAccountUiCheckZed => 'Zed 키체인을 확인하시겠습니까?';
+
+  @override
+  String get llmAccountUiMacOSMay =>
+      'macOS는 가져오기 가능한 매니페스트를 생성할 때 Stroom이 일치하는 키체인 항목을 확인하도록 허용할지 여부를 항목별로 물을 수 있습니다.';
+
+  @override
+  String get llmAccountUiThisStep =>
+      '이 단계에서는 계정이 저장되지 않습니다. 나중에 가져오려는 계정을 하나씩 확인해야 합니다.';
+
+  @override
+  String get llmAccountUiKeepChecking => '계속 확인하세요';
+
+  @override
+  String get llmAccountUiUnableTo =>
+      '시스템 키체인을 읽을 수 없습니다. 시스템 키체인 액세스 권한을 확인하고 다시 시도하세요.';
+
+  @override
+  String get llmAccountUiNoReadable =>
+      '읽을 수 있는 Zed OpenAI, Anthropic, Google, Mistral 또는 xAI 자격 증명을 찾을 수 없습니다.';
+
+  @override
+  String get llmAccountUiProviderText => '공급자';
+
+  @override
+  String get llmAccountUiStroomWill =>
+      'Stroom은 확인 후 자격 증명을 다시 읽고 확인합니다. 키는 인터페이스에 표시되지 않습니다.';
+
+  @override
+  String get llmAccountUiImportThis => '이 계정 가져오기';
+
+  @override
+  String get llmAccountUiCredentialsNot =>
+      '자격 증명을 가져오지 못했습니다. 키체인 항목이 변경되었거나 액세스가 거부되었거나 보안 저장소를 사용할 수 없습니다.';
+
+  @override
+  String get llmAccountUiPleaseAdd => '먼저 계정에 모델을 추가한 후 모델 그룹을 생성하세요.';
+
+  @override
+  String get llmAccountUiTheModel =>
+      '모델 그룹을 저장하지 못했습니다. 해당 업스트림 모델이 회원 계정에 존재하는지 확인하세요.';
+
+  @override
+  String get llmAccountUiModelGroup => '모델 그룹 삭제에 실패했습니다.';
+
+  @override
+  String get llmAccountUiLLMAccount => 'LLM 계정 및 모델 그룹';
+
+  @override
+  String get llmAccountUiModelGroupText => '모델 그룹';
+
+  @override
+  String get llmAccountUiEachAccount =>
+      '각 계정은 자격 증명, 모델 기능, 할당량 및 동시성 전략을 독립적으로 저장합니다. 알려지지 않은 금액은 알려지지 않았습니다.';
+
+  @override
+  String get llmAccountUiImportAPI => 'Zed에서 API 자격 증명 가져오기';
+
+  @override
+  String get llmAccountUiTheRouting => '라우팅 정책을 저장하지 못했습니다.';
+
+  @override
+  String get llmAccountUiStableModel =>
+      '안정적인 모델 그룹은 레거시 세션 모델 ID를 선택적 계정 및 업스트림 모델에 매핑합니다. 구성원은 이 그룹 내에서만 롤백할 수 있습니다.';
+
+  @override
+  String get llmAccountUiAddModel => '모델 그룹 추가';
+
+  @override
+  String get llmAccountUiKimiCode => '키미코드 인증에 실패했습니다. 다시 로그인해 주세요.';
+
+  @override
+  String get llmAccountUiLoginTo => 'Kimi 코드 CLI에 로그인';
+
+  @override
+  String get llmAccountUiOpenThe =>
+      'Kimi 인증 페이지를 열고 아래 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.';
+
+  @override
+  String get llmAccountUiOpenKimi => '오픈키미';
+
+  @override
+  String get llmAccountUiKiloCode => 'Kilo Code 인증에 실패했습니다. 다시 로그인해 보세요.';
+
+  @override
+  String get llmAccountUiLoginToKilo => '킬로코드에 로그인하세요';
+
+  @override
+  String get llmAccountUiOpenTheKilo =>
+      'Kilo Code 인증 페이지를 열고 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.';
+
+  @override
+  String get llmAccountUiOpenKilo => '킬로 코드 열기';
+
+  @override
+  String get llmAccountUiMetaMuse => 'Meta Muse 인증에 실패했습니다. 다시 로그인해 보세요.';
+
+  @override
+  String get llmAccountUiLoginMeta => '로그인 메타뮤즈 코드';
+
+  @override
+  String get llmAccountUiOpenTheMeta =>
+      '메타 확인 페이지를 열고 아래 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.';
+
+  @override
+  String get llmAccountUiOpenMeta => '오픈메타';
+
+  @override
+  String get llmAccountUiTheAccountOr => '계정 또는 모델 그룹을 읽을 수 없습니다.';
+
+  @override
+  String get llmAccountUiQuotaAnd => '할당량 및 동시성 전략';
+
+  @override
+  String get llmAccountUiAvailableModels =>
+      '사용 가능한 모델은 Openference 계정 계획에 따라 다릅니다. 오프라인 모델 카탈로그는 인증을 의미하지 않습니다.';
+
+  @override
+  String get llmAccountUiNoRecord => '기록 없음';
+
+  @override
+  String get llmAccountUiChatAdapterDoes => 'ChatAdapter는 현재 이 커넥터를 지원하지 않습니다.';
+
+  @override
+  String get llmAccountUiThisAccount =>
+      '이 계정의 모델 그룹은 채팅 및 작업 흐름 모델 선택기에 표시되지 않습니다.';
+
+  @override
+  String get llmAccountUiModelsAnd => '모델 및 기능';
+
+  @override
+  String get llmAccountUiLocalObservation => '지역 관측 사용법';
+
+  @override
+  String get llmAccountUiNoLocal => '로컬 기록 없음(지난 62일)';
+
+  @override
+  String get llmAccountUiLocalObservationUsage =>
+      '로컬 관측 사용량을 알 수 없음(라우팅 기록을 읽을 수 없음)';
+
+  @override
+  String get llmAccountUiLocalStatistics =>
+      '지난 62일 동안의 지역 통계는 계정 잔액을 나타내지 않습니다.';
+
+  @override
+  String get llmAccountUiQuotaAndFallback => '할당량 및 대체 전략';
+
+  @override
+  String get llmAccountUiKeepOld => '이전 세션 모델 그룹 유지';
+
+  @override
+  String get llmAccountUiDeleteModel => '모델 그룹 삭제';
+
+  @override
+  String get llmAccountUiModelGroupLocal => '모델그룹 로컬 누적 사용량: 알 수 없음';
+
+  @override
+  String get llmAccountUiModelGroupLocalCumulative =>
+      '모델그룹 로컬 누적 사용량 : 알 수 없음(라우팅 기록을 읽을 수 없음)';
+
+  @override
+  String get llmAccountUiTheCorresponding =>
+      '이전 세션 모델 참조의 해당 멤버 및 로컬 참조 ID를 유지해야 합니다.';
+
+  @override
+  String get llmAccountUiThereAre => '라우팅 가능한 계정 구성원이 없습니다.';
+
+  @override
+  String get llmAccountUiHoursText => '5시간';
+
+  @override
+  String get llmAccountUiDailyText => '매일';
+
+  @override
+  String get llmAccountUiWeeklyText => '매주';
+
+  @override
+  String get llmAccountUiMonthlyText => '매달';
+
+  @override
+  String get llmAccountUiMainWindow => '메인 창 잔여 잔액';
+
+  @override
+  String get llmAccountUiTheRemaining => '하위 창의 남은 금액';
+
+  @override
+  String get llmAccountUiDailyQuota => '남은 일일 할당량';
+
+  @override
+  String get llmAccountUiWeeklyQuota => '남은 주간 할당량';
+
+  @override
+  String get llmAccountUiMonthlyQuota => '남은 월별 할당량';
+
+  @override
+  String get llmAccountUiCodeReview => '남은 코드 검토 할당량';
+
+  @override
+  String get llmAccountUiRequestText => '요청';
+
+  @override
+  String get llmAccountUiAbilityUnknown => '능력 불명';
+
+  @override
+  String get llmAccountUiConnectionStatus => '연결 상태를 알 수 없음';
+
+  @override
+  String get llmAccountUiReadyText => '준비';
+
+  @override
+  String get llmAccountUiSuspendedText => '정지됨';
+
+  @override
+  String get llmAccountUiReAuthentication => '재인증 필요';
+
+  @override
+  String get llmAccountUiTheConnection =>
+      '연결 상태를 알 수 없습니다. 경로가 여전히 요청을 시도할 수 있으므로 요청 결과에 따라 상태를 업데이트하세요.';
+
+  @override
+  String get llmAccountUiAccountsCan => '계정은 모델 그룹 라우팅에 참여할 수 있습니다.';
+
+  @override
+  String get llmAccountUiTheAccountHas => '계정이 정지되었으며 라우팅에 참여하지 않습니다.';
+
+  @override
+  String get llmAccountUiTheAccountNeeds => '라우팅에 참여하려면 먼저 계정을 다시 인증해야 합니다.';
+
+  @override
+  String get llmAccountUiPasteCloud => 'Cloud-IDE-JWT 붙여넣기';
+
+  @override
+  String get llmAccountUiKiloCodeDevice => 'Kilo 코드 장치 OAuth';
+
+  @override
+  String get llmAccountUiAnonymousFree => '익명(무료 모델만 해당)';
+
+  @override
+  String get llmAccountUiQoderAdministrator => 'Qoder 관리자가 OAuth를 구성합니다.';
+
+  @override
+  String get llmAccountUiCodeBuddyDomestic => 'CodeBuddy 국내기기 OAuth';
+
+  @override
+  String get llmAccountUiCodeBuddyInternational => 'CodeBuddy 국제 장치 OAuth';
+
+  @override
+  String get llmAccountUiWorkBuddyCLI => 'WorkBuddy CLI 장치 OAuth';
+
+  @override
+  String get llmAccountUiLegacyOAuth => '레거시 OAuth(지원되지 않음)';
+
+  @override
+  String get llmAccountUiSubscribeTo => 'OAuth 구독';
+
+  @override
+  String get llmAccountUiGoogleService => 'Google 서비스 계정';
+
+  @override
+  String get llmAccountUiAWSAccess => 'AWS 액세스 + 비밀 키(세션 토큰 선택 사항)';
+
+  @override
+  String get llmAccountUiAWSDefault => 'AWS 기본 자격 증명 체인';
+
+  @override
+  String get llmAccountUiSessionToken => '세션 토큰';
+
+  @override
+  String get llmAccountUiOfficialDevin => '공식 Devin CLI 독립 로그인';
+
+  @override
+  String get llmAccountUiLegacyAI => '레거시 AI Studio 릴레이(단종)';
+
+  @override
+  String get llmAccountUiNoCertification => '인증 없음';
+
+  @override
+  String get llmAccountUiOpenVerification => '확인 페이지 열기';
+
+  @override
+  String get llmAccountUiUserProvided => '사용자가 제공한 업스트림 API 키';
+
+  @override
+  String get llmAccountUiAWSBedrock => 'AWS Bedrock 사용자 제공 정적 자격 증명';
+
+  @override
+  String get llmAccountUiStroomDevin =>
+      '이 계정에 대해 별도로 생성된 Stroom Devin CLI 로그인 구성';
+
+  @override
+  String get llmAccountUiTheLegacy =>
+      '레거시 AI Studio 릴레이는 폐기되었습니다. 대신 API 키 또는 지원되는 OAuth를 사용하세요.';
+
+  @override
+  String get llmAccountUiNativeCompatible => '기본 호환 엔드포인트, 자격 증명 없음';
+
+  @override
+  String get llmAccountUiUpstreamAuthentication => '업스트림 인증 실패';
+
+  @override
+  String get llmAccountUiInsufficientUpstream => '업스트림 할당량이 부족합니다.';
+
+  @override
+  String get llmAccountUiUpstreamRequests => '업스트림 요청이 제한됩니다.';
+
+  @override
+  String get llmAccountUiUpstreamConnection => '업스트림 연결 실패';
+
+  @override
+  String get llmAccountUiUpstreamService => '업스트림 서비스 오류';
+
+  @override
+  String get llmAccountUiUpstreamRejects => '업스트림이 요청을 거부함';
+
+  @override
+  String get llmAccountUiRequestCanceled => '요청이 취소되었습니다.';
+
+  @override
+  String get llmAccountUiUpstreamRequest => '업스트림 요청이 실패했습니다.';
+
+  @override
+  String get llmAccountUiSameConnector => '동일한 커넥터 계정';
+
+  @override
+  String get llmAccountUiCurrentModel => '현재 모델 그룹';
+
+  @override
+  String get llmAccountUiLeastUsed => '가장 적게 사용됨';
+
+  @override
+  String get llmAccountUiPollingText => '폴링';
+
+  @override
+  String get llmAccountUiPrioritizeHigher => '더 높은 잔액에 우선순위를 두세요';
+
+  @override
+  String get llmAccountUiPrioritizeConsumption => '낮은 잔액의 소비 우선순위';
+
+  @override
+  String get llmAccountUiAddLLM => 'LLM 계정 추가';
+
+  @override
+  String get llmAccountUiEditLLM => 'LLM 계정 편집';
+
+  @override
+  String get llmAccountUiServiceProvider => '서비스 제공업체 기본값';
+
+  @override
+  String get llmAccountUiCustomOpenAI => '맞춤형 OpenAI 호환 엔드포인트';
+
+  @override
+  String get llmAccountUiLogIn => 'Stroom 내에서 Trae SOLO에 로그인하세요.';
+
+  @override
+  String get llmAccountUiLoginCallbacks =>
+      '로그인 콜백은 로컬에서만 수신되며 보안 자격 증명 저장소에 기록됩니다. 콜백 주소나 검색 기록은 저장되지 않습니다.';
+
+  @override
+  String get llmAccountUiChatAdapterDoesNot =>
+      'ChatAdapter는 현재 이 커넥터를 지원하지 않습니다. 저장 후에는 계정의 모델 그룹이 채팅 및 작업 흐름 모델 선택기에 표시되지 않습니다.';
+
+  @override
+  String get llmAccountUiAuthenticationMethod => '인증방법';
+
+  @override
+  String get llmAccountUiFindThe => 'Cloudflare Dashboard 오른쪽에서 계정 ID를 찾으세요.';
+
+  @override
+  String get llmAccountUiAPIKeys =>
+      'API 키는 여러 개의 독립적인 연결로 추가되고 모델 그룹을 통해 폴링될 수 있습니다. 익명 모드는 확인된 무료 모델만 표시하고 호출합니다. 계정 디렉터리는 사용되지 않습니다.';
+
+  @override
+  String get llmAccountUiEachCline =>
+      '각 Cline API 키는 독립적인 계정으로 저장되어야 합니다. 모델 카탈로그는 Cline 또는 ClinePass에 의해 별도로 새로 고쳐집니다. 카탈로그 자체가 해당 계정에 구독 승인이 있다는 의미는 아닙니다.';
+
+  @override
+  String get llmAccountUiOnlyLaunch =>
+      '공식 devin CLI만 실행하세요. 로그인 구성은 이 계정과 별개로 Stroom 애플리케이션 디렉터리에 저장됩니다. 호스트 Devin 로그인 또는 API 키는 읽혀지지 않습니다.';
+
+  @override
+  String get llmAccountUiUseThe =>
+      '기본 Codex CLI를 사용하세요. 먼저 터미널에서 codex 로그인을 실행하세요. Stroom은 CLI 로그인 데이터를 읽거나 저장하지 않습니다.';
+
+  @override
+  String get llmAccountUiUseTheNative =>
+      '기본 ZCode 앱 서버 및 GLM 코딩 계획을 사용하세요. 필요한 경우 먼저 공식 ZCode 앱에 로그인하세요. Stroom은 ZCode 로그인 데이터를 읽거나 저장하지 않습니다.';
+
+  @override
+  String get llmAccountUiOfficialDevinCLI => '공식 Devin CLI 실행 가능 절대 경로';
+
+  @override
+  String get llmAccountUiCopyThe =>
+      '공식 Devin 설치 위치에서 devin 실행 파일의 전체 경로를 복사합니다.';
+
+  @override
+  String get llmAccountUiRetrustCurrent =>
+      '현재 CLI 실행 파일을 다시 신뢰하고 SHA-256을 업데이트하세요.';
+
+  @override
+  String get llmAccountUiIHave => 'Devin 공식 채널에서 이 실행 파일을 설치하고 신뢰했습니다.';
+
+  @override
+  String get llmAccountUiStroomFixes =>
+      'Stroom은 현재 파일의 SHA-256을 수정합니다. 파일이 변경되면 시작을 거부합니다.';
+
+  @override
+  String get llmAccountUiLogBack => '공식 Devin CLI에 다시 로그인하세요.';
+
+  @override
+  String get llmAccountUiReauthenticateThe =>
+      '이 계정에 대한 독립형 CLI 로그인 구성을 다시 인증하십시오.';
+
+  @override
+  String get llmAccountUiPleaseSelect => '이 계정을 저장하기 전에 지원되는 인증 방법을 선택하세요.';
+
+  @override
+  String get llmAccountUiTheLegacyAI =>
+      '레거시 AI Studio 웹 세션 연결이 중단되었습니다. API 키 또는 지원되는 OAuth를 선택하고 다시 승인하세요.';
+
+  @override
+  String get llmAccountUiQoderOAuth =>
+      'Qoder OAuth에서는 서비스 관리자가 완전한 OAuth 인증, 토큰, 사용자 정보 URL 및 클라이언트 자격 증명을 제공해야 합니다. 승인 후에는 DashScope API 키와 민감한 OAuth 자격 증명만 플랫폼 보안 저장소에 저장됩니다. 브라우저 쿠키는 사용되지 않습니다. 새로 고침 부여는 업스트림으로 정의되지 않았습니다. 자격 증명이 만료되면 다시 인증하세요.';
+
+  @override
+  String get llmAccountUiSubmitTo =>
+      '플랫폼 보안 저장소에만 제출하세요. 기존 OAuth 클라이언트 비밀번호를 유지하려면 비워두세요.';
+
+  @override
+  String get llmAccountUiEnterThe =>
+      'pt-로 시작하는 Qoder 개인 액세스 토큰을 입력하세요. 네이티브 qodercli를 통해 호출됩니다. 문자 채팅만 지원되고 발신자 도구는 지원되지 않습니다. 단일 요청에 대해 최대 45초 동안 응답이 버퍼링되어 반환됩니다.';
+
+  @override
+  String get llmAccountUiGitLabUser => 'GitLab 사용자 설정 → 응용 프로그램';
+
+  @override
+  String get llmAccountUiOnlySaved =>
+      '플랫폼 보안 저장소에만 저장됩니다. 공용 클라이언트의 경우 비워 둘 수 있습니다.';
+
+  @override
+  String get llmAccountUiOnlyStored => '플랫폼 보안 저장소에만 저장됩니다.';
+
+  @override
+  String get llmAccountUiGitHubEnterprise =>
+      'GitHub Enterprise Cloud 또는 서버에서는 Copilot을 활성화하고 장치 OAuth를 허용해야 합니다. HTTPS 인스턴스 주소를 사용하십시오. OAuth 애플리케이션 클라이언트 ID는 관리자가 제공할 수 있으며, 공개 클라이언트 ID를 사용하려면 공백으로 남겨둘 수 있습니다.';
+
+  @override
+  String get llmAccountUiClineUses => 'Cline은 고정된 서비스 엔드포인트를 사용합니다.';
+
+  @override
+  String get llmAccountUiAIHorde => 'AI Horde는 고정된 HTTPS 채팅 엔드포인트를 사용합니다.';
+
+  @override
+  String get llmAccountUiUncloseAIUses =>
+      'UncloseAI는 고정된 OpenAI 채팅 완료 엔드포인트를 사용합니다.';
+
+  @override
+  String get llmAccountUiKiloCodeUses => 'Kilo Code는 고정된 서비스 엔드포인트를 사용합니다.';
+
+  @override
+  String get llmAccountUiFixedService => '고정 서비스 엔드포인트';
+
+  @override
+  String get llmAccountUiEndpointAddress => '엔드포인트 주소(커넥터에서 요구하는 경우 입력)';
+
+  @override
+  String get llmAccountUiEnterAzure =>
+      'Azure OpenAI 리소스 또는 Azure AI Foundry 호스트를 입력하세요. 배포 및 버전은 별도로 구성됩니다.';
+
+  @override
+  String get llmAccountUiLeaveBlank =>
+      '이 계정 유형에 대한 공식 모델 카탈로그 및 API 엔드포인트를 사용하려면 비워 두세요.';
+
+  @override
+  String get llmAccountUiFixedHTTPS => '명령 코드를 사용하여 HTTPS API 엔드포인트를 수정했습니다.';
+
+  @override
+  String get llmAccountUiFixedHTTPSEndpoint =>
+      'Kilo Code 모델 게이트웨이를 사용하여 HTTPS 엔드포인트를 수정했습니다.';
+
+  @override
+  String get llmAccountUiFixedHTTPSChat =>
+      'Cline을 사용하여 HTTPS 채팅 완료 엔드포인트를 수정했습니다.';
+
+  @override
+  String get llmAccountUiNoAPI => 'API 키가 필요하지 않습니다. 옵션 키는 식별용으로만 사용됩니다.';
+
+  @override
+  String get llmAccountUiAIHordeS =>
+      'AI Horde의 익명 키 또는 우선 순위 API 키는 고정된 채팅 서비스 엔드포인트로만 전송됩니다.';
+
+  @override
+  String get llmAccountUiSOLOUses =>
+      'SOLO는 고정된 Trae 서비스 엔드포인트를 사용합니다. 해당 엔드포인트에만 Cloud-IDE-JWT를 보냅니다. 붙여넣은 토큰은 약 14일 후에 다시 입력해야 합니다.';
+
+  @override
+  String get llmAccountUiTheDeployment => '배포 ID는 계정의 고유한 업스트림 모델 ID로 사용됩니다.';
+
+  @override
+  String get llmAccountUiTheDefault => '기본값은 Azure 모델 카탈로그에 따라 구성됩니다.';
+
+  @override
+  String get llmAccountUiAmazonQ => 'Amazon Q 개발자 지역';
+
+  @override
+  String get llmAccountUiAWSRegion => 'AWS 지역';
+
+  @override
+  String get llmAccountUiVertexArea => '정점 영역';
+
+  @override
+  String get llmAccountUiQwenCloud => 'Qwen Cloud 지역 ID';
+
+  @override
+  String get llmAccountUiGoogleCloud => 'Google Cloud 프로젝트 ID';
+
+  @override
+  String get llmAccountUiThePartner =>
+      '파트너 모델에는 프로젝트 ID가 필요합니다. 서비스 계정은 JSON의 project_id에서 자동으로 읽을 수 있습니다.';
+
+  @override
+  String get llmAccountUiCanBe => '서비스 계정 JSON의 project_id를 사용하려면 비워 둘 수 있습니다.';
+
+  @override
+  String get llmAccountUiAWSBuilder => 'AWS 빌더 ID OAuth 자격 증명 JSON';
+
+  @override
+  String get llmAccountUiThisAuthentication => '이 인증 방법에는 자격 증명을 입력할 필요가 없습니다.';
+
+  @override
+  String get llmAccountUiAWSCredentials => 'AWS 자격 증명 JSON';
+
+  @override
+  String get llmAccountUiServiceAccount => '서비스 계정 JSON';
+
+  @override
+  String get llmAccountUiAIHordeAPI => 'AI Horde API 키(선택적 우선순위)';
+
+  @override
+  String get llmAccountUiCredentialsText => '자격 증명';
+
+  @override
+  String get llmAccountUiPasteThe =>
+      'JWT 자체 또는 전체 \'Cloud-IDE-JWT <token>\' 요청 헤더 값을 붙여넣습니다. 가져오기 토큰은 자동으로 새로 고쳐지지 않습니다. 인앱 Trae 로그인에 대한 자격 증명은 만료되면 자동으로 새로 고쳐집니다.';
+
+  @override
+  String get llmAccountUiGetThe =>
+      'Cursor.com/dashboard/api에서 사용자 API 키(crsr_… 또는 grok_…)를 가져옵니다. 커서 IDE 로그인을 읽을 수 없습니다.';
+
+  @override
+  String get llmAccountUiTheOptional =>
+      '선택적 AI Horde API 키는 대기열 우선순위(kudos)만 높이고 모델 권한은 높이지 않습니다. 익명 모드를 사용하려면 \"인증 없음\"을 선택하세요.';
+
+  @override
+  String get llmAccountUiUsingThe => '실행 환경에 AWS 기본 자격 증명 체인 사용';
+
+  @override
+  String get llmAccountUiSavedIn => '플랫폼 보안 저장소에 저장됨';
+
+  @override
+  String get llmAccountUiLeaveBlankTo => '현재 보안 자격 증명을 유지하려면 비워 두세요.';
+
+  @override
+  String get llmAccountUiDefaultAPI => '기본 API 프로토콜';
+
+  @override
+  String get llmAccountUiConnectionStatusText => '연결 상태';
+
+  @override
+  String get llmAccountUiModelTo => '구성할 모델';
+
+  @override
+  String get llmAccountUiModelAPI => '모델 API 프로토콜';
+
+  @override
+  String get llmAccountUiInheritAccount => '계정 기본 계약 상속';
+
+  @override
+  String get llmAccountUiUpstreamModels => '업스트림 모델 및 기능';
+
+  @override
+  String get llmAccountUiOnePer => '한 줄에 하나씩: 모델 ID, 스트리밍, 비전, 도구';
+
+  @override
+  String get llmAccountUiModelID =>
+      '모델 ID와 컨텍스트 길이는 고정 카탈로그에서 나옵니다. 다른 기능은 아직 알려지지 않았습니다.';
+
+  @override
+  String get llmAccountUiAnonymousMode =>
+      '익명 모드에서는 openrouter/free만 허용됩니다. 계정을 연결한 후 계정 디렉터리에 있는 모델을 사용할 수 있습니다.';
+
+  @override
+  String get llmAccountUiModelsCome =>
+      '모델은 Kilo Code 디렉토리에서 제공됩니다. API 키와 장치 OAuth는 저장된 자체 자격 증명을 사용합니다.';
+
+  @override
+  String get llmAccountUiModelsAndCapabilities =>
+      '모델과 기능은 업스트림 디렉터리에서 나옵니다. 위에서 각 모델에 대해 지원한다고 선언한 API 프로토콜을 선택하세요.';
+
+  @override
+  String get llmAccountUiACPDoes =>
+      'ACP는 안정적인 모델 카탈로그를 제공하지 않습니다. 공식 CLI의 현재 기본 모델을 사용하세요.';
+
+  @override
+  String get llmAccountUiKimiCodeCLI =>
+      'Kimi Code CLI는 검증된 코딩 계획 모델 디렉터리만 엽니다.';
+
+  @override
+  String get llmAccountUiGrokBuild => 'Grok Build는 검증된 구독 모델의 카탈로그만 엽니다.';
+
+  @override
+  String get llmAccountUiXAIOAuth => 'xAI OAuth는 API에서 계정으로 얻은 모델 디렉터리만 엽니다.';
+
+  @override
+  String get llmAccountUiMetaMuseOAuth =>
+      'Meta Muse OAuth는 API에서 구독 계정으로 얻은 모델 디렉터리만 엽니다.';
+
+  @override
+  String get llmAccountUiModelsComeFrom =>
+      '모델은 Cline의 Chat Completions 카탈로그에서 제공됩니다. 가용성은 해당 계정 및 구독에 따라 결정됩니다.';
+
+  @override
+  String get llmAccountUiTheAbility =>
+      '능력은 명시적으로 선언됩니다. 이를 명시적으로 비활성화하려면 Vision=false를 사용하고, 입력하지 않은 경우 알 수 없는 상태로 두십시오.';
+
+  @override
+  String get llmAccountUiRefreshModel => '모델 디렉터리 새로 고침';
+
+  @override
+  String get llmAccountUiTestThe => '로컬 Auggie CLI 테스트';
+
+  @override
+  String get llmAccountUiCheckLocal => '로컬 Codex CLI 로그인 상태 확인';
+
+  @override
+  String get llmAccountUiTheModelDirectory =>
+      '계정 및 수정 사항을 저장한 후 모델 디렉터리를 새로 고칠 수 있습니다.';
+
+  @override
+  String get llmAccountUiAuggieCLI =>
+      'Auggie CLI 모델 목록이 카탈로그를 반환하지 않았습니다. 고정 모델 카탈로그가 유지됩니다.';
+
+  @override
+  String get llmAccountUiVertexAI =>
+      'Vertex AI 파트너에는 유효한 Google Cloud 프로젝트와 권한이 있는 서비스 계정이 필요합니다. Express API 키는 Gemini만 지원합니다.';
+
+  @override
+  String get llmAccountUiFailedTo => '모델 디렉터리를 읽지 못했습니다. 계정 인증 및 연결 설정을 확인하세요.';
+
+  @override
+  String get llmAccountUiAuggieCLIIs => 'Auggie CLI가 설치되어 실행 중입니다.';
+
+  @override
+  String get llmAccountUiCodexCLI => 'Codex CLI가 로그인되어 실행할 준비가 되었습니다.';
+
+  @override
+  String get llmAccountUiVertexAIPartners =>
+      'Vertex AI 파트너에는 유효한 프로젝트 ID가 필요합니다. 서비스 계정은 JSON에서 읽을 수 있으며 API 키는 프로젝트에 바인딩되어야 합니다.';
+
+  @override
+  String get llmAccountUiFailedToSave =>
+      '계정을 저장하지 못했습니다. 연결 설정을 확인한 후 다시 시도해 주세요.';
+
+  @override
+  String get llmAccountUiTraeThe =>
+      'Trae 로그인이 완료되지 않았습니다. 다시 시도하거나 Cloud-IDE-JWT를 사용하여 수동으로 가져오세요.';
+
+  @override
+  String get llmAccountUiPleaseEnter => '계정 이름을 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterThe => 'crsr_로 시작하는 커서 사용자 API 키를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterYour => 'GitLab Duo OAuth 클라이언트 ID를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterA =>
+      '유효한 HTTPS Qoder OAuth 관리 엔드포인트를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterQODER =>
+      'QODER_OAUTH_CLIENT_ID 및 클라이언트 비밀번호를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValid =>
+      '유효한 Azure HTTPS 리소스 호스트, 배포 ID 및 API 버전을 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidCloudflare =>
+      '유효한 Cloudflare 계정 ID를 입력하세요.';
+
+  @override
+  String get llmAccountUiCloudflareWorkers =>
+      'Cloudflare Workers AI는 검증된 고정 모델의 카탈로그만 제공합니다.';
+
+  @override
+  String get llmAccountUiKimiCodeAccounts =>
+      'Kimi 코드 계정은 검증된 코딩 계획 모델만 사용할 수 있습니다.';
+
+  @override
+  String get llmAccountUiPleaseRefresh =>
+      '먼저 모델 디렉터리를 새로 고치고 지원되는 ApiProtocols에서 프로토콜을 선택하세요.';
+
+  @override
+  String get llmAccountUiAbilityValues => '능력 값은 참 또는 거짓일 수 있습니다.';
+
+  @override
+  String get llmAccountUiCommandCode => '명령 코드 모델 기능은 업스트림 디렉터리에서만 선언할 수 있습니다.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidGitHub =>
+      '유효한 GitHub Enterprise HTTPS 인스턴스 주소를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseFill => '공식 Devin CLI 실행 파일의 전체 경로를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseConfirm =>
+      '이 실행 파일이 Devin 공식 설치 채널에서 제공되는지 확인하세요.';
+
+  @override
+  String get llmAccountUiTheSelected => '선택한 CLI 경로가 잘못되었거나 실행 가능하지 않습니다.';
+
+  @override
+  String get llmAccountUiPleaseEnterTheAmazon =>
+      'AWS Builder ID 새로 고침 토큰이 포함된 Amazon Q 자격 증명 JSON을 입력하십시오.';
+
+  @override
+  String get llmAccountUiPleaseEnterAValidAmazon =>
+      '유효한 Amazon Q OAuth 자격 증명 JSON과 지원되는 지역을 입력하세요.';
+
+  @override
+  String get llmAccountUiLegacyAIStudio =>
+      '기존 AI Studio 웹 세션 연결이 중단되었습니다. 대신 API 키 또는 지원되는 OAuth를 사용하세요.';
+
+  @override
+  String get llmAccountUiPleaseProvide =>
+      'Google OAuth 데스크톱 클라이언트 ID와 해당 클라이언트 비밀번호를 입력하세요.';
+
+  @override
+  String get llmAccountUiPleaseEnterYourCredentials => '자격 증명을 입력하세요.';
+
+  @override
+  String get llmAccountUiModelGroupName => '모델 그룹 이름';
+
+  @override
+  String get llmAccountUiAccountAnd => '계정 및 업스트림 모델';
+
+  @override
+  String get llmAccountUiTheModelGroup => '현재 모델 그룹에는 구성원이 없습니다.';
+
+  @override
+  String get llmAccountUiLocalReferences =>
+      '로컬 참조는 기존 세션 모델 ID와의 호환성을 위해 사용됩니다. 계정 구성원은 이 안정적인 그룹 내에서만 선택에 참여합니다.';
+
+  @override
+  String get llmAccountUiGroupMembers =>
+      '동일한 모델 참조 아래의 그룹 구성원은 동일한 채팅 프로토콜을 사용해야 합니다.';
+
+  @override
+  String get llmAccountUiAccountHas => '계정이 삭제되었습니다';
+
+  @override
+  String get llmAccountUiOldSession => '이전 세션 참조가 필요한 구성원';
+
+  @override
+  String get llmAccountUiRemoveMember => '회원 삭제';
+
+  @override
+  String get llmAccountUiLocalModel => '로컬 모델 참조 ID';
+
+  @override
+  String get llmAccountUiSamePriority => '동일한 우선순위 선택';
+
+  @override
+  String get llmAccountUiCrossAccount => '교차 계정 롤백 범위';
+
+  @override
+  String get llmAccountUiConcurrencyLimit => '동시성 제한';
+
+  @override
+  String get llmAccountUiLeaveBlankToIndicate =>
+      '제한이 없음을 나타내려면 비워 두십시오. 계정과 모델 그룹은 별도로 구성됩니다.';
+
+  @override
+  String get llmAccountUiRollingWindow => '롤링 윈도우';
+
+  @override
+  String get llmAccountUiCalendarWindow => '달력 창';
+
+  @override
+  String get llmAccountUiCalendarTime => '달력 시간대';
+
+  @override
+  String get llmAccountUiForExample => '예: 아시아/타이베이 또는 UTC';
+
+  @override
+  String get llmAccountUiRemainingCredit => '남은 신용한도';
+
+  @override
+  String get llmAccountUiWindowUsage => '창구 사용 제한';
+
+  @override
+  String get llmAccountUiFixedValue => '고정값';
+
+  @override
+  String get llmAccountUiPercentageText => '백분율';
+
+  @override
+  String get llmAccountUiUnitText => '단위';
+
+  @override
+  String get llmAccountUiTheConcurrency =>
+      '동시성 상한은 양의 정수여야 하며, 제한이 없음을 나타내려면 공백으로 두어야 합니다.';
+
+  @override
+  String get llmAccountUiTheCalendar => '달력 창에 시간대를 입력해야 합니다.';
+
+  @override
+  String get llmAccountUiQuotaAndUsage =>
+      '할당량 및 사용량 한도는 음수가 아니어야 합니다. 백분율은 100을 초과할 수 없습니다.';
+
+  @override
+  String get llmAccountUiHourWindow => '5시간 창';
+
+  @override
+  String get llmAccountUiDayWindow => '일 창';
+
+  @override
+  String get llmAccountUiWeeklyWindow => '주간 기간';
+
+  @override
+  String get llmAccountUiMonthWindow => '월 창';
+
+  @override
+  String llmImportStoppedAfterLegacySyncFailure(int count) {
+    return '계정 $count개를 가져왔지만 이전 구성을 동기화하지 못했습니다.';
+  }
+
+  @override
+  String llmImportStoppedAfterCredentialFailure(int count) {
+    return '계정 $count개를 가져왔습니다. 키체인 항목이 변경되었거나 접근이 거부되었거나 보안 저장소를 사용할 수 없어 나머지 자격 증명은 가져오지 않았습니다.';
+  }
+
+  @override
+  String get llmRequestUsedAccount => '이번 요청에 사용된 계정';
+
+  @override
+  String get llmLastAttemptedAccount => '마지막으로 시도한 계정';
+
+  @override
+  String get llmRouteDecisionSessionAffinity => '이 대화에서 최근 성공한 계정 계속 사용';
+
+  @override
+  String get llmRouteDecisionSessionAffinityPersistenceFailed =>
+      '이번 계정 연속성은 저장되지 않았습니다.';
+
+  @override
+  String get llmRouteDecisionExplicitAccountSelection => '사용자가 선택한 계정으로 라우팅';
+
+  @override
+  String get llmRouteDecisionSelectedAccountOutsideGroup =>
+      '선택한 계정이 현재 모델 그룹에 속하지 않습니다.';
+
+  @override
+  String get llmRouteDecisionConversationIdInvalid =>
+      '대화 식별자가 유효하지 않으며 세션 선호도가 사용되지 않았습니다.';
+
+  @override
+  String get llmRouteDecisionModelGroupMissing =>
+      '이 모델의 안정적인 모델 그룹을 찾을 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionModelGroupAmbiguous =>
+      '이 모델은 여러 모델 그룹과 동시에 연결되어 있습니다.';
+
+  @override
+  String get llmRouteDecisionConnectorProtocolIncompatible =>
+      '커넥터 프로토콜이 이 채팅 모델에 적용되지 않습니다.';
+
+  @override
+  String get llmRouteDecisionConnectionUnknown => '연결 상태를 알 수 없음';
+
+  @override
+  String get llmRouteDecisionAccountMissing => '계정이 삭제되었습니다.';
+
+  @override
+  String get llmRouteDecisionAccountIdInvalid => '계정 식별자가 유효하지 않음';
+
+  @override
+  String get llmRouteDecisionAccountUnavailable => '계정이 일시 중지되었거나 재인증이 필요합니다.';
+
+  @override
+  String get llmRouteDecisionModelMappingMismatch => '계정이 선택한 모델에 매핑되지 않았습니다.';
+
+  @override
+  String get llmRouteDecisionModelNotMapped => '계정에서 해당 상위 모델을 찾을 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionCapabilityMismatch =>
+      '계정 모델이 이 요청에 필요한 기능을 지원하지 않습니다.';
+
+  @override
+  String get llmRouteDecisionFallbackScope => '롤백 범위에서는 이 커넥터로 전환할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionCooldown => '계정이 여전히 장애 쿨다운 기간에 있습니다.';
+
+  @override
+  String get llmRouteDecisionConcurrencyLimit =>
+      '계정 또는 모델 그룹이 동시 사용 한도에 도달했습니다.';
+
+  @override
+  String get llmRouteDecisionBalanceUnknownOrIncomparable =>
+      '한도를 알 수 없거나 측정 단위를 비교할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionBalanceAtOrBelowReserve =>
+      '잔액이 보유 한도에 도달했거나 그 미만입니다.';
+
+  @override
+  String get llmRouteDecisionUsageUnknown => '사용량이 알려지지 않아 한도를 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionReserveBalanceUnknown =>
+      '잔여 한도가 알 수 없어 보류 한도를 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionReserveUnitUnknownOrIncomparable =>
+      '유지 한도 측정 단위가 알 수 없거나 비교할 수 없음';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknownOrIncomparable =>
+      '총 한도가 알 수 없거나 비교할 수 없음';
+
+  @override
+  String get llmRouteDecisionReserveTotalUnknown =>
+      '한도 총량이 알 수 없어 보유 한도를 계산할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionReserveUsageEstimateUnknown =>
+      '요청 사용량 추정치가 알 수 없어 보류선을 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionReserveInFlightUsageUnknown =>
+      '진행 중인 요청 사용량이 알 수 없어 보유 한도를 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionReserveFloorReached => '잔여 한도가 보류 한도보다 낮음';
+
+  @override
+  String get llmRouteDecisionUsageCeilingReached => '사용 한도에 도달했습니다.';
+
+  @override
+  String get llmRouteDecisionUsageCeilingTotalUnknown =>
+      '총 사용량이 알려지지 않아 상한선을 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionUsageUnitMismatch => '사용량 측정 단위가 일치하지 않음';
+
+  @override
+  String get llmRouteDecisionUsageSourceMismatch =>
+      '사용량과 한도 데이터 출처가 일치하지 않습니다.';
+
+  @override
+  String get llmRouteDecisionUsageInFlightUnknown =>
+      '진행 중인 요청 사용량이 알 수 없어 상한을 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionUsageEstimateUnknown =>
+      '요청 사용량 추정치가 알 수 없어 상한을 판단할 수 없습니다.';
+
+  @override
+  String get llmRouteDecisionInvalidWindowTimezone => '한도 창 시간대 설정이 유효하지 않습니다.';
+
+  @override
+  String get llmRouteDecisionReserveFloor => '잔여 한도가 보유 한도보다 낮음';
+
+  @override
+  String get llmRouteDecisionUsageCeiling => '사용 한도에 도달했습니다.';
+
+  @override
+  String get llmRouteDecisionRequestAuthentication => '상위 단계에서 인증을 거부했습니다.';
+
+  @override
+  String get llmRouteDecisionRequestQuotaExhausted => '상위 시스템에서 한도 소진을 보고함';
+
+  @override
+  String get llmRouteDecisionRequestRateLimited => '상위 트래픽 제한';
+
+  @override
+  String get llmRouteDecisionRequestConnection => '업스트림 연결 실패';
+
+  @override
+  String get llmRouteDecisionRequestServer => '상위 서비스 오류';
+
+  @override
+  String get llmRouteDecisionRequestInvalidRequest =>
+      '상위 서비스에서 요청 파라미터를 거부했습니다.';
+
+  @override
+  String get llmRouteDecisionRequestCancelled => '요청이 취소되었습니다.';
+
+  @override
+  String get llmRouteDecisionRequestOther => '상위 요청 실패';
+
   AppLocalizationsKo([String locale = 'ko']) : super(locale);
 
   @override
@@ -1618,6 +3157,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatSearchAll => '모든 대화 검색...';
+
+  @override
+  String get chatSearchCurrentMode => '현재 대화';
+
+  @override
+  String get chatSearchAllMode => '모든 대화';
+
+  @override
+  String get chatSearchRetry => '검색 다시 시도';
+
+  @override
+  String get chatSearchError => '검색 실패';
 
   @override
   String get searchPrevious => '이전 일치 항목';
@@ -13394,6 +14945,18 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get chatSearchAll => '모든 대화 검색...';
+
+  @override
+  String get chatSearchCurrentMode => '현재 대화';
+
+  @override
+  String get chatSearchAllMode => '모든 대화';
+
+  @override
+  String get chatSearchRetry => '검색 다시 시도';
+
+  @override
+  String get chatSearchError => '검색 실패';
 
   @override
   String get searchPrevious => '이전 일치 항목';
