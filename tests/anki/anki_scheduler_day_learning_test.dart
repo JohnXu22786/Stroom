@@ -130,7 +130,8 @@ void main() {
       'col',
       columns: ['mod'],
       where: 'id = 1',
-    )).single['mod'];
+    ))
+        .single['mod'];
     await collection.db.execute('''
       CREATE TRIGGER fail_review_log_insert
       BEFORE INSERT ON revlog
@@ -151,7 +152,8 @@ void main() {
         'col',
         columns: ['mod'],
         where: 'id = 1',
-      )).single['mod'],
+      ))
+          .single['mod'],
       beforeModified,
     );
   });

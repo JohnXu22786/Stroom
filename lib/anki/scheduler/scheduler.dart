@@ -89,18 +89,20 @@ class AnkiScheduler {
       await cards.update(card, executor: txn);
 
       // Log the review with the card update in the same transaction.
-      await col.revlog.insert(RevlogEntry(
-        cid: cid,
-        button_chosen: rating,
-        interval: card.interval,
-        last_interval: lastIvl,
-        ease_factor: card.ease_factor,
-        taken_millis: reviewDuration,
-        review_kind:
-            card.ctype == CardType.learn || card.ctype == CardType.relearn
-                ? RevlogReviewKind.relearning
-                : RevlogReviewKind.review,
-      ), executor: txn);
+      await col.revlog.insert(
+          RevlogEntry(
+            cid: cid,
+            button_chosen: rating,
+            interval: card.interval,
+            last_interval: lastIvl,
+            ease_factor: card.ease_factor,
+            taken_millis: reviewDuration,
+            review_kind:
+                card.ctype == CardType.learn || card.ctype == CardType.relearn
+                    ? RevlogReviewKind.relearning
+                    : RevlogReviewKind.review,
+          ),
+          executor: txn);
 
       await col.save(executor: txn);
     });
