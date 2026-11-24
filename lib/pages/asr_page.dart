@@ -714,8 +714,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     'configId': option.configId,
                     'modelId': option.modelId,
                   };
-                  final resetRetryState =
-                      _modelSelectionRequired ||
+                  final resetRetryState = _modelSelectionRequired ||
                       !_sameModelReference(
                         _selectedModelReference,
                         newReference,
@@ -732,9 +731,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 },
           items: List.generate(modelOptions.length, (i) {
             final opt = modelOptions[i];
-            final modelName = opt.model.name.isNotEmpty
-                ? opt.model.name
-                : opt.model.modelId;
+            final modelName =
+                opt.model.name.isNotEmpty ? opt.model.name : opt.model.modelId;
             final displayText = opt.providerName.isNotEmpty
                 ? '$modelName | ${opt.providerName}'
                 : modelName;
