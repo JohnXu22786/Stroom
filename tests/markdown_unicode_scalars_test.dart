@@ -15,4 +15,29 @@ void main() {
       '<p>� � \u0001 😀 😀</p>\n',
     );
   });
+
+  test('a reference label ending in an escape stays literal', () {
+    expect(markdown.markdownToHtml(r'[foo\'), '<p>[foo\\</p>\n');
+  });
+
+  test('a bracketed destination ending in an escape stays literal', () {
+    expect(
+      markdown.markdownToHtml(r'[foo]: <bar\'),
+      '<p>[foo]: &lt;bar\\</p>\n',
+    );
+  });
+
+  test('a bare destination ending in an escape is accepted as a reference', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: bar\\'),
+      '<p><a href="bar%5C">text</a></p>\n',
+    );
+  });
+
+  test('a reference title ending in an escape stays literal', () {
+    expect(
+      markdown.markdownToHtml(r'[foo]: bar "baz\'),
+      '<p>[foo]: bar &quot;baz\\</p>\n',
+    );
+  });
 }
