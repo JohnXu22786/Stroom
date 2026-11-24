@@ -598,28 +598,49 @@ class McpClient {
       );
 
       String? currentEvent;
+      final dataLines = <String>[];
+
+      void dispatchEvent() {
+        if (dataLines.isNotEmpty) {
+          final data = dataLines.join('\n');
+          dataLines.clear();
+          if (currentEvent == 'endpoint') {
+            // Standard MCP: server sends event: endpoint with URL to post messages
+            _sseEndpointUrl = data.trim();
+            debugPrint(
+                'MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
+            if (!_sseEndpointCompleter.isCompleted) {
+              _sseEndpointCompleter.complete();
+            }
+          } else {
+            // JSON-RPC response through the SSE stream
+            _handleMessage(data);
+          }
+        }
+        currentEvent = null;
+      }
 
       _sseSubscription = stream.listen(
         (line) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.substring(7).trim();
-          } else if (line.startsWith('data: ')) {
-            final data = line.substring(6);
-            if (currentEvent == 'endpoint') {
-              // Standard MCP: server sends event: endpoint with URL to post messages
-              _sseEndpointUrl = data.trim();
-              debugPrint(
-                  'MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
-              if (!_sseEndpointCompleter.isCompleted) {
-                _sseEndpointCompleter.complete();
-              }
-            } else {
-              // JSON-RPC response through the SSE stream
-              _handleMessage(data);
-            }
-            currentEvent = null;
-          } else if (line.isEmpty) {
-            currentEvent = null;
+          // The browser SSE transport splits on LF and can retain the CR from
+          // CRLF separators; normalize one line-ending CR before parsing.
+          final normalizedLine =
+              line.endsWith('\r') ? line.substring(0, line.length - 1) : line;
+          if (normalizedLine.isEmpty) {
+            dispatchEvent();
+            return;
+          }
+
+          final colon = normalizedLine.indexOf(':');
+          final field =
+              colon == -1 ? normalizedLine : normalizedLine.substring(0, colon);
+          var value = colon == -1 ? '' : normalizedLine.substring(colon + 1);
+          if (value.startsWith(' ')) value = value.substring(1);
+
+          if (field == 'event') {
+            currentEvent = value;
+          } else if (field == 'data') {
+            dataLines.add(value);
           }
         },
         onError: (Object error) {
