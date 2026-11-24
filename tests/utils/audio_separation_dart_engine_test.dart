@@ -1690,11 +1690,26 @@ void main() {
       );
 
       final mp4WithoutAudio = Uint8List.fromList([
-        0x00, 0x00, 0x00, 0x14,
-        0x66, 0x74, 0x79, 0x70,
-        0x69, 0x73, 0x6F, 0x6D,
-        0x00, 0x00, 0x02, 0x00,
-        0x69, 0x73, 0x6F, 0x6D,
+        0x00,
+        0x00,
+        0x00,
+        0x14,
+        0x66,
+        0x74,
+        0x79,
+        0x70,
+        0x69,
+        0x73,
+        0x6F,
+        0x6D,
+        0x00,
+        0x00,
+        0x02,
+        0x00,
+        0x69,
+        0x73,
+        0x6F,
+        0x6D,
       ]);
       await expectLater(
         extractAudioFromWebBytes(mp4WithoutAudio, 'mp4'),
@@ -1783,8 +1798,7 @@ void main() {
       expect(cancelled, isTrue);
     });
 
-    test('web AAC packaging yields while building its sample table',
-        () async {
+    test('web AAC packaging yields while building its sample table', () async {
       var cancelled = false;
       final audioFrames = List.generate(
         2048,

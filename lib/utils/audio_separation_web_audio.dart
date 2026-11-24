@@ -11,9 +11,10 @@ Future<Uint8List> extractAudioFromWebBytes(
   String videoFormat, {
   bool Function()? isCancelled,
   void Function(int progress)? onProgress,
-}) => extractAudioWebAsync(
-  videoBytes: videoBytes,
-  videoFormat: videoFormat,
-  isCancelled: isCancelled,
-  onProgress: onProgress,
-);
+}) =>
+    extractAudioWebAsync(
+      videoBytes: videoBytes,
+      videoFormat: videoFormat,
+      isCancelled: isCancelled,
+      onProgress: onProgress,
+    );

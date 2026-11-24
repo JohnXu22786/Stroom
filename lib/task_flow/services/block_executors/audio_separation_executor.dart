@@ -112,8 +112,7 @@ Future<Uint8List> _extractVideoBytesInBackground(
   Uint8List videoBytes,
   String videoFormat, {
   bool Function()? isCancelled,
-}
-) {
+}) {
   if (kIsWeb) {
     return webAudio.extractAudioFromWebBytes(
       videoBytes,

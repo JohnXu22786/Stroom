@@ -718,7 +718,6 @@ class AudioSeparationEngine {
     }
   }
 
-
   Stream<Uint8List> _createM4aFrameChunksYielding(
     List<_AudioFrame> frames,
     _AudioTrackInfo track, {
@@ -734,6 +733,7 @@ class AudioSeparationEngine {
       }
       await Future<void>.delayed(Duration.zero);
     }
+
     final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
     final channels = track.channels > 0 ? track.channels : 2;
     final audioSampleEntryVersion = sampleRate > 0xFFFF ? 1 : 0;
@@ -1490,7 +1490,6 @@ class _Mp4Demuxer {
     }
   }
 
-
   Future<_AudioTrackInfo?> findAudioTrackYielding() async {
     try {
       _offset = 0;
@@ -1874,7 +1873,6 @@ class _Mp4Demuxer {
     );
   }
 
-
   Future<_AudioTrackInfo?> _parseTrackYielding() async {
     final trackStart = _offset;
     final trackSize = _boxSizeAt(trackStart - 8);
@@ -1922,7 +1920,8 @@ class _Mp4Demuxer {
           );
           if (editType == 'elst') {
             if (editListEntries != null) return null;
-            editListEntries = await _parseEditListEntriesYielding(editOffset, editSize);
+            editListEntries =
+                await _parseEditListEntriesYielding(editOffset, editSize);
             if (editListEntries == null) return null;
           }
           editOffset += editSize;
@@ -2272,7 +2271,6 @@ class _Mp4Demuxer {
     return entryOffset == boxEnd ? entries : null;
   }
 
-
   List<_EditListEntry>? _parseEditListEntries(int boxStart, int boxSize) {
     final boxEnd = boxStart + boxSize;
     if (boxEnd > _data.length || boxSize < 16) return null;
@@ -2425,7 +2423,6 @@ class _Mp4Demuxer {
     }
     return _EditListSelection(includedSampleIndices, outputEditList);
   }
-
 
   _EditListSelection? _selectSamplesForEditList(
     List<_EditListEntry>? entries,
