@@ -126,7 +126,7 @@ class TBodyNode extends ElementNode {
       final child = children[index] as TrNode;
       final List<Widget> widgets =
           List.generate(cellCount, (index) => Container());
-      for (var i = 0; i < child.children.length; ++i) {
+      for (var i = 0; i < child.children.length && i < cellCount; ++i) {
         var c = child.children[i];
         widgets[i] = Padding(
             padding: config.table.bodyPadding,
