@@ -541,6 +541,10 @@
   "chatAutoContinuePrompt": "끝나지 않았다면 계속하세요.",
   "chatSearchCurrent": "이 대화 검색...",
   "chatSearchAll": "모든 대화 검색...",
+  "chatSearchCurrentMode": "현재 대화",
+  "chatSearchAllMode": "모든 대화",
+  "chatSearchRetry": "검색 다시 시도",
+  "chatSearchError": "검색 실패",
   "searchPrevious": "이전 일치 항목",
   "searchNext": "다음 일치 항목",
   "searchClose": "검색 닫기",
@@ -5428,8 +5432,12 @@
   "bgTaskOcrRequestSizeExceeded": "OCR 요청 JSON 크기 {encodedBytes}바이트가 설정된 제한 {budgetBytes}바이트를 초과했습니다.",
   "@bgTaskOcrRequestSizeExceeded": {
     "placeholders": {
-      "encodedBytes": {"type": "int"},
-      "budgetBytes": {"type": "int"}
+      "encodedBytes": {
+        "type": "int"
+      },
+      "budgetBytes": {
+        "type": "int"
+      }
     }
   },
   "bgTaskOcrError": "OCR 실패: {details}",
@@ -7185,12 +7193,1563 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.",
-  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "@ocrSamplingTemperatureOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR temperature."
+  },
   "ocrSamplingTopPOutOfRange": "저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.",
-  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "@ocrSamplingTopPOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR top-P value."
+  },
   "ocrSamplingSliderRepairRequired": "범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "@ocrSamplingSliderRepairRequired": {
+    "description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."
+  },
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다."
-
+  "providerResponsesEndpointHelp": "이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다.",
+  "llmAccountLabel": "계정",
+  "llmAccountForThisRequest": "이번 요청에 사용할 계정",
+  "llmAccountUseModelGroup": "모델 그룹 라우팅 사용",
+  "llmAccountManagementTitle": "LLM 계정 및 모델 그룹",
+  "llmAccountAdd": "계정 추가",
+  "llmAccountEmpty": "LLM 계정이 없습니다.",
+  "llmAccountEditTitleAdd": "LLM 계정 추가",
+  "llmAccountEditTitleEdit": "LLM 계정 편집",
+  "traeAuthorizationTitle": "Trae SOLO 연결",
+  "traeAuthorizationLoadError": "로그인 페이지를 불러오지 못했습니다. 취소한 후 다시 시도하세요.",
+  "llmOcrAccountSyncFailed": "OCR 계정을 동기화하지 못했습니다. 계정 관리에서 설정을 확인하세요.",
+  "llmOcrAccountMigrationFailed": "OCR 계정을 마이그레이션하지 못했습니다. 기존 구성이 유지됩니다.",
+  "llmAccountsTab": "계정",
+  "llmModelGroupsTab": "모델 그룹",
+  "llmAccountsSummary": "각 계정은 자격 증명, 모델 기능, 할당량 및 동시성 제한을 따로 저장합니다. 알 수 없는 할당량은 알 수 없음으로 유지됩니다.",
+  "llmModelGroupsSummary": "안정적인 모델 그룹은 Stroom 모델 이름을 계정 및 상위 모델에 연결합니다. 대체 라우팅은 그룹 내부로 제한됩니다.",
+  "llmAccountName": "계정 이름",
+  "llmConnectorLabel": "커넥터",
+  "llmProviderPresetLabel": "공급자 프리셋",
+  "llmAuthenticationMethodLabel": "인증 방식",
+  "llmDefaultApiProtocolLabel": "기본 API 프로토콜",
+  "llmConnectionStatusLabel": "연결 상태",
+  "llmConfigureModelLabel": "구성할 모델",
+  "llmModelApiProtocolLabel": "모델 API 프로토콜",
+  "llmUpstreamModelsCapabilitiesLabel": "상위 모델 및 기능",
+  "llmModelGroupNameLabel": "모델 그룹 이름",
+  "llmStableModelIdLabel": "Stroom 안정 모델 ID",
+  "llmPriorityTierLabel": "우선순위 단계",
+  "llmUpstreamModelLabel": "상위 모델",
+  "llmSamePrioritySelectionLabel": "같은 우선순위 계정 선택",
+  "llmFallbackScopeLabel": "계정 간 대체 범위",
+  "llmConcurrencyLimitLabel": "동시성 제한",
+  "llmWindowModeLabel": "기간 모드",
+  "llmCalendarTimezoneLabel": "달력 시간대",
+  "llmValueLabel": "값",
+  "llmTypeLabel": "유형",
+  "llmRemainingQuotaFloorLabel": "최소 잔여 할당량",
+  "llmWindowUsageCeilingLabel": "기간 사용량 한도",
+  "llmImportZedCredentials": "Zed에서 API 자격 증명 가져오기",
+  "llmAddModelGroupTooltip": "모델 그룹 추가",
+  "llmNoModelGroups": "모델 그룹이 없습니다.",
+  "llmAccountPolicies": "계정 정책",
+  "llmQuotaConcurrencyPolicy": "할당량 및 동시성 정책",
+  "llmAccountAuthSource": "인증 출처: {source}",
+  "llmAccountRecentError": "최근 오류: {error}",
+  "llmNoRecord": "기록 없음",
+  "llmConnectorUnavailableForChat": "이 커넥터는 Chat에서 지원되지 않습니다.",
+  "llmAccountUnavailableInSelectors": "이 계정의 모델은 Chat 또는 Task Flow 선택기에 표시되지 않습니다.",
+  "llmModelsCapabilitiesHeading": "모델 및 기능",
+  "llmNoModelsConfigured": "구성된 모델 없음",
+  "llmUsageQuotaHeading": "사용량 및 할당량",
+  "llmQuotaUnknown": "할당량 알 수 없음",
+  "llmQuotaLimitsHeading": "할당량 제한",
+  "llmLocalObservedUsageHeading": "로컬 관측 사용량",
+  "llmUsageHistoryDisclaimer": "최근 62일간의 로컬 통계이며 공급자 잔액을 나타내지 않습니다.",
+  "llmLastRouteHeading": "최근 라우팅",
+  "llmMembersHeading": "구성원",
+  "llmNoRoutableMembers": "라우팅 가능한 계정 구성원이 없습니다",
+  "llmLegacyMemberRequired": "기존 대화 모델 참조와 로컬 ID를 보존하려면 이 구성원을 유지해야 합니다.",
+  "llmAccountGroupLoadError": "계정 또는 모델 그룹을 불러오지 못했습니다.",
+  "llmRetryLoad": "다시 시도",
+  "llmGroupFallbackWithinMembers": "저장된 그룹은 구성원 내에서만 대체 라우팅을 허용합니다.",
+  "llmMixedGroupProtocolError": "같은 모델 참조의 모든 구성원은 동일한 채팅 프로토콜을 사용해야 합니다.",
+  "llmAddMember": "구성원 추가",
+  "llmNoGroupMembers": "이 모델 그룹에는 구성원이 없습니다.",
+  "llmStableModelGroupHelp": "로컬 모델 ID는 기존 대화와의 호환성을 유지합니다. 대체 라우팅은 이 안정적인 그룹 안에서만 이뤄집니다.",
+  "llmSignInProvider": "{provider} 로그인",
+  "llmOAuthInstructions": "{provider} 인증을 열고 아래 코드를 입력하세요. 인증 후 Stroom이 계정을 저장합니다.",
+  "llmOpenProviderAuthorization": "{provider} 열기",
+  "llmAuthorizationSource": "인증 출처: {source}",
+  "llmAccountDeleteFailed": "계정을 삭제하지 못했습니다.",
+  "llmAccountDeleteCleanupFailed": "계정은 삭제했지만 이전 구성을 정리하지 못했습니다.",
+  "llmSaveBeforeModelRefresh": "모델 카탈로그를 새로 고치기 전에 계정과 변경 사항을 저장하세요.",
+  "llmRefreshModelCatalog": "모델 카탈로그 새로 고침",
+  "llmReauthorize": "재인증",
+  "llmSave": "저장",
+  "llmCancel": "취소",
+  "llmDelete": "삭제",
+  "llmEdit": "편집",
+  "llmContinueKeychainScan": "계속 확인",
+  "llmImportCredentialsConfirmTitle": "{provider} 자격 증명을 가져오시겠습니까?",
+  "llmImportThisAccount": "이 계정 가져오기",
+  "llmImportedAccounts": "공급자 계정 {count}개를 안전하게 가져왔습니다.",
+  "llmSamePriorityStrategySummary": "동일 우선순위 정책: {strategy}",
+  "llmKeepLegacyGroup": "이전 대화를 위해 모델 그룹 유지",
+  "llmGroupUsageSummary": "그룹 사용량: {usage}",
+  "llmModelGroupSettings": "모델 그룹 설정",
+  "llmAddModelGroupMemberTitle": "모델 그룹 구성원 추가",
+  "llmSavePolicy": "정책 저장",
+  "llmOpenferenceCatalogNote": "사용 가능한 모델은 Openference 계정 요금제에 따라 달라집니다. 오프라인 카탈로그는 이용 권한을 의미하지 않습니다.",
+  "llmTestLocalCli": "로컬 {cli} CLI 테스트",
+  "llmCheckLocalCodexCli": "로컬 Codex CLI 로그인 확인",
+  "llmCliReady": "{cli} CLI가 설치되어 사용할 수 있습니다.",
+  "llmCodexCliReady": "Codex CLI에 로그인되어 사용할 수 있습니다.",
+  "llmCheckZedKeychain": "Zed 키체인을 확인할까요?",
+  "llmRoutingPolicyTitle": "{target} 라우팅 정책",
+  "llmSupportedAuthRequired": "계정을 저장하기 전에 지원되는 인증 방식을 선택하세요.",
+  "llmTraeCallbackPrivacy": "로그인 콜백은 이 기기에서만 수신해 보안 자격 증명 저장소에 저장합니다. 콜백 URL과 검색 기록은 저장하지 않습니다.",
+  "llmCloudflareAccountIdLabel": "Cloudflare 계정 ID",
+  "llmCloudflareAccountIdHint": "Cloudflare 대시보드 오른쪽에서 계정 ID를 찾으세요.",
+  "llmDevinExecutablePathLabel": "공식 Devin CLI 실행 파일 경로",
+  "llmDevinExecutablePathHelp": "공식 설치 위치에서 Devin 실행 파일의 전체 경로를 복사하세요.",
+  "llmExecutableIntegrityHint": "Stroom은 이 파일의 SHA-256을 기록하며 파일이 변경되면 실행을 거부합니다.",
+  "llmDevinReauthTitle": "공식 Devin CLI 다시 로그인",
+  "llmDevinReauthSubtitle": "이 계정의 별도 CLI 로그인을 다시 인증합니다.",
+  "llmKeepOAuthClientSecretHelp": "플랫폼 보안 저장소에만 저장됩니다. 기존 OAuth 클라이언트 암호를 유지하려면 비워 두세요.",
+  "llmPublicOauthClientSecretHelp": "플랫폼 보안 저장소에만 저장됩니다. 공개 클라이언트는 비워 둘 수 있습니다.",
+  "llmGitlabApplicationsHint": "GitLab 사용자 설정 → Applications",
+  "llmAzureDeploymentIdHelp": "배포 ID는 이 계정의 고유한 상위 모델 ID로 사용됩니다.",
+  "llmAzureApiVersionHelp": "기본값은 Azure 모델 카탈로그 구성을 따릅니다.",
+  "llmAmazonQRegionLabel": "Amazon Q Developer 리전",
+  "llmQwenCloudRegionLabel": "Qwen Cloud 리전 ID",
+  "llmQwenCloudRegionHelp": "API 키는 리전에 연결됩니다. 지원: ap-southeast-1, cn-beijing, eu-central-1, cn-hongkong, ap-northeast-1, us-east-1.",
+  "llmGoogleCloudProjectLabel": "Google Cloud 프로젝트 ID",
+  "llmModelCapabilitiesInputHint": "한 줄에 하나: 모델 ID,streaming,vision,tools",
+  "llmGoogleOAuthPrerequisites": "이 연결은 Google Generative Language API OAuth를 사용합니다. 사용자가 관리하는 Google Cloud 프로젝트, Generative Language API 활성화, 구성된 Desktop OAuth 클라이언트가 필요합니다. 요청은 해당 프로젝트에 청구되며 Code Assist나 AI Studio 웹 로그인을 사용하지 않습니다.",
+  "llmGitlabOAuthPrerequisites": "GitLab Duo OAuth에는 콜백 http://localhost:20128/callback 및 ai_features read_user 권한으로 등록된 GitLab 앱이 필요합니다. client ID와 앱 유형에 따라 client secret을 입력하세요. 토큰은 안전하게 저장되며 지원되는 경우 갱신됩니다. PAT도 별도로 선택할 수 있습니다.",
+  "llmAmazonQOAuthPrerequisites": "refresh_token이 포함된 AWS Builder ID OAuth 자격 증명 JSON을 가져오세요. access_token, clientId, clientSecret은 선택 항목입니다. 클라이언트 정보가 없으면 Stroom이 AWS OIDC로 클라이언트를 등록해 토큰을 갱신합니다. 토큰은 보안 저장소에 저장하며 브라우저 쿠키는 읽지 않습니다. 지원 리전: us-east-1, eu-central-1.",
+  "llmTraeTokenSecurity": "SOLO는 고정 Trae 서비스 엔드포인트를 사용하며 Cloud-IDE-JWT만 전송합니다. 가져온 토큰은 약 14일 후 만료되어 다시 입력해야 합니다.",
+  "llmAccountUsageUsedLabel": "사용됨",
+  "@llmAccountUsageUsedLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageRemainingLabel": "남음",
+  "@llmAccountUsageRemainingLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageTotalLabel": "합계",
+  "@llmAccountUsageTotalLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountRemainingQuotaLabel": "잔여 할당량:",
+  "@llmAccountRemainingQuotaLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountMetricUnitUnknown": "알 수 없는 단위",
+  "@llmAccountMetricUnitUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilitySupported": "지원됨",
+  "@llmAccountCapabilitySupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnsupported": "지원되지 않음",
+  "@llmAccountCapabilityUnsupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnknown": "알 수 없음",
+  "@llmAccountCapabilityUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountQuotaReserveThreshold": "{window} 남은 할당량 예약 기준: {threshold}",
+  "@llmAccountQuotaReserveThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUsageCeilingThreshold": "{window} 사용량 한도: {threshold}",
+  "@llmAccountUsageCeilingThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccountWithOAuth": "“{account}” 계정을 삭제하고 OAuth 승인을 취소하며 모델 그룹에서 제거할까요?",
+  "@llmConfirmDeleteAccountWithOAuth": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccount": "“{account}” 계정을 삭제하고 모델 그룹에서 제거할까요?",
+  "@llmConfirmDeleteAccount": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteModelGroup": "“{group}” 라우팅을 삭제할까요? 기존 대화의 모델 참조는 변경되지 않습니다.",
+  "@llmConfirmDeleteModelGroup": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportAccountSource": "로컬 키체인에서 “{account}”을(를) Stroom {provider} API 계정으로 가져옵니다.",
+  "@llmKeychainImportAccountSource": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportExistingAccountNotice": "Stroom 계정 키를 업데이트하고 이름, 모델, 라우팅 설정은 유지합니다.",
+  "@llmKeychainImportExistingAccountNotice": {
+    "description": "LLM account management UI text."
+  },
+  "llmKeychainImportSecurityNote": "확인 후 Stroom이 자격 증명을 다시 읽어 검증합니다. 키는 인터페이스에 표시되지 않습니다.",
+  "@llmKeychainImportSecurityNote": {
+    "description": "LLM account management UI text."
+  },
+  "llmProviderAuthorizationFailed": "{provider} 인증에 실패했습니다. 다시 로그인을 시작하세요.",
+  "@llmProviderAuthorizationFailed": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountConcurrencySummary": "계정 동시 실행 수: {value}",
+  "@llmAccountConcurrencySummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountGroupUsageSummary": "모델 그룹 로컬 사용량: {usage}",
+  "@llmAccountGroupUsageSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "usage": {
+        "type": "String"
+      }
+    }
+  },
+  "llmPriorityTierValue": "우선순위 {tier}",
+  "@llmPriorityTierValue": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "tier": {
+        "type": "int"
+      }
+    }
+  },
+  "llmGroupMemberSummary": "{upstream} · 우선순위 {priority} · 로컬 ID {localId}",
+  "@llmGroupMemberSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "upstream": {
+        "type": "String"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "localId": {
+        "type": "String"
+      }
+    }
+  },
+  "llmNoAccountCanProcessModel": "{model}을(를) 처리할 수 있는 계정이 없습니다.",
+  "@llmNoAccountCanProcessModel": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "llmOAuthLimitationSaveMessage": "{limitation}\n이 계정을 저장하기 전에 지원되는 인증 방식을 선택하세요.",
+  "@llmOAuthLimitationSaveMessage": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "limitation": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderEnterpriseCredentials": "{provider}에서 제공한 기업 자격 증명",
+  "@llmProviderEnterpriseCredentials": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderSessionToken": "{provider}에서 제공한 세션 토큰",
+  "@llmProviderSessionToken": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderCredential": "{provider}에서 제공한 자격 증명",
+  "@llmProviderCredential": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUiAccountSaving": "계정 저장에 실패했습니다. 귀하의 계정 정보와 보안 보관 상태를 확인하시기 바랍니다.",
+  "@llmAccountUiAccountSaving": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountDeletion": "계정 삭제에 실패했습니다.",
+  "@llmAccountUiAccountDeletion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccount": "계정이 삭제되었지만 이전 구성을 정리하지 못했습니다.",
+  "@llmAccountUiTheAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountWas": "계정이 삭제되었지만 OAuth 취소에 실패했습니다. 승인을 취소하려면 공급자 계정 설정으로 이동하세요.",
+  "@llmAccountUiTheAccountWas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckZed": "Zed 키체인을 확인하시겠습니까?",
+  "@llmAccountUiCheckZed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMacOSMay": "macOS는 가져오기 가능한 매니페스트를 생성할 때 Stroom이 일치하는 키체인 항목을 확인하도록 허용할지 여부를 항목별로 물을 수 있습니다.",
+  "@llmAccountUiMacOSMay": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisStep": "이 단계에서는 계정이 저장되지 않습니다. 나중에 가져오려는 계정을 하나씩 확인해야 합니다.",
+  "@llmAccountUiThisStep": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepChecking": "계속 확인하세요",
+  "@llmAccountUiKeepChecking": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnableTo": "시스템 키체인을 읽을 수 없습니다. 시스템 키체인 액세스 권한을 확인하고 다시 시도하세요.",
+  "@llmAccountUiUnableTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoReadable": "읽을 수 있는 Zed OpenAI, Anthropic, Google, Mistral 또는 xAI 자격 증명을 찾을 수 없습니다.",
+  "@llmAccountUiNoReadable": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiProviderText": "공급자",
+  "@llmAccountUiProviderText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomWill": "Stroom은 확인 후 자격 증명을 다시 읽고 확인합니다. 키는 인터페이스에 표시되지 않습니다.",
+  "@llmAccountUiStroomWill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportThis": "이 계정 가져오기",
+  "@llmAccountUiImportThis": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsNot": "자격 증명을 가져오지 못했습니다. 키체인 항목이 변경되었거나 액세스가 거부되었거나 보안 저장소를 사용할 수 없습니다.",
+  "@llmAccountUiCredentialsNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseAdd": "먼저 계정에 모델을 추가한 후 모델 그룹을 생성하세요.",
+  "@llmAccountUiPleaseAdd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModel": "모델 그룹을 저장하지 못했습니다. 해당 업스트림 모델이 회원 계정에 존재하는지 확인하세요.",
+  "@llmAccountUiTheModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroup": "모델 그룹 삭제에 실패했습니다.",
+  "@llmAccountUiModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLLMAccount": "LLM 계정 및 모델 그룹",
+  "@llmAccountUiLLMAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupText": "모델 그룹",
+  "@llmAccountUiModelGroupText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachAccount": "각 계정은 자격 증명, 모델 기능, 할당량 및 동시성 전략을 독립적으로 저장합니다. 알려지지 않은 금액은 알려지지 않았습니다.",
+  "@llmAccountUiEachAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportAPI": "Zed에서 API 자격 증명 가져오기",
+  "@llmAccountUiImportAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRouting": "라우팅 정책을 저장하지 못했습니다.",
+  "@llmAccountUiTheRouting": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStableModel": "안정적인 모델 그룹은 레거시 세션 모델 ID를 선택적 계정 및 업스트림 모델에 매핑합니다. 구성원은 이 그룹 내에서만 롤백할 수 있습니다.",
+  "@llmAccountUiStableModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddModel": "모델 그룹 추가",
+  "@llmAccountUiAddModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCode": "키미코드 인증에 실패했습니다. 다시 로그인해 주세요.",
+  "@llmAccountUiKimiCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginTo": "Kimi 코드 CLI에 로그인",
+  "@llmAccountUiLoginTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenThe": "Kimi 인증 페이지를 열고 아래 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.",
+  "@llmAccountUiOpenThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKimi": "오픈키미",
+  "@llmAccountUiOpenKimi": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCode": "Kilo Code 인증에 실패했습니다. 다시 로그인해 보세요.",
+  "@llmAccountUiKiloCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginToKilo": "킬로코드에 로그인하세요",
+  "@llmAccountUiLoginToKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheKilo": "Kilo Code 인증 페이지를 열고 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.",
+  "@llmAccountUiOpenTheKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKilo": "킬로 코드 열기",
+  "@llmAccountUiOpenKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuse": "Meta Muse 인증에 실패했습니다. 다시 로그인해 보세요.",
+  "@llmAccountUiMetaMuse": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginMeta": "로그인 메타뮤즈 코드",
+  "@llmAccountUiLoginMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheMeta": "메타 확인 페이지를 열고 아래 코드를 입력하세요. 승인이 완료되면 Stroom은 자동으로 계정을 저장합니다.",
+  "@llmAccountUiOpenTheMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenMeta": "오픈메타",
+  "@llmAccountUiOpenMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountOr": "계정 또는 모델 그룹을 읽을 수 없습니다.",
+  "@llmAccountUiTheAccountOr": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAnd": "할당량 및 동시성 전략",
+  "@llmAccountUiQuotaAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAvailableModels": "사용 가능한 모델은 Openference 계정 계획에 따라 다릅니다. 오프라인 모델 카탈로그는 인증을 의미하지 않습니다.",
+  "@llmAccountUiAvailableModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoRecord": "기록 없음",
+  "@llmAccountUiNoRecord": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoes": "ChatAdapter는 현재 이 커넥터를 지원하지 않습니다.",
+  "@llmAccountUiChatAdapterDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAccount": "이 계정의 모델 그룹은 채팅 및 작업 흐름 모델 선택기에 표시되지 않습니다.",
+  "@llmAccountUiThisAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAnd": "모델 및 기능",
+  "@llmAccountUiModelsAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservation": "지역 관측 사용법",
+  "@llmAccountUiLocalObservation": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoLocal": "로컬 기록 없음(지난 62일)",
+  "@llmAccountUiNoLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservationUsage": "로컬 관측 사용량을 알 수 없음(라우팅 기록을 읽을 수 없음)",
+  "@llmAccountUiLocalObservationUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalStatistics": "지난 62일 동안의 지역 통계는 계정 잔액을 나타내지 않습니다.",
+  "@llmAccountUiLocalStatistics": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndFallback": "할당량 및 대체 전략",
+  "@llmAccountUiQuotaAndFallback": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepOld": "이전 세션 모델 그룹 유지",
+  "@llmAccountUiKeepOld": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDeleteModel": "모델 그룹 삭제",
+  "@llmAccountUiDeleteModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocal": "모델그룹 로컬 누적 사용량: 알 수 없음",
+  "@llmAccountUiModelGroupLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocalCumulative": "모델그룹 로컬 누적 사용량 : 알 수 없음(라우팅 기록을 읽을 수 없음)",
+  "@llmAccountUiModelGroupLocalCumulative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCorresponding": "이전 세션 모델 참조의 해당 멤버 및 로컬 참조 ID를 유지해야 합니다.",
+  "@llmAccountUiTheCorresponding": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThereAre": "라우팅 가능한 계정 구성원이 없습니다.",
+  "@llmAccountUiThereAre": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHoursText": "5시간",
+  "@llmAccountUiHoursText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyText": "매일",
+  "@llmAccountUiDailyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyText": "매주",
+  "@llmAccountUiWeeklyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyText": "매달",
+  "@llmAccountUiMonthlyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMainWindow": "메인 창 잔여 잔액",
+  "@llmAccountUiMainWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRemaining": "하위 창의 남은 금액",
+  "@llmAccountUiTheRemaining": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyQuota": "남은 일일 할당량",
+  "@llmAccountUiDailyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyQuota": "남은 주간 할당량",
+  "@llmAccountUiWeeklyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyQuota": "남은 월별 할당량",
+  "@llmAccountUiMonthlyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeReview": "남은 코드 검토 할당량",
+  "@llmAccountUiCodeReview": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestText": "요청",
+  "@llmAccountUiRequestText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityUnknown": "능력 불명",
+  "@llmAccountUiAbilityUnknown": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatus": "연결 상태를 알 수 없음",
+  "@llmAccountUiConnectionStatus": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReadyText": "준비",
+  "@llmAccountUiReadyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSuspendedText": "정지됨",
+  "@llmAccountUiSuspendedText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReAuthentication": "재인증 필요",
+  "@llmAccountUiReAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConnection": "연결 상태를 알 수 없습니다. 경로가 여전히 요청을 시도할 수 있으므로 요청 결과에 따라 상태를 업데이트하세요.",
+  "@llmAccountUiTheConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountsCan": "계정은 모델 그룹 라우팅에 참여할 수 있습니다.",
+  "@llmAccountUiAccountsCan": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountHas": "계정이 정지되었으며 라우팅에 참여하지 않습니다.",
+  "@llmAccountUiTheAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountNeeds": "라우팅에 참여하려면 먼저 계정을 다시 인증해야 합니다.",
+  "@llmAccountUiTheAccountNeeds": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteCloud": "Cloud-IDE-JWT 붙여넣기",
+  "@llmAccountUiPasteCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeDevice": "Kilo 코드 장치 OAuth",
+  "@llmAccountUiKiloCodeDevice": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousFree": "익명(무료 모델만 해당)",
+  "@llmAccountUiAnonymousFree": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderAdministrator": "Qoder 관리자가 OAuth를 구성합니다.",
+  "@llmAccountUiQoderAdministrator": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyDomestic": "CodeBuddy 국내기기 OAuth",
+  "@llmAccountUiCodeBuddyDomestic": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyInternational": "CodeBuddy 국제 장치 OAuth",
+  "@llmAccountUiCodeBuddyInternational": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWorkBuddyCLI": "WorkBuddy CLI 장치 OAuth",
+  "@llmAccountUiWorkBuddyCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyOAuth": "레거시 OAuth(지원되지 않음)",
+  "@llmAccountUiLegacyOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubscribeTo": "OAuth 구독",
+  "@llmAccountUiSubscribeTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleService": "Google 서비스 계정",
+  "@llmAccountUiGoogleService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSAccess": "AWS 액세스 + 비밀 키(세션 토큰 선택 사항)",
+  "@llmAccountUiAWSAccess": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSDefault": "AWS 기본 자격 증명 체인",
+  "@llmAccountUiAWSDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSessionToken": "세션 토큰",
+  "@llmAccountUiSessionToken": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevin": "공식 Devin CLI 독립 로그인",
+  "@llmAccountUiOfficialDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAI": "레거시 AI Studio 릴레이(단종)",
+  "@llmAccountUiLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoCertification": "인증 없음",
+  "@llmAccountUiNoCertification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenVerification": "확인 페이지 열기",
+  "@llmAccountUiOpenVerification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUserProvided": "사용자가 제공한 업스트림 API 키",
+  "@llmAccountUiUserProvided": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBedrock": "AWS Bedrock 사용자 제공 정적 자격 증명",
+  "@llmAccountUiAWSBedrock": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomDevin": "이 계정에 대해 별도로 생성된 Stroom Devin CLI 로그인 구성",
+  "@llmAccountUiStroomDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacy": "레거시 AI Studio 릴레이는 폐기되었습니다. 대신 API 키 또는 지원되는 OAuth를 사용하세요.",
+  "@llmAccountUiTheLegacy": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNativeCompatible": "기본 호환 엔드포인트, 자격 증명 없음",
+  "@llmAccountUiNativeCompatible": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamAuthentication": "업스트림 인증 실패",
+  "@llmAccountUiUpstreamAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInsufficientUpstream": "업스트림 할당량이 부족합니다.",
+  "@llmAccountUiInsufficientUpstream": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequests": "업스트림 요청이 제한됩니다.",
+  "@llmAccountUiUpstreamRequests": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamConnection": "업스트림 연결 실패",
+  "@llmAccountUiUpstreamConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamService": "업스트림 서비스 오류",
+  "@llmAccountUiUpstreamService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRejects": "업스트림이 요청을 거부함",
+  "@llmAccountUiUpstreamRejects": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestCanceled": "요청이 취소되었습니다.",
+  "@llmAccountUiRequestCanceled": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequest": "업스트림 요청이 실패했습니다.",
+  "@llmAccountUiUpstreamRequest": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSameConnector": "동일한 커넥터 계정",
+  "@llmAccountUiSameConnector": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCurrentModel": "현재 모델 그룹",
+  "@llmAccountUiCurrentModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeastUsed": "가장 적게 사용됨",
+  "@llmAccountUiLeastUsed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPollingText": "폴링",
+  "@llmAccountUiPollingText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeHigher": "더 높은 잔액에 우선순위를 두세요",
+  "@llmAccountUiPrioritizeHigher": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeConsumption": "낮은 잔액의 소비 우선순위",
+  "@llmAccountUiPrioritizeConsumption": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddLLM": "LLM 계정 추가",
+  "@llmAccountUiAddLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEditLLM": "LLM 계정 편집",
+  "@llmAccountUiEditLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceProvider": "서비스 제공업체 기본값",
+  "@llmAccountUiServiceProvider": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCustomOpenAI": "맞춤형 OpenAI 호환 엔드포인트",
+  "@llmAccountUiCustomOpenAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogIn": "Stroom 내에서 Trae SOLO에 로그인하세요.",
+  "@llmAccountUiLogIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginCallbacks": "로그인 콜백은 로컬에서만 수신되며 보안 자격 증명 저장소에 기록됩니다. 콜백 주소나 검색 기록은 저장되지 않습니다.",
+  "@llmAccountUiLoginCallbacks": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoesNot": "ChatAdapter는 현재 이 커넥터를 지원하지 않습니다. 저장 후에는 계정의 모델 그룹이 채팅 및 작업 흐름 모델 선택기에 표시되지 않습니다.",
+  "@llmAccountUiChatAdapterDoesNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuthenticationMethod": "인증방법",
+  "@llmAccountUiAuthenticationMethod": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFindThe": "Cloudflare Dashboard 오른쪽에서 계정 ID를 찾으세요.",
+  "@llmAccountUiFindThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAPIKeys": "API 키는 여러 개의 독립적인 연결로 추가되고 모델 그룹을 통해 폴링될 수 있습니다. 익명 모드는 확인된 무료 모델만 표시하고 호출합니다. 계정 디렉터리는 사용되지 않습니다.",
+  "@llmAccountUiAPIKeys": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachCline": "각 Cline API 키는 독립적인 계정으로 저장되어야 합니다. 모델 카탈로그는 Cline 또는 ClinePass에 의해 별도로 새로 고쳐집니다. 카탈로그 자체가 해당 계정에 구독 승인이 있다는 의미는 아닙니다.",
+  "@llmAccountUiEachCline": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyLaunch": "공식 devin CLI만 실행하세요. 로그인 구성은 이 계정과 별개로 Stroom 애플리케이션 디렉터리에 저장됩니다. 호스트 Devin 로그인 또는 API 키는 읽혀지지 않습니다.",
+  "@llmAccountUiOnlyLaunch": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseThe": "기본 Codex CLI를 사용하세요. 먼저 터미널에서 codex 로그인을 실행하세요. Stroom은 CLI 로그인 데이터를 읽거나 저장하지 않습니다.",
+  "@llmAccountUiUseThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseTheNative": "기본 ZCode 앱 서버 및 GLM 코딩 계획을 사용하세요. 필요한 경우 먼저 공식 ZCode 앱에 로그인하세요. Stroom은 ZCode 로그인 데이터를 읽거나 저장하지 않습니다.",
+  "@llmAccountUiUseTheNative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevinCLI": "공식 Devin CLI 실행 가능 절대 경로",
+  "@llmAccountUiOfficialDevinCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCopyThe": "공식 Devin 설치 위치에서 devin 실행 파일의 전체 경로를 복사합니다.",
+  "@llmAccountUiCopyThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRetrustCurrent": "현재 CLI 실행 파일을 다시 신뢰하고 SHA-256을 업데이트하세요.",
+  "@llmAccountUiRetrustCurrent": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiIHave": "Devin 공식 채널에서 이 실행 파일을 설치하고 신뢰했습니다.",
+  "@llmAccountUiIHave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomFixes": "Stroom은 현재 파일의 SHA-256을 수정합니다. 파일이 변경되면 시작을 거부합니다.",
+  "@llmAccountUiStroomFixes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogBack": "공식 Devin CLI에 다시 로그인하세요.",
+  "@llmAccountUiLogBack": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReauthenticateThe": "이 계정에 대한 독립형 CLI 로그인 구성을 다시 인증하십시오.",
+  "@llmAccountUiReauthenticateThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseSelect": "이 계정을 저장하기 전에 지원되는 인증 방법을 선택하세요.",
+  "@llmAccountUiPleaseSelect": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacyAI": "레거시 AI Studio 웹 세션 연결이 중단되었습니다. API 키 또는 지원되는 OAuth를 선택하고 다시 승인하세요.",
+  "@llmAccountUiTheLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderOAuth": "Qoder OAuth에서는 서비스 관리자가 완전한 OAuth 인증, 토큰, 사용자 정보 URL 및 클라이언트 자격 증명을 제공해야 합니다. 승인 후에는 DashScope API 키와 민감한 OAuth 자격 증명만 플랫폼 보안 저장소에 저장됩니다. 브라우저 쿠키는 사용되지 않습니다. 새로 고침 부여는 업스트림으로 정의되지 않았습니다. 자격 증명이 만료되면 다시 인증하세요.",
+  "@llmAccountUiQoderOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubmitTo": "플랫폼 보안 저장소에만 제출하세요. 기존 OAuth 클라이언트 비밀번호를 유지하려면 비워두세요.",
+  "@llmAccountUiSubmitTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterThe": "pt-로 시작하는 Qoder 개인 액세스 토큰을 입력하세요. 네이티브 qodercli를 통해 호출됩니다. 문자 채팅만 지원되고 발신자 도구는 지원되지 않습니다. 단일 요청에 대해 최대 45초 동안 응답이 버퍼링되어 반환됩니다.",
+  "@llmAccountUiEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitLabUser": "GitLab 사용자 설정 → 응용 프로그램",
+  "@llmAccountUiGitLabUser": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlySaved": "플랫폼 보안 저장소에만 저장됩니다. 공용 클라이언트의 경우 비워 둘 수 있습니다.",
+  "@llmAccountUiOnlySaved": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyStored": "플랫폼 보안 저장소에만 저장됩니다.",
+  "@llmAccountUiOnlyStored": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitHubEnterprise": "GitHub Enterprise Cloud 또는 서버에서는 Copilot을 활성화하고 장치 OAuth를 허용해야 합니다. HTTPS 인스턴스 주소를 사용하십시오. OAuth 애플리케이션 클라이언트 ID는 관리자가 제공할 수 있으며, 공개 클라이언트 ID를 사용하려면 공백으로 남겨둘 수 있습니다.",
+  "@llmAccountUiGitHubEnterprise": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiClineUses": "Cline은 고정된 서비스 엔드포인트를 사용합니다.",
+  "@llmAccountUiClineUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHorde": "AI Horde는 고정된 HTTPS 채팅 엔드포인트를 사용합니다.",
+  "@llmAccountUiAIHorde": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUncloseAIUses": "UncloseAI는 고정된 OpenAI 채팅 완료 엔드포인트를 사용합니다.",
+  "@llmAccountUiUncloseAIUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeUses": "Kilo Code는 고정된 서비스 엔드포인트를 사용합니다.",
+  "@llmAccountUiKiloCodeUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedService": "고정 서비스 엔드포인트",
+  "@llmAccountUiFixedService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEndpointAddress": "엔드포인트 주소(커넥터에서 요구하는 경우 입력)",
+  "@llmAccountUiEndpointAddress": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterAzure": "Azure OpenAI 리소스 또는 Azure AI Foundry 호스트를 입력하세요. 배포 및 버전은 별도로 구성됩니다.",
+  "@llmAccountUiEnterAzure": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlank": "이 계정 유형에 대한 공식 모델 카탈로그 및 API 엔드포인트를 사용하려면 비워 두세요.",
+  "@llmAccountUiLeaveBlank": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPS": "명령 코드를 사용하여 HTTPS API 엔드포인트를 수정했습니다.",
+  "@llmAccountUiFixedHTTPS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSEndpoint": "Kilo Code 모델 게이트웨이를 사용하여 HTTPS 엔드포인트를 수정했습니다.",
+  "@llmAccountUiFixedHTTPSEndpoint": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSChat": "Cline을 사용하여 HTTPS 채팅 완료 엔드포인트를 수정했습니다.",
+  "@llmAccountUiFixedHTTPSChat": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoAPI": "API 키가 필요하지 않습니다. 옵션 키는 식별용으로만 사용됩니다.",
+  "@llmAccountUiNoAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeS": "AI Horde의 익명 키 또는 우선 순위 API 키는 고정된 채팅 서비스 엔드포인트로만 전송됩니다.",
+  "@llmAccountUiAIHordeS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSOLOUses": "SOLO는 고정된 Trae 서비스 엔드포인트를 사용합니다. 해당 엔드포인트에만 Cloud-IDE-JWT를 보냅니다. 붙여넣은 토큰은 약 14일 후에 다시 입력해야 합니다.",
+  "@llmAccountUiSOLOUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDeployment": "배포 ID는 계정의 고유한 업스트림 모델 ID로 사용됩니다.",
+  "@llmAccountUiTheDeployment": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDefault": "기본값은 Azure 모델 카탈로그에 따라 구성됩니다.",
+  "@llmAccountUiTheDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAmazonQ": "Amazon Q 개발자 지역",
+  "@llmAccountUiAmazonQ": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSRegion": "AWS 지역",
+  "@llmAccountUiAWSRegion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexArea": "정점 영역",
+  "@llmAccountUiVertexArea": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQwenCloud": "Qwen Cloud 지역 ID",
+  "@llmAccountUiQwenCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleCloud": "Google Cloud 프로젝트 ID",
+  "@llmAccountUiGoogleCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThePartner": "파트너 모델에는 프로젝트 ID가 필요합니다. 서비스 계정은 JSON의 project_id에서 자동으로 읽을 수 있습니다.",
+  "@llmAccountUiThePartner": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCanBe": "서비스 계정 JSON의 project_id를 사용하려면 비워 둘 수 있습니다.",
+  "@llmAccountUiCanBe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBuilder": "AWS 빌더 ID OAuth 자격 증명 JSON",
+  "@llmAccountUiAWSBuilder": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAuthentication": "이 인증 방법에는 자격 증명을 입력할 필요가 없습니다.",
+  "@llmAccountUiThisAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSCredentials": "AWS 자격 증명 JSON",
+  "@llmAccountUiAWSCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceAccount": "서비스 계정 JSON",
+  "@llmAccountUiServiceAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeAPI": "AI Horde API 키(선택적 우선순위)",
+  "@llmAccountUiAIHordeAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsText": "자격 증명",
+  "@llmAccountUiCredentialsText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteThe": "JWT 자체 또는 전체 'Cloud-IDE-JWT <token>' 요청 헤더 값을 붙여넣습니다. 가져오기 토큰은 자동으로 새로 고쳐지지 않습니다. 인앱 Trae 로그인에 대한 자격 증명은 만료되면 자동으로 새로 고쳐집니다.",
+  "@llmAccountUiPasteThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGetThe": "Cursor.com/dashboard/api에서 사용자 API 키(crsr_… 또는 grok_…)를 가져옵니다. 커서 IDE 로그인을 읽을 수 없습니다.",
+  "@llmAccountUiGetThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheOptional": "선택적 AI Horde API 키는 대기열 우선순위(kudos)만 높이고 모델 권한은 높이지 않습니다. 익명 모드를 사용하려면 \"인증 없음\"을 선택하세요.",
+  "@llmAccountUiTheOptional": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUsingThe": "실행 환경에 AWS 기본 자격 증명 체인 사용",
+  "@llmAccountUiUsingThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSavedIn": "플랫폼 보안 저장소에 저장됨",
+  "@llmAccountUiSavedIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankTo": "현재 보안 자격 증명을 유지하려면 비워 두세요.",
+  "@llmAccountUiLeaveBlankTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDefaultAPI": "기본 API 프로토콜",
+  "@llmAccountUiDefaultAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatusText": "연결 상태",
+  "@llmAccountUiConnectionStatusText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelTo": "구성할 모델",
+  "@llmAccountUiModelTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelAPI": "모델 API 프로토콜",
+  "@llmAccountUiModelAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInheritAccount": "계정 기본 계약 상속",
+  "@llmAccountUiInheritAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamModels": "업스트림 모델 및 기능",
+  "@llmAccountUiUpstreamModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnePer": "한 줄에 하나씩: 모델 ID, 스트리밍, 비전, 도구",
+  "@llmAccountUiOnePer": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelID": "모델 ID와 컨텍스트 길이는 고정 카탈로그에서 나옵니다. 다른 기능은 아직 알려지지 않았습니다.",
+  "@llmAccountUiModelID": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousMode": "익명 모드에서는 openrouter/free만 허용됩니다. 계정을 연결한 후 계정 디렉터리에 있는 모델을 사용할 수 있습니다.",
+  "@llmAccountUiAnonymousMode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsCome": "모델은 Kilo Code 디렉토리에서 제공됩니다. API 키와 장치 OAuth는 저장된 자체 자격 증명을 사용합니다.",
+  "@llmAccountUiModelsCome": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAndCapabilities": "모델과 기능은 업스트림 디렉터리에서 나옵니다. 위에서 각 모델에 대해 지원한다고 선언한 API 프로토콜을 선택하세요.",
+  "@llmAccountUiModelsAndCapabilities": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiACPDoes": "ACP는 안정적인 모델 카탈로그를 제공하지 않습니다. 공식 CLI의 현재 기본 모델을 사용하세요.",
+  "@llmAccountUiACPDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeCLI": "Kimi Code CLI는 검증된 코딩 계획 모델 디렉터리만 엽니다.",
+  "@llmAccountUiKimiCodeCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGrokBuild": "Grok Build는 검증된 구독 모델의 카탈로그만 엽니다.",
+  "@llmAccountUiGrokBuild": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiXAIOAuth": "xAI OAuth는 API에서 계정으로 얻은 모델 디렉터리만 엽니다.",
+  "@llmAccountUiXAIOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuseOAuth": "Meta Muse OAuth는 API에서 구독 계정으로 얻은 모델 디렉터리만 엽니다.",
+  "@llmAccountUiMetaMuseOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsComeFrom": "모델은 Cline의 Chat Completions 카탈로그에서 제공됩니다. 가용성은 해당 계정 및 구독에 따라 결정됩니다.",
+  "@llmAccountUiModelsComeFrom": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAbility": "능력은 명시적으로 선언됩니다. 이를 명시적으로 비활성화하려면 Vision=false를 사용하고, 입력하지 않은 경우 알 수 없는 상태로 두십시오.",
+  "@llmAccountUiTheAbility": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRefreshModel": "모델 디렉터리 새로 고침",
+  "@llmAccountUiRefreshModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTestThe": "로컬 Auggie CLI 테스트",
+  "@llmAccountUiTestThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckLocal": "로컬 Codex CLI 로그인 상태 확인",
+  "@llmAccountUiCheckLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelDirectory": "계정 및 수정 사항을 저장한 후 모델 디렉터리를 새로 고칠 수 있습니다.",
+  "@llmAccountUiTheModelDirectory": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLI": "Auggie CLI 모델 목록이 카탈로그를 반환하지 않았습니다. 고정 모델 카탈로그가 유지됩니다.",
+  "@llmAccountUiAuggieCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAI": "Vertex AI 파트너에는 유효한 Google Cloud 프로젝트와 권한이 있는 서비스 계정이 필요합니다. Express API 키는 Gemini만 지원합니다.",
+  "@llmAccountUiVertexAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedTo": "모델 디렉터리를 읽지 못했습니다. 계정 인증 및 연결 설정을 확인하세요.",
+  "@llmAccountUiFailedTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLIIs": "Auggie CLI가 설치되어 실행 중입니다.",
+  "@llmAccountUiAuggieCLIIs": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodexCLI": "Codex CLI가 로그인되어 실행할 준비가 되었습니다.",
+  "@llmAccountUiCodexCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAIPartners": "Vertex AI 파트너에는 유효한 프로젝트 ID가 필요합니다. 서비스 계정은 JSON에서 읽을 수 있으며 API 키는 프로젝트에 바인딩되어야 합니다.",
+  "@llmAccountUiVertexAIPartners": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedToSave": "계정을 저장하지 못했습니다. 연결 설정을 확인한 후 다시 시도해 주세요.",
+  "@llmAccountUiFailedToSave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTraeThe": "Trae 로그인이 완료되지 않았습니다. 다시 시도하거나 Cloud-IDE-JWT를 사용하여 수동으로 가져오세요.",
+  "@llmAccountUiTraeThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnter": "계정 이름을 입력하세요.",
+  "@llmAccountUiPleaseEnter": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterThe": "crsr_로 시작하는 커서 사용자 API 키를 입력하세요.",
+  "@llmAccountUiPleaseEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYour": "GitLab Duo OAuth 클라이언트 ID를 입력하세요.",
+  "@llmAccountUiPleaseEnterYour": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterA": "유효한 HTTPS Qoder OAuth 관리 엔드포인트를 입력하세요.",
+  "@llmAccountUiPleaseEnterA": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterQODER": "QODER_OAUTH_CLIENT_ID 및 클라이언트 비밀번호를 입력하세요.",
+  "@llmAccountUiPleaseEnterQODER": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValid": "유효한 Azure HTTPS 리소스 호스트, 배포 ID 및 API 버전을 입력하세요.",
+  "@llmAccountUiPleaseEnterAValid": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidCloudflare": "유효한 Cloudflare 계정 ID를 입력하세요.",
+  "@llmAccountUiPleaseEnterAValidCloudflare": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCloudflareWorkers": "Cloudflare Workers AI는 검증된 고정 모델의 카탈로그만 제공합니다.",
+  "@llmAccountUiCloudflareWorkers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeAccounts": "Kimi 코드 계정은 검증된 코딩 계획 모델만 사용할 수 있습니다.",
+  "@llmAccountUiKimiCodeAccounts": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseRefresh": "먼저 모델 디렉터리를 새로 고치고 지원되는 ApiProtocols에서 프로토콜을 선택하세요.",
+  "@llmAccountUiPleaseRefresh": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityValues": "능력 값은 참 또는 거짓일 수 있습니다.",
+  "@llmAccountUiAbilityValues": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCommandCode": "명령 코드 모델 기능은 업스트림 디렉터리에서만 선언할 수 있습니다.",
+  "@llmAccountUiCommandCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidGitHub": "유효한 GitHub Enterprise HTTPS 인스턴스 주소를 입력하세요.",
+  "@llmAccountUiPleaseEnterAValidGitHub": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseFill": "공식 Devin CLI 실행 파일의 전체 경로를 입력하세요.",
+  "@llmAccountUiPleaseFill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseConfirm": "이 실행 파일이 Devin 공식 설치 채널에서 제공되는지 확인하세요.",
+  "@llmAccountUiPleaseConfirm": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheSelected": "선택한 CLI 경로가 잘못되었거나 실행 가능하지 않습니다.",
+  "@llmAccountUiTheSelected": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterTheAmazon": "AWS Builder ID 새로 고침 토큰이 포함된 Amazon Q 자격 증명 JSON을 입력하십시오.",
+  "@llmAccountUiPleaseEnterTheAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidAmazon": "유효한 Amazon Q OAuth 자격 증명 JSON과 지원되는 지역을 입력하세요.",
+  "@llmAccountUiPleaseEnterAValidAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAIStudio": "기존 AI Studio 웹 세션 연결이 중단되었습니다. 대신 API 키 또는 지원되는 OAuth를 사용하세요.",
+  "@llmAccountUiLegacyAIStudio": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseProvide": "Google OAuth 데스크톱 클라이언트 ID와 해당 클라이언트 비밀번호를 입력하세요.",
+  "@llmAccountUiPleaseProvide": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYourCredentials": "자격 증명을 입력하세요.",
+  "@llmAccountUiPleaseEnterYourCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupName": "모델 그룹 이름",
+  "@llmAccountUiModelGroupName": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountAnd": "계정 및 업스트림 모델",
+  "@llmAccountUiAccountAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelGroup": "현재 모델 그룹에는 구성원이 없습니다.",
+  "@llmAccountUiTheModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalReferences": "로컬 참조는 기존 세션 모델 ID와의 호환성을 위해 사용됩니다. 계정 구성원은 이 안정적인 그룹 내에서만 선택에 참여합니다.",
+  "@llmAccountUiLocalReferences": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGroupMembers": "동일한 모델 참조 아래의 그룹 구성원은 동일한 채팅 프로토콜을 사용해야 합니다.",
+  "@llmAccountUiGroupMembers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountHas": "계정이 삭제되었습니다",
+  "@llmAccountUiAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOldSession": "이전 세션 참조가 필요한 구성원",
+  "@llmAccountUiOldSession": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemoveMember": "회원 삭제",
+  "@llmAccountUiRemoveMember": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalModel": "로컬 모델 참조 ID",
+  "@llmAccountUiLocalModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSamePriority": "동일한 우선순위 선택",
+  "@llmAccountUiSamePriority": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCrossAccount": "교차 계정 롤백 범위",
+  "@llmAccountUiCrossAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConcurrencyLimit": "동시성 제한",
+  "@llmAccountUiConcurrencyLimit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankToIndicate": "제한이 없음을 나타내려면 비워 두십시오. 계정과 모델 그룹은 별도로 구성됩니다.",
+  "@llmAccountUiLeaveBlankToIndicate": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRollingWindow": "롤링 윈도우",
+  "@llmAccountUiRollingWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarWindow": "달력 창",
+  "@llmAccountUiCalendarWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarTime": "달력 시간대",
+  "@llmAccountUiCalendarTime": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiForExample": "예: 아시아/타이베이 또는 UTC",
+  "@llmAccountUiForExample": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemainingCredit": "남은 신용한도",
+  "@llmAccountUiRemainingCredit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWindowUsage": "창구 사용 제한",
+  "@llmAccountUiWindowUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedValue": "고정값",
+  "@llmAccountUiFixedValue": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPercentageText": "백분율",
+  "@llmAccountUiPercentageText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnitText": "단위",
+  "@llmAccountUiUnitText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConcurrency": "동시성 상한은 양의 정수여야 하며, 제한이 없음을 나타내려면 공백으로 두어야 합니다.",
+  "@llmAccountUiTheConcurrency": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCalendar": "달력 창에 시간대를 입력해야 합니다.",
+  "@llmAccountUiTheCalendar": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndUsage": "할당량 및 사용량 한도는 음수가 아니어야 합니다. 백분율은 100을 초과할 수 없습니다.",
+  "@llmAccountUiQuotaAndUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHourWindow": "5시간 창",
+  "@llmAccountUiHourWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDayWindow": "일 창",
+  "@llmAccountUiDayWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyWindow": "주간 기간",
+  "@llmAccountUiWeeklyWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthWindow": "월 창",
+  "@llmAccountUiMonthWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmImportStoppedAfterLegacySyncFailure": "계정 {count}개를 가져왔지만 이전 구성을 동기화하지 못했습니다.",
+  "@llmImportStoppedAfterLegacySyncFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmImportStoppedAfterCredentialFailure": "계정 {count}개를 가져왔습니다. 키체인 항목이 변경되었거나 접근이 거부되었거나 보안 저장소를 사용할 수 없어 나머지 자격 증명은 가져오지 않았습니다.",
+  "@llmImportStoppedAfterCredentialFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmRequestUsedAccount": "이번 요청에 사용된 계정",
+  "@llmRequestUsedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmLastAttemptedAccount": "마지막으로 시도한 계정",
+  "@llmLastAttemptedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmRouteDecisionSessionAffinity": "이 대화에서 최근 성공한 계정 계속 사용",
+  "@llmRouteDecisionSessionAffinity": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSessionAffinityPersistenceFailed": "이번 계정 연속성은 저장되지 않았습니다.",
+  "@llmRouteDecisionSessionAffinityPersistenceFailed": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionExplicitAccountSelection": "사용자가 선택한 계정으로 라우팅",
+  "@llmRouteDecisionExplicitAccountSelection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSelectedAccountOutsideGroup": "선택한 계정이 현재 모델 그룹에 속하지 않습니다.",
+  "@llmRouteDecisionSelectedAccountOutsideGroup": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConversationIdInvalid": "대화 식별자가 유효하지 않으며 세션 선호도가 사용되지 않았습니다.",
+  "@llmRouteDecisionConversationIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupMissing": "이 모델의 안정적인 모델 그룹을 찾을 수 없습니다.",
+  "@llmRouteDecisionModelGroupMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupAmbiguous": "이 모델은 여러 모델 그룹과 동시에 연결되어 있습니다.",
+  "@llmRouteDecisionModelGroupAmbiguous": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectorProtocolIncompatible": "커넥터 프로토콜이 이 채팅 모델에 적용되지 않습니다.",
+  "@llmRouteDecisionConnectorProtocolIncompatible": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectionUnknown": "연결 상태를 알 수 없음",
+  "@llmRouteDecisionConnectionUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountMissing": "계정이 삭제되었습니다.",
+  "@llmRouteDecisionAccountMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountIdInvalid": "계정 식별자가 유효하지 않음",
+  "@llmRouteDecisionAccountIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountUnavailable": "계정이 일시 중지되었거나 재인증이 필요합니다.",
+  "@llmRouteDecisionAccountUnavailable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelMappingMismatch": "계정이 선택한 모델에 매핑되지 않았습니다.",
+  "@llmRouteDecisionModelMappingMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelNotMapped": "계정에서 해당 상위 모델을 찾을 수 없습니다.",
+  "@llmRouteDecisionModelNotMapped": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCapabilityMismatch": "계정 모델이 이 요청에 필요한 기능을 지원하지 않습니다.",
+  "@llmRouteDecisionCapabilityMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionFallbackScope": "롤백 범위에서는 이 커넥터로 전환할 수 없습니다.",
+  "@llmRouteDecisionFallbackScope": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCooldown": "계정이 여전히 장애 쿨다운 기간에 있습니다.",
+  "@llmRouteDecisionCooldown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConcurrencyLimit": "계정 또는 모델 그룹이 동시 사용 한도에 도달했습니다.",
+  "@llmRouteDecisionConcurrencyLimit": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceUnknownOrIncomparable": "한도를 알 수 없거나 측정 단위를 비교할 수 없습니다.",
+  "@llmRouteDecisionBalanceUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceAtOrBelowReserve": "잔액이 보유 한도에 도달했거나 그 미만입니다.",
+  "@llmRouteDecisionBalanceAtOrBelowReserve": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnknown": "사용량이 알려지지 않아 한도를 판단할 수 없습니다.",
+  "@llmRouteDecisionUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveBalanceUnknown": "잔여 한도가 알 수 없어 보류 한도를 판단할 수 없습니다.",
+  "@llmRouteDecisionReserveBalanceUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUnitUnknownOrIncomparable": "유지 한도 측정 단위가 알 수 없거나 비교할 수 없음",
+  "@llmRouteDecisionReserveUnitUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknownOrIncomparable": "총 한도가 알 수 없거나 비교할 수 없음",
+  "@llmRouteDecisionReserveTotalUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknown": "한도 총량이 알 수 없어 보유 한도를 계산할 수 없습니다.",
+  "@llmRouteDecisionReserveTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUsageEstimateUnknown": "요청 사용량 추정치가 알 수 없어 보류선을 판단할 수 없습니다.",
+  "@llmRouteDecisionReserveUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveInFlightUsageUnknown": "진행 중인 요청 사용량이 알 수 없어 보유 한도를 판단할 수 없습니다.",
+  "@llmRouteDecisionReserveInFlightUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloorReached": "잔여 한도가 보류 한도보다 낮음",
+  "@llmRouteDecisionReserveFloorReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingReached": "사용 한도에 도달했습니다.",
+  "@llmRouteDecisionUsageCeilingReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingTotalUnknown": "총 사용량이 알려지지 않아 상한선을 판단할 수 없습니다.",
+  "@llmRouteDecisionUsageCeilingTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnitMismatch": "사용량 측정 단위가 일치하지 않음",
+  "@llmRouteDecisionUsageUnitMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageSourceMismatch": "사용량과 한도 데이터 출처가 일치하지 않습니다.",
+  "@llmRouteDecisionUsageSourceMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageInFlightUnknown": "진행 중인 요청 사용량이 알 수 없어 상한을 판단할 수 없습니다.",
+  "@llmRouteDecisionUsageInFlightUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageEstimateUnknown": "요청 사용량 추정치가 알 수 없어 상한을 판단할 수 없습니다.",
+  "@llmRouteDecisionUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionInvalidWindowTimezone": "한도 창 시간대 설정이 유효하지 않습니다.",
+  "@llmRouteDecisionInvalidWindowTimezone": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloor": "잔여 한도가 보유 한도보다 낮음",
+  "@llmRouteDecisionReserveFloor": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeiling": "사용 한도에 도달했습니다.",
+  "@llmRouteDecisionUsageCeiling": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestAuthentication": "상위 단계에서 인증을 거부했습니다.",
+  "@llmRouteDecisionRequestAuthentication": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestQuotaExhausted": "상위 시스템에서 한도 소진을 보고함",
+  "@llmRouteDecisionRequestQuotaExhausted": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestRateLimited": "상위 트래픽 제한",
+  "@llmRouteDecisionRequestRateLimited": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestConnection": "업스트림 연결 실패",
+  "@llmRouteDecisionRequestConnection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestServer": "상위 서비스 오류",
+  "@llmRouteDecisionRequestServer": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestInvalidRequest": "상위 서비스에서 요청 파라미터를 거부했습니다.",
+  "@llmRouteDecisionRequestInvalidRequest": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestCancelled": "요청이 취소되었습니다.",
+  "@llmRouteDecisionRequestCancelled": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestOther": "상위 요청 실패",
+  "@llmRouteDecisionRequestOther": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  }
 }

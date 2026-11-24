@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +10,13 @@ import '../providers/provider_config_display_names.dart';
 import '../providers/provider_preset_localizations.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
+import '../ai_gateway/ai_gateway.dart';
+import '../services/llm_model_group_provider.dart';
 import '../services/todo_tool_service.dart';
 import '../services/web_search_service.dart';
 import 'connectivity_test_dialog.dart';
 import 'provider_config_detail_page.dart';
+import 'llm_account_management_page.dart';
 import 'mcp_server_config_page.dart';
 import 'provider_config_tool_dialogs.dart';
 import 'provider_settings_panel.dart';
@@ -22,6 +27,23 @@ final _builtinToolDefinitions = [
   ...TodoToolService.toolDefinitions,
   ...WebSearchService.toolDefinitions,
 ];
+
+/// Keeps the legacy provider row pointed at the account's current secure
+/// credential entry. This value is a reference only; secret bytes stay in
+/// platform secure storage.
+ProviderConfigItem syncLegacyLlmAccountCredentialReference(
+  ProviderConfigItem config,
+  AiGatewayAccount account,
+) {
+  final raw = config.toMap();
+  final credentialRef = account.credentialRef;
+  if (account.hasCredential) {
+    if (credentialRef != null) raw['credentialRef'] = credentialRef;
+  } else {
+    raw.remove('credentialRef');
+  }
+  return ProviderConfigItem.fromMap(raw);
+}
 
 ToolDefinition? _httpToolDefinition(String providerName) {
   final toolName = switch (providerName) {
@@ -111,6 +133,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         configIndex: configIndex,
       );
     } else {
+      final originalConfig = entry.configs[configIndex];
+      final editedConfigId = originalConfig.id;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -120,6 +144,34 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           ),
         ),
       );
+      if (entry.type == 'ocr' && mounted) {
+        final updatedConfig = _entry?.configs
+            .where((config) => config.id == editedConfigId)
+            .firstOrNull;
+        if (updatedConfig != null &&
+            jsonEncode(originalConfig.toMap()) !=
+                jsonEncode(updatedConfig.toMap())) {
+          try {
+            final runtime = await AiGateway.sharedPlatform();
+            await ensureLegacyOcrProviderConfigGroups(
+              runtime: runtime,
+              config: updatedConfig,
+              previousConfig: originalConfig,
+            );
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    AppLocalizations.of(context)?.llmOcrAccountSyncFailed ??
+                        'OCR 账号同步失败；请在账号管理中检查配置。',
+                  ),
+                ),
+              );
+            }
+          }
+        }
+      }
     }
     if (!mounted) return;
     setState(() {});
@@ -320,6 +372,29 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     );
 
     if (confirmed != true) return;
+
+    final sourceConfig = entry.configs[configIndex];
+    if (entry.type == 'ocr') {
+      try {
+        final runtime = await AiGateway.sharedPlatform();
+        await ensureLegacyOcrProviderConfigGroups(
+          runtime: runtime,
+          config: sourceConfig,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)?.llmOcrAccountMigrationFailed ??
+                    'OCR 账号迁移失败；原配置仍保留。',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
 
     var configs = entry.configs.map((c) => c.copy()).toList();
     configs.removeAt(configIndex);
@@ -791,9 +866,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   onDelete:
                       group.isBuiltin ? null : () => _deleteMcpGroup(group),
                   isExpanded: _expandedMcpGroups[group.id] ?? true,
-                  onExpandedChanged: (expanded) => setState(
-                    () => _expandedMcpGroups[group.id] = expanded,
-                  ),
+                  onExpandedChanged: (expanded) =>
+                      setState(() => _expandedMcpGroups[group.id] = expanded),
                 ),
               ),
             ),
@@ -861,10 +935,13 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   ),
                   IconButton(
                     onPressed: () => setState(
-                        () => _builtinToolsExpanded = !_builtinToolsExpanded),
-                    icon: Icon(_builtinToolsExpanded
-                        ? Icons.expand_less
-                        : Icons.expand_more),
+                      () => _builtinToolsExpanded = !_builtinToolsExpanded,
+                    ),
+                    icon: Icon(
+                      _builtinToolsExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                    ),
                   ),
                 ],
               ),
@@ -911,6 +988,98 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     );
   }
 
+  Future<void> _syncLegacyLlmAccountConfig(AiGatewayAccount account) async {
+    final state = ref.read(providerEntriesProvider);
+    final entry = state.entries.where((item) => item.type == 'llm').firstOrNull;
+    if (entry == null ||
+        !entry.configs.any((config) => config.id == account.id)) {
+      return;
+    }
+    final configs = entry.configs.map((config) {
+      if (config.id != account.id) return config;
+      final raw = config.toMap()
+        ..['providerName'] = account.displayName
+        ..['connectorType'] = account.connectorType
+        ..['authType'] = account.authType
+        ..['apiProtocol'] = config.apiProtocol ??
+            apiProtocolFromLegacyEndpointType(config.endpointType)
+        ..['endpointType'] = legacyEndpointTypeForApiProtocol(
+          config.apiProtocol ??
+              apiProtocolFromLegacyEndpointType(config.endpointType),
+        )
+        ..['models'] = account.models.map((model) {
+          final modelConfig = Map<String, dynamic>.from(model.config)
+            ..['id'] = model.id
+            ..['name'] = model.displayName
+            ..['modelId'] = model.upstreamModelId
+            ..['capabilities'] = Map<String, dynamic>.from(
+              model.capabilities,
+            )
+            // Legacy imports default these two capabilities to true.
+            // Mark account-edited rows so an omitted value stays unknown.
+            ..['accountCapabilitiesEdited'] = true;
+          final streaming = model.capabilities['streaming'];
+          if (streaming is bool) {
+            modelConfig['supportStream'] = streaming;
+          } else {
+            modelConfig.remove('supportStream');
+          }
+          final instruction = model.capabilities['instruction'];
+          if (instruction is bool) {
+            modelConfig['supportInstruction'] = instruction;
+          } else {
+            modelConfig.remove('supportInstruction');
+          }
+          return modelConfig;
+        }).toList();
+      final endpoint = account.endpointConfig['baseUrl'] ??
+          account.endpointConfig['host'] ??
+          account.endpointConfig['apiBase'];
+      raw['host'] = endpoint is String ? endpoint : '';
+      for (final key in const ['baseUrl', 'apiBase']) {
+        final value = account.endpointConfig[key];
+        if (value is String && value.isNotEmpty) {
+          raw[key] = value;
+        } else {
+          raw.remove(key);
+        }
+      }
+      return syncLegacyLlmAccountCredentialReference(
+        ProviderConfigItem.fromMap(raw),
+        account,
+      );
+    }).toList(growable: false);
+    await ref.read(providerEntriesProvider.notifier).update(
+          entry.id,
+          ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            enabled: entry.enabled,
+            legacyFields: entry.legacyFields,
+            configs: configs,
+          ),
+        );
+  }
+
+  Future<void> _removeLegacyLlmAccountConfig(AiGatewayAccount account) async {
+    final state = ref.read(providerEntriesProvider);
+    final next = removeLegacyLlmAccountSourceConfigsById(
+      state,
+      accountId: account.id,
+      endpointConfig: account.endpointConfig,
+    );
+    if (identical(next, state)) return;
+    final notifier = ref.read(providerEntriesProvider.notifier);
+    for (final updated in next.entries) {
+      final previous =
+          state.entries.where((entry) => entry.id == updated.id).firstOrNull;
+      if (previous != null && !identical(previous, updated)) {
+        await notifier.update(updated.id, updated);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final entriesState = ref.watch(providerEntriesProvider);
@@ -929,6 +1098,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         body: Center(
           child: Text(AppLocalizations.of(context)!.providerNotFound),
         ),
+      );
+    }
+    if (entry.type == 'llm' &&
+        !entriesState.llmCredentialMigrationUnavailable &&
+        !entriesState.llmModelGroupCatalogUnavailable) {
+      return LlmAccountManagementPage(
+        onConfigurationChanged: () =>
+            ref.read(providerEntriesProvider.notifier).load(),
+        onAccountSaved: _syncLegacyLlmAccountConfig,
+        onAccountDeleted: _removeLegacyLlmAccountConfig,
       );
     }
     if (entry.type == 'mcp') {
@@ -1302,21 +1481,14 @@ class _McpConfigCard extends StatelessWidget {
     final trailingActions = <Widget>[
       if (onSettings != null)
         IconButton(
-          icon: Icon(
-            settingsIcon,
-            size: 20,
-            color: cs.onSurfaceVariant,
-          ),
+          icon: Icon(settingsIcon, size: 20, color: cs.onSurfaceVariant),
           onPressed: onSettings,
           tooltip: settingsTooltip ?? AppLocalizations.of(context)!.appSettings,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
         ),
       if (enabled != null && onEnabledChanged != null)
-        Switch.adaptive(
-          value: enabled!,
-          onChanged: onEnabledChanged,
-        ),
+        Switch.adaptive(value: enabled!, onChanged: onEnabledChanged),
       if (onTest != null)
         IconButton(
           icon: const Icon(Icons.network_check, size: 20),
@@ -1342,11 +1514,7 @@ class _McpConfigCard extends StatelessWidget {
       if (onDelete != null) ...[
         const SizedBox(width: 4),
         IconButton(
-          icon: Icon(
-            Icons.delete_outline,
-            size: 20,
-            color: cs.error,
-          ),
+          icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
           onPressed: onDelete,
           tooltip: AppLocalizations.of(context)!.providerDeleteTooltip,
           padding: EdgeInsets.zero,
@@ -1453,8 +1621,9 @@ class _McpConfigCard extends StatelessWidget {
                                     .providerApiKeyHint(apiKeyHint!),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.7),
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.7,
+                                  ),
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),

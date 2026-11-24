@@ -58,6 +58,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<String> modelNames;
   final int selectedModelIndex;
   final ValueChanged<int> onModelSelected;
+  final VoidCallback? onAccountOverrideTap;
+  final String? accountOverrideName;
   final String? conversationId;
   final String initialDraftText;
 
@@ -117,6 +119,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.modelNames = const [],
     this.selectedModelIndex = 0,
     required this.onModelSelected,
+    this.onAccountOverrideTap,
+    this.accountOverrideName,
     this.conversationId,
     this.initialDraftText = '',
     this.initialDraftAttachments = const [],

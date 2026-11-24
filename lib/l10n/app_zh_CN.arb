@@ -538,6 +538,10 @@
   "chatAutoContinuePrompt": "如果还没完成，请继续。",
   "chatSearchCurrent": "搜索当前对话...",
   "chatSearchAll": "搜索所有对话...",
+  "chatSearchCurrentMode": "当前对话",
+  "chatSearchAllMode": "所有对话",
+  "chatSearchRetry": "重试搜索",
+  "chatSearchError": "搜索失败",
   "searchPrevious": "上一个",
   "searchNext": "下一个",
   "searchClose": "关闭搜索",
@@ -5425,8 +5429,12 @@
   "bgTaskOcrRequestSizeExceeded": "OCR 请求 JSON 大小为 {encodedBytes} 字节，超过配置的 {budgetBytes} 字节上限。",
   "@bgTaskOcrRequestSizeExceeded": {
     "placeholders": {
-      "encodedBytes": {"type": "int"},
-      "budgetBytes": {"type": "int"}
+      "encodedBytes": {
+        "type": "int"
+      },
+      "budgetBytes": {
+        "type": "int"
+      }
     }
   },
   "bgTaskOcrError": "OCR识别失败：{details}",
@@ -7185,12 +7193,1563 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。",
-  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "@ocrSamplingTemperatureOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR temperature."
+  },
   "ocrSamplingTopPOutOfRange": "已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。",
-  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "@ocrSamplingTopPOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR top-P value."
+  },
   "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "@ocrSamplingSliderRepairRequired": {
+    "description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."
+  },
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。"
-
+  "providerResponsesEndpointHelp": "请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。",
+  "llmAccountLabel": "账号",
+  "llmAccountForThisRequest": "本次请求使用账号",
+  "llmAccountUseModelGroup": "按模型组策略路由",
+  "llmAccountManagementTitle": "LLM 账号与模型组",
+  "llmAccountAdd": "添加账号",
+  "llmAccountEmpty": "还没有 LLM 账号。",
+  "llmAccountEditTitleAdd": "添加 LLM 账号",
+  "llmAccountEditTitleEdit": "编辑 LLM 账号",
+  "traeAuthorizationTitle": "连接 Trae SOLO",
+  "traeAuthorizationLoadError": "登录页面加载失败，请取消后重试。",
+  "llmOcrAccountSyncFailed": "OCR 账号同步失败；请在账号管理中检查配置。",
+  "llmOcrAccountMigrationFailed": "OCR 账号迁移失败；原配置仍保留。",
+  "llmAccountsTab": "账号",
+  "llmModelGroupsTab": "模型组",
+  "llmAccountsSummary": "每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。",
+  "llmModelGroupsSummary": "稳定模型组把 Stroom 模型名映射到账号和上游模型。回退仅限本组成员。",
+  "llmAccountName": "账号名称",
+  "llmConnectorLabel": "连接器",
+  "llmProviderPresetLabel": "服务商预设",
+  "llmAuthenticationMethodLabel": "认证方式",
+  "llmDefaultApiProtocolLabel": "默认 API 协议",
+  "llmConnectionStatusLabel": "连接状态",
+  "llmConfigureModelLabel": "要配置的模型",
+  "llmModelApiProtocolLabel": "模型 API 协议",
+  "llmUpstreamModelsCapabilitiesLabel": "上游模型与能力",
+  "llmModelGroupNameLabel": "模型组名称",
+  "llmStableModelIdLabel": "Stroom 稳定模型引用 ID",
+  "llmPriorityTierLabel": "优先级层级",
+  "llmUpstreamModelLabel": "上游模型",
+  "llmSamePrioritySelectionLabel": "同优先级账号选择",
+  "llmFallbackScopeLabel": "跨账号回退范围",
+  "llmConcurrencyLimitLabel": "并发上限",
+  "llmWindowModeLabel": "窗口模式",
+  "llmCalendarTimezoneLabel": "日历时区",
+  "llmValueLabel": "数值",
+  "llmTypeLabel": "类型",
+  "llmRemainingQuotaFloorLabel": "剩余额度保留线",
+  "llmWindowUsageCeilingLabel": "窗口使用量上限",
+  "llmImportZedCredentials": "从 Zed 导入 API 凭据",
+  "llmAddModelGroupTooltip": "添加模型组",
+  "llmNoModelGroups": "还没有模型组。",
+  "llmAccountPolicies": "账号策略",
+  "llmQuotaConcurrencyPolicy": "额度与并发策略",
+  "llmAccountAuthSource": "认证来源：{source}",
+  "llmAccountRecentError": "最近错误：{error}",
+  "llmNoRecord": "无记录",
+  "llmConnectorUnavailableForChat": "此连接器不支持 Chat。",
+  "llmAccountUnavailableInSelectors": "此账号的模型不会出现在 Chat 或 Task Flow 选择器中。",
+  "llmModelsCapabilitiesHeading": "模型与能力",
+  "llmNoModelsConfigured": "未配置模型",
+  "llmUsageQuotaHeading": "用量与额度",
+  "llmQuotaUnknown": "额度未知",
+  "llmQuotaLimitsHeading": "额度限制",
+  "llmLocalObservedUsageHeading": "本地观测用量",
+  "llmUsageHistoryDisclaimer": "最近 62 天的本地统计，不代表供应商余额。",
+  "llmLastRouteHeading": "最近一次路由",
+  "llmMembersHeading": "成员",
+  "llmNoRoutableMembers": "没有可路由的账号成员",
+  "llmLegacyMemberRequired": "需要保留该成员以兼容旧会话模型引用和本地模型 ID。",
+  "llmAccountGroupLoadError": "账号或模型组无法读取。",
+  "llmRetryLoad": "重试",
+  "llmGroupFallbackWithinMembers": "已保存的模型组只允许在组成员中回退。",
+  "llmMixedGroupProtocolError": "同一模型引用下的所有成员必须使用相同聊天协议。",
+  "llmAddMember": "添加成员",
+  "llmNoGroupMembers": "模型组当前没有成员。",
+  "llmStableModelGroupHelp": "本地模型 ID 用于兼容已有会话；回退仅限此稳定组。",
+  "llmSignInProvider": "登录 {provider}",
+  "llmOAuthInstructions": "打开 {provider} 授权页面并输入下方代码。授权完成后 Stroom 会保存账号。",
+  "llmOpenProviderAuthorization": "打开 {provider}",
+  "llmAuthorizationSource": "授权来源：{source}",
+  "llmAccountDeleteFailed": "账号删除失败。",
+  "llmAccountDeleteCleanupFailed": "账号已删除，但旧配置清理失败。",
+  "llmSaveBeforeModelRefresh": "保存账号及修改后才能刷新模型目录。",
+  "llmRefreshModelCatalog": "刷新模型目录",
+  "llmReauthorize": "重新授权",
+  "llmSave": "保存",
+  "llmCancel": "取消",
+  "llmDelete": "删除",
+  "llmEdit": "编辑",
+  "llmContinueKeychainScan": "继续检查",
+  "llmImportCredentialsConfirmTitle": "导入 {provider} 凭据？",
+  "llmImportThisAccount": "导入此账号",
+  "llmImportedAccounts": "已安全导入 {count} 个提供商账号。",
+  "llmSamePriorityStrategySummary": "同优先级策略：{strategy}",
+  "llmKeepLegacyGroup": "为旧会话保留此模型组",
+  "llmGroupUsageSummary": "模型组用量：{usage}",
+  "llmModelGroupSettings": "模型组设置",
+  "llmAddModelGroupMemberTitle": "添加模型组成员",
+  "llmSavePolicy": "保存策略",
+  "llmOpenferenceCatalogNote": "可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。",
+  "llmTestLocalCli": "测试本地 {cli} CLI",
+  "llmCheckLocalCodexCli": "检查本地 Codex CLI 登录状态",
+  "llmCliReady": "{cli} CLI 已安装并可运行。",
+  "llmCodexCliReady": "Codex CLI 已登录并可运行。",
+  "llmCheckZedKeychain": "检查 Zed 钥匙串？",
+  "llmRoutingPolicyTitle": "{target} 路由策略",
+  "llmSupportedAuthRequired": "请选择受支持的认证方式后再保存此账号。",
+  "llmTraeCallbackPrivacy": "登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。",
+  "llmCloudflareAccountIdLabel": "Cloudflare 账号 ID",
+  "llmCloudflareAccountIdHint": "在 Cloudflare Dashboard 右侧查找 Account ID。",
+  "llmDevinExecutablePathLabel": "Devin 官方 CLI 可执行文件路径",
+  "llmDevinExecutablePathHelp": "从 Devin 官方安装位置复制可执行文件的完整路径。",
+  "llmExecutableIntegrityHint": "Stroom 会记录此文件的 SHA-256；文件更改后将拒绝启动。",
+  "llmDevinReauthTitle": "重新登录官方 Devin CLI",
+  "llmDevinReauthSubtitle": "重新认证此账号独立的 CLI 登录。",
+  "llmKeepOAuthClientSecretHelp": "仅保存在平台安全存储中；留空以保留现有 OAuth client secret。",
+  "llmPublicOauthClientSecretHelp": "仅保存在平台安全存储中；公开客户端可留空。",
+  "llmGitlabApplicationsHint": "GitLab 用户设置 → Applications",
+  "llmAzureDeploymentIdHelp": "部署 ID 会作为该账号唯一的上游模型 ID。",
+  "llmAzureApiVersionHelp": "默认值依据 Azure 模型目录配置。",
+  "llmAmazonQRegionLabel": "Amazon Q Developer 区域",
+  "llmQwenCloudRegionLabel": "Qwen Cloud 区域 ID",
+  "llmQwenCloudRegionHelp": "API Key 与区域绑定。支持：ap-southeast-1、cn-beijing、eu-central-1、cn-hongkong、ap-northeast-1、us-east-1。",
+  "llmGoogleCloudProjectLabel": "Google Cloud 项目 ID",
+  "llmModelCapabilitiesInputHint": "每行一个：模型 ID,streaming,vision,tools",
+  "llmGoogleOAuthPrerequisites": "此连接使用 Google Generative Language API OAuth；需要你管理的 Google Cloud 项目、已启用 Generative Language API 和配置好的 OAuth Desktop 客户端。请求按此项目计费，不使用 Code Assist 或 AI Studio 网页登录。",
+  "llmGitlabOAuthPrerequisites": "GitLab Duo OAuth 需要先注册 GitLab 应用，并设置回调 http://localhost:20128/callback 和 ai_features read_user 权限。填写 client ID，并按应用类型填写 client secret。令牌会安全保存，并在支持时自动刷新。也可单独选择 PAT。",
+  "llmAmazonQOAuthPrerequisites": "导入 AWS Builder ID OAuth 凭据 JSON，必须包含 refresh_token；access_token、clientId 和 clientSecret 可选。缺少客户端凭据时，Stroom 会通过 AWS OIDC 注册客户端后刷新令牌。令牌直接写入安全存储；Stroom 不读取浏览器 Cookie。仅支持 us-east-1 和 eu-central-1。",
+  "llmTraeTokenSecurity": "SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。导入的令牌约 14 天后过期，需要重新输入。",
+  "llmAccountUsageUsedLabel": "已用",
+  "@llmAccountUsageUsedLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageRemainingLabel": "剩余",
+  "@llmAccountUsageRemainingLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageTotalLabel": "总额",
+  "@llmAccountUsageTotalLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountRemainingQuotaLabel": "剩余额度：",
+  "@llmAccountRemainingQuotaLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountMetricUnitUnknown": "单位未知",
+  "@llmAccountMetricUnitUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilitySupported": "支持",
+  "@llmAccountCapabilitySupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnsupported": "不支持",
+  "@llmAccountCapabilityUnsupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnknown": "未知",
+  "@llmAccountCapabilityUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountQuotaReserveThreshold": "{window}剩余额度保留线：{threshold}",
+  "@llmAccountQuotaReserveThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUsageCeilingThreshold": "{window}使用上限：{threshold}",
+  "@llmAccountUsageCeilingThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccountWithOAuth": "删除“{account}”、撤销 OAuth 授权并从模型组中移除该账号？",
+  "@llmConfirmDeleteAccountWithOAuth": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccount": "删除“{account}”并从模型组中移除该账号？",
+  "@llmConfirmDeleteAccount": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteModelGroup": "删除“{group}”的路由配置？已有会话中的模型引用不会改写。",
+  "@llmConfirmDeleteModelGroup": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportAccountSource": "将从本机钥匙串导入“{account}”到 Stroom 的 {provider} API 账号。",
+  "@llmKeychainImportAccountSource": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportExistingAccountNotice": "这会更新该 Stroom 账号的密钥，并保留名称、模型和路由设置。",
+  "@llmKeychainImportExistingAccountNotice": {
+    "description": "LLM account management UI text."
+  },
+  "llmKeychainImportSecurityNote": "确认后 Stroom 会重新读取并核对该凭据。密钥不会显示在界面中。",
+  "@llmKeychainImportSecurityNote": {
+    "description": "LLM account management UI text."
+  },
+  "llmProviderAuthorizationFailed": "{provider} 授权失败，请重新开始登录。",
+  "@llmProviderAuthorizationFailed": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountConcurrencySummary": "账号并发 {value}",
+  "@llmAccountConcurrencySummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountGroupUsageSummary": "模型组本地累计用量：{usage}",
+  "@llmAccountGroupUsageSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "usage": {
+        "type": "String"
+      }
+    }
+  },
+  "llmPriorityTierValue": "层级 {tier}",
+  "@llmPriorityTierValue": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "tier": {
+        "type": "int"
+      }
+    }
+  },
+  "llmGroupMemberSummary": "{upstream} · 优先级 {priority} · 本地引用 {localId}",
+  "@llmGroupMemberSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "upstream": {
+        "type": "String"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "localId": {
+        "type": "String"
+      }
+    }
+  },
+  "llmNoAccountCanProcessModel": "没有账号可处理 {model}",
+  "@llmNoAccountCanProcessModel": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "llmOAuthLimitationSaveMessage": "{limitation}\n请选择受支持的认证方式后再保存此账号。",
+  "@llmOAuthLimitationSaveMessage": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "limitation": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderEnterpriseCredentials": "{provider} 企业服务凭据",
+  "@llmProviderEnterpriseCredentials": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderSessionToken": "{provider} 用户提供的会话令牌",
+  "@llmProviderSessionToken": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderCredential": "{provider} 提供的凭据",
+  "@llmProviderCredential": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUiAccountSaving": "账号保存失败。请检查账号信息和安全存储状态。",
+  "@llmAccountUiAccountSaving": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountDeletion": "账号删除失败。",
+  "@llmAccountUiAccountDeletion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccount": "账号已删除，但旧配置清理失败。",
+  "@llmAccountUiTheAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountWas": "账号已删除，但 OAuth 撤销失败。请到提供商账户设置中撤销授权。",
+  "@llmAccountUiTheAccountWas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckZed": "检查 Zed 钥匙串？",
+  "@llmAccountUiCheckZed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMacOSMay": "macOS 可能在生成可导入清单时，逐项询问是否允许 Stroom 检查匹配的钥匙串条目。",
+  "@llmAccountUiMacOSMay": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisStep": "这一步不会保存账号；之后你仍需逐个确认要导入的账号。",
+  "@llmAccountUiThisStep": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepChecking": "继续检查",
+  "@llmAccountUiKeepChecking": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnableTo": "无法读取系统钥匙串。请检查系统钥匙串访问权限后重试。",
+  "@llmAccountUiUnableTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoReadable": "没有找到可读取的 Zed OpenAI、Anthropic、Google、Mistral 或 xAI 凭据。",
+  "@llmAccountUiNoReadable": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiProviderText": "提供商",
+  "@llmAccountUiProviderText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomWill": "\n\nStroom 会在确认后重新读取并核对该凭据。密钥不会显示在界面中。",
+  "@llmAccountUiStroomWill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportThis": "导入此账号",
+  "@llmAccountUiImportThis": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsNot": "凭据未导入。钥匙串项目可能已更改、访问被拒绝，或安全存储不可用。",
+  "@llmAccountUiCredentialsNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseAdd": "请先在账号中添加模型，再创建模型组。",
+  "@llmAccountUiPleaseAdd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModel": "模型组保存失败。请确认成员账号中存在对应的上游模型。",
+  "@llmAccountUiTheModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroup": "模型组删除失败。",
+  "@llmAccountUiModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLLMAccount": "LLM 账号与模型组",
+  "@llmAccountUiLLMAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupText": "模型组",
+  "@llmAccountUiModelGroupText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachAccount": "每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。",
+  "@llmAccountUiEachAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportAPI": "从 Zed 导入 API 凭据",
+  "@llmAccountUiImportAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRouting": "路由策略保存失败。",
+  "@llmAccountUiTheRouting": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStableModel": "稳定模型组把旧会话模型 ID 映射到可选账号和上游模型。成员只能在此组内回退。",
+  "@llmAccountUiStableModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddModel": "添加模型组",
+  "@llmAccountUiAddModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCode": "Kimi Code 授权失败，请重新开始登录。",
+  "@llmAccountUiKimiCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginTo": "登录 Kimi Code CLI",
+  "@llmAccountUiLoginTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenThe": "打开 Kimi 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。",
+  "@llmAccountUiOpenThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKimi": "打开 Kimi",
+  "@llmAccountUiOpenKimi": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCode": "Kilo Code 授权失败，请重新开始登录。",
+  "@llmAccountUiKiloCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginToKilo": "登录 Kilo Code",
+  "@llmAccountUiLoginToKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheKilo": "打开 Kilo Code 验证页面并输入代码。授权完成后 Stroom 会自动保存账号。",
+  "@llmAccountUiOpenTheKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKilo": "打开 Kilo Code",
+  "@llmAccountUiOpenKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuse": "Meta Muse 授权失败，请重新开始登录。",
+  "@llmAccountUiMetaMuse": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginMeta": "登录 Meta Muse Code",
+  "@llmAccountUiLoginMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheMeta": "打开 Meta 验证页面并输入下面的代码。授权完成后 Stroom 会自动保存账号。",
+  "@llmAccountUiOpenTheMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenMeta": "打开 Meta",
+  "@llmAccountUiOpenMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountOr": "账号或模型组无法读取。",
+  "@llmAccountUiTheAccountOr": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAnd": "额度与并发策略",
+  "@llmAccountUiQuotaAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAvailableModels": "可用模型取决于 Openference 账号计划；离线模型目录不代表已获授权。",
+  "@llmAccountUiAvailableModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoRecord": "无记录",
+  "@llmAccountUiNoRecord": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoes": "ChatAdapter 暂不支持此连接器。",
+  "@llmAccountUiChatAdapterDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAccount": "该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。",
+  "@llmAccountUiThisAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAnd": "模型与能力",
+  "@llmAccountUiModelsAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservation": "本地观测用量",
+  "@llmAccountUiLocalObservation": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoLocal": "暂无本地记录（最近 62 天）",
+  "@llmAccountUiNoLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservationUsage": "本地观测用量未知（路由记录无法读取）",
+  "@llmAccountUiLocalObservationUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalStatistics": "最近 62 天的本地统计，不代表账号余额。",
+  "@llmAccountUiLocalStatistics": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndFallback": "额度与回退策略",
+  "@llmAccountUiQuotaAndFallback": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepOld": "保留旧会话模型组",
+  "@llmAccountUiKeepOld": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDeleteModel": "删除模型组",
+  "@llmAccountUiDeleteModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocal": "模型组本地累计用量：未知",
+  "@llmAccountUiModelGroupLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocalCumulative": "模型组本地累计用量：未知（路由记录无法读取）",
+  "@llmAccountUiModelGroupLocalCumulative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCorresponding": "需保留旧会话模型引用对应的成员及本地引用 ID。",
+  "@llmAccountUiTheCorresponding": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThereAre": "没有可路由的账号成员",
+  "@llmAccountUiThereAre": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHoursText": "5 小时",
+  "@llmAccountUiHoursText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyText": "每日",
+  "@llmAccountUiDailyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyText": "每周",
+  "@llmAccountUiWeeklyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyText": "每月",
+  "@llmAccountUiMonthlyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMainWindow": "主窗口额度剩余",
+  "@llmAccountUiMainWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRemaining": "次窗口额度剩余",
+  "@llmAccountUiTheRemaining": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyQuota": "每日额度剩余",
+  "@llmAccountUiDailyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyQuota": "每周额度剩余",
+  "@llmAccountUiWeeklyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyQuota": "每月额度剩余",
+  "@llmAccountUiMonthlyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeReview": "代码审查额度剩余",
+  "@llmAccountUiCodeReview": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestText": "请求",
+  "@llmAccountUiRequestText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityUnknown": "能力未知",
+  "@llmAccountUiAbilityUnknown": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatus": "连接状态未知",
+  "@llmAccountUiConnectionStatus": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReadyText": "就绪",
+  "@llmAccountUiReadyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSuspendedText": "已暂停",
+  "@llmAccountUiSuspendedText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReAuthentication": "需要重新认证",
+  "@llmAccountUiReAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConnection": "连接状态未知；路由仍可尝试请求，请根据请求结果更新状态。",
+  "@llmAccountUiTheConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountsCan": "账号可参与其模型组路由。",
+  "@llmAccountUiAccountsCan": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountHas": "账号已暂停，不会参与路由。",
+  "@llmAccountUiTheAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountNeeds": "账号需要重新认证后才会参与路由。",
+  "@llmAccountUiTheAccountNeeds": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteCloud": "粘贴 Cloud-IDE-JWT",
+  "@llmAccountUiPasteCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeDevice": "Kilo Code 设备 OAuth",
+  "@llmAccountUiKiloCodeDevice": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousFree": "匿名（仅免费模型）",
+  "@llmAccountUiAnonymousFree": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderAdministrator": "Qoder 管理员配置 OAuth",
+  "@llmAccountUiQoderAdministrator": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyDomestic": "CodeBuddy 国内设备 OAuth",
+  "@llmAccountUiCodeBuddyDomestic": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyInternational": "CodeBuddy International 设备 OAuth",
+  "@llmAccountUiCodeBuddyInternational": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWorkBuddyCLI": "WorkBuddy CLI 设备 OAuth",
+  "@llmAccountUiWorkBuddyCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyOAuth": "旧版 OAuth（不支持）",
+  "@llmAccountUiLegacyOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubscribeTo": "订阅 OAuth",
+  "@llmAccountUiSubscribeTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleService": "Google 服务账号",
+  "@llmAccountUiGoogleService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSAccess": "AWS Access + Secret Key（Session Token 可选）",
+  "@llmAccountUiAWSAccess": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSDefault": "AWS 默认凭据链",
+  "@llmAccountUiAWSDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSessionToken": "会话令牌",
+  "@llmAccountUiSessionToken": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevin": "官方 Devin CLI 独立登录",
+  "@llmAccountUiOfficialDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAI": "旧版 AI Studio relay（已停用）",
+  "@llmAccountUiLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoCertification": "无认证",
+  "@llmAccountUiNoCertification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenVerification": "打开验证页面",
+  "@llmAccountUiOpenVerification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUserProvided": "用户提供的上游 API Key",
+  "@llmAccountUiUserProvided": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBedrock": "AWS Bedrock 用户提供的静态凭据",
+  "@llmAccountUiAWSBedrock": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomDevin": "Stroom 为此账号单独创建的 Devin CLI 登录配置",
+  "@llmAccountUiStroomDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacy": "旧版 AI Studio relay 已停用；请改用 API Key 或受支持的 OAuth。",
+  "@llmAccountUiTheLegacy": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNativeCompatible": "本地兼容端点，无凭据",
+  "@llmAccountUiNativeCompatible": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamAuthentication": "上游认证失败",
+  "@llmAccountUiUpstreamAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInsufficientUpstream": "上游额度不足",
+  "@llmAccountUiInsufficientUpstream": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequests": "上游请求受限",
+  "@llmAccountUiUpstreamRequests": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamConnection": "上游连接失败",
+  "@llmAccountUiUpstreamConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamService": "上游服务错误",
+  "@llmAccountUiUpstreamService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRejects": "上游拒绝请求",
+  "@llmAccountUiUpstreamRejects": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestCanceled": "请求已取消",
+  "@llmAccountUiRequestCanceled": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequest": "上游请求失败",
+  "@llmAccountUiUpstreamRequest": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSameConnector": "同一连接器账号",
+  "@llmAccountUiSameConnector": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCurrentModel": "当前模型组",
+  "@llmAccountUiCurrentModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeastUsed": "最少使用",
+  "@llmAccountUiLeastUsed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPollingText": "轮询",
+  "@llmAccountUiPollingText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeHigher": "优先较高余额",
+  "@llmAccountUiPrioritizeHigher": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeConsumption": "优先消耗较低余额",
+  "@llmAccountUiPrioritizeConsumption": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddLLM": "添加 LLM 账号",
+  "@llmAccountUiAddLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEditLLM": "编辑 LLM 账号",
+  "@llmAccountUiEditLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceProvider": "服务商预设",
+  "@llmAccountUiServiceProvider": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCustomOpenAI": "自定义 OpenAI 兼容端点",
+  "@llmAccountUiCustomOpenAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogIn": "在 Stroom 内登录 Trae SOLO",
+  "@llmAccountUiLogIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginCallbacks": "登录回调只在本机接收并写入安全凭据存储；不会保存回调地址或浏览记录。",
+  "@llmAccountUiLoginCallbacks": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoesNot": "ChatAdapter 暂不支持此连接器；保存后，该账号的模型组不会出现在聊天与 Task Flow 模型选择器中。",
+  "@llmAccountUiChatAdapterDoesNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuthenticationMethod": "认证方式",
+  "@llmAccountUiAuthenticationMethod": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFindThe": "在 Cloudflare Dashboard 右侧找到 Account ID。",
+  "@llmAccountUiFindThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAPIKeys": "API Key 可添加为多个独立连接并通过模型组轮询。匿名模式只显示并调用已确认的免费模型；不会使用账号目录。",
+  "@llmAccountUiAPIKeys": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachCline": "每个 Cline API Key 需保存为独立账号。模型目录按 Cline 或 ClinePass 分开刷新；目录本身不代表账号拥有订阅授权。",
+  "@llmAccountUiEachCline": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyLaunch": "仅启动官方 devin CLI。登录配置保存在此账号独立的 Stroom 应用目录；不会读取主机 Devin 登录或 API key。",
+  "@llmAccountUiOnlyLaunch": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseThe": "使用本机 Codex CLI。请先在终端运行 codex login；Stroom 不读取或保存 CLI 登录数据。",
+  "@llmAccountUiUseThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseTheNative": "使用本机 ZCode app-server 和 GLM Coding Plan。需要时请先在官方 ZCode 应用中登录；Stroom 不读取或保存 ZCode 登录数据。",
+  "@llmAccountUiUseTheNative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevinCLI": "官方 Devin CLI 可执行文件绝对路径",
+  "@llmAccountUiOfficialDevinCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCopyThe": "从 Devin 官方安装位置复制 devin 可执行文件的完整路径。",
+  "@llmAccountUiCopyThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRetrustCurrent": "重新信任当前 CLI 可执行文件并更新 SHA-256",
+  "@llmAccountUiRetrustCurrent": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiIHave": "我已从 Devin 官方渠道安装并信任此可执行文件",
+  "@llmAccountUiIHave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomFixes": "Stroom 固定当前文件的 SHA-256；文件改变后会拒绝启动。",
+  "@llmAccountUiStroomFixes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogBack": "重新登录官方 Devin CLI",
+  "@llmAccountUiLogBack": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReauthenticateThe": "重新认证此账号的独立 CLI 登录配置。",
+  "@llmAccountUiReauthenticateThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseSelect": "请选择受支持的认证方式后再保存此账号。",
+  "@llmAccountUiPleaseSelect": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacyAI": "旧版 AI Studio 网页会话连接已停用。请选择 API Key 或受支持的 OAuth 并重新授权。",
+  "@llmAccountUiTheLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderOAuth": "Qoder OAuth 需要服务管理员提供完整的 OAuth authorize、token、user-info URL 和 client credentials。授权后只将 DashScope API key 与敏感 OAuth 凭据保存在平台安全存储中；不会使用浏览器 Cookie。上游未定义 refresh grant；凭据失效时请重新授权。",
+  "@llmAccountUiQoderOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubmitTo": "只提交到平台安全存储；留空以保留现有 OAuth client secret。",
+  "@llmAccountUiSubmitTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterThe": "输入以 pt- 开头的 Qoder Personal Access Token。通过本机 qodercli 调用；仅支持文本聊天，不支持调用方 tools，响应会缓冲后返回，单次请求最多 45 秒。",
+  "@llmAccountUiEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitLabUser": "GitLab 用户设置 → Applications",
+  "@llmAccountUiGitLabUser": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlySaved": "仅保存在平台安全存储；公开客户端可留空。",
+  "@llmAccountUiOnlySaved": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyStored": "只保存在平台安全存储中。",
+  "@llmAccountUiOnlyStored": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitHubEnterprise": "GitHub Enterprise Cloud 或 Server 必须启用 Copilot，并允许 device OAuth。使用 HTTPS 实例地址；OAuth 应用客户端 ID 可由管理员提供，留空时使用公开客户端 ID。",
+  "@llmAccountUiGitHubEnterprise": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiClineUses": "Cline 使用固定服务端点",
+  "@llmAccountUiClineUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHorde": "AI Horde 使用固定 HTTPS Chat 端点",
+  "@llmAccountUiAIHorde": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUncloseAIUses": "UncloseAI 使用固定 OpenAI Chat Completions 端点",
+  "@llmAccountUiUncloseAIUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeUses": "Kilo Code 使用固定服务端点",
+  "@llmAccountUiKiloCodeUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedService": "固定服务端点",
+  "@llmAccountUiFixedService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEndpointAddress": "端点地址（连接器需要时填写）",
+  "@llmAccountUiEndpointAddress": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterAzure": "输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。",
+  "@llmAccountUiEnterAzure": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlank": "留空以使用此账号类型的官方模型目录和 API 端点。",
+  "@llmAccountUiLeaveBlank": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPS": "使用 Command Code 的固定 HTTPS API 端点。",
+  "@llmAccountUiFixedHTTPS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSEndpoint": "使用 Kilo Code 模型网关的固定 HTTPS 端点。",
+  "@llmAccountUiFixedHTTPSEndpoint": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSChat": "使用 Cline 的固定 HTTPS Chat Completions 端点。",
+  "@llmAccountUiFixedHTTPSChat": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoAPI": "无需 API key；可选 key 仅用于身份标识。",
+  "@llmAccountUiNoAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeS": "AI Horde 的匿名键或优先级 API Key 仅发送到其固定聊天服务端点。",
+  "@llmAccountUiAIHordeS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSOLOUses": "SOLO 使用固定的 Trae 服务端点；仅将 Cloud-IDE-JWT 发送到该端点。粘贴令牌约 14 天后需重新输入。",
+  "@llmAccountUiSOLOUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDeployment": "部署 ID 会作为该账号唯一的上游模型 ID。",
+  "@llmAccountUiTheDeployment": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDefault": "默认值根据 Azure 模型目录配置。",
+  "@llmAccountUiTheDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAmazonQ": "Amazon Q Developer 区域",
+  "@llmAccountUiAmazonQ": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSRegion": "AWS 区域",
+  "@llmAccountUiAWSRegion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexArea": "Vertex 区域",
+  "@llmAccountUiVertexArea": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQwenCloud": "Qwen Cloud 区域 ID",
+  "@llmAccountUiQwenCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleCloud": "Google Cloud 项目 ID",
+  "@llmAccountUiGoogleCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThePartner": "伙伴模型需要项目 ID；服务账号可从 JSON 的 project_id 自动读取。",
+  "@llmAccountUiThePartner": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCanBe": "可留空以使用服务账号 JSON 中的 project_id。",
+  "@llmAccountUiCanBe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBuilder": "AWS Builder ID OAuth 凭据 JSON",
+  "@llmAccountUiAWSBuilder": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAuthentication": "该认证方式无需输入凭据",
+  "@llmAccountUiThisAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSCredentials": "AWS 凭据 JSON",
+  "@llmAccountUiAWSCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceAccount": "服务账号 JSON",
+  "@llmAccountUiServiceAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeAPI": "AI Horde API Key（可选优先级）",
+  "@llmAccountUiAIHordeAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsText": "凭据",
+  "@llmAccountUiCredentialsText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteThe": "粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。",
+  "@llmAccountUiPasteThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGetThe": "从 cursor.com/dashboard/api 获取 User API Key（crsr_… 或 grok_…）。不会读取 Cursor IDE 登录。",
+  "@llmAccountUiGetThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheOptional": "可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。",
+  "@llmAccountUiTheOptional": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUsingThe": "使用运行环境的 AWS 默认凭据链",
+  "@llmAccountUiUsingThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSavedIn": "保存在平台安全存储中",
+  "@llmAccountUiSavedIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankTo": "留空以保留当前安全凭据",
+  "@llmAccountUiLeaveBlankTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDefaultAPI": "默认 API 协议",
+  "@llmAccountUiDefaultAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatusText": "连接状态",
+  "@llmAccountUiConnectionStatusText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelTo": "要配置的模型",
+  "@llmAccountUiModelTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelAPI": "模型 API 协议",
+  "@llmAccountUiModelAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInheritAccount": "继承账号默认协议",
+  "@llmAccountUiInheritAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamModels": "上游模型与能力",
+  "@llmAccountUiUpstreamModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnePer": "每行一个：模型 ID,streaming,vision,tools",
+  "@llmAccountUiOnePer": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelID": "模型 ID 和上下文长度来自固定目录；其他能力保持未知。",
+  "@llmAccountUiModelID": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousMode": "匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。",
+  "@llmAccountUiAnonymousMode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsCome": "模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。",
+  "@llmAccountUiModelsCome": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAndCapabilities": "模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。",
+  "@llmAccountUiModelsAndCapabilities": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiACPDoes": "ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。",
+  "@llmAccountUiACPDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeCLI": "Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。",
+  "@llmAccountUiKimiCodeCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGrokBuild": "Grok Build 仅开放已验证的订阅模型目录。",
+  "@llmAccountUiGrokBuild": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiXAIOAuth": "xAI OAuth 仅开放该账号从 API 获取的模型目录。",
+  "@llmAccountUiXAIOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuseOAuth": "Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。",
+  "@llmAccountUiMetaMuseOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsComeFrom": "模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。",
+  "@llmAccountUiModelsComeFrom": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAbility": "能力为显式声明；用 vision=false 显式禁用，未填写保持未知。",
+  "@llmAccountUiTheAbility": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRefreshModel": "刷新模型目录",
+  "@llmAccountUiRefreshModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTestThe": "测试本地 Auggie CLI",
+  "@llmAccountUiTestThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckLocal": "检查本地 Codex CLI 登录状态",
+  "@llmAccountUiCheckLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelDirectory": "保存账号和修改后可刷新模型目录。",
+  "@llmAccountUiTheModelDirectory": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLI": "Auggie CLI model list 未返回目录；已保留固定模型目录。",
+  "@llmAccountUiAuggieCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAI": "Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。",
+  "@llmAccountUiVertexAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedTo": "模型目录读取失败，请检查账号认证和连接设置。",
+  "@llmAccountUiFailedTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLIIs": "Auggie CLI 已安装并可运行。",
+  "@llmAccountUiAuggieCLIIs": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodexCLI": "Codex CLI 已登录并可运行。",
+  "@llmAccountUiCodexCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAIPartners": "Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。",
+  "@llmAccountUiVertexAIPartners": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedToSave": "保存账号失败，请检查连接设置后重试。",
+  "@llmAccountUiFailedToSave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTraeThe": "Trae 登录未完成，请重试或使用 Cloud-IDE-JWT 手动导入。",
+  "@llmAccountUiTraeThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnter": "请输入账号名称。",
+  "@llmAccountUiPleaseEnter": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterThe": "请输入以 crsr_ 开头的 Cursor User API Key。",
+  "@llmAccountUiPleaseEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYour": "请输入 GitLab Duo OAuth client ID。",
+  "@llmAccountUiPleaseEnterYour": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterA": "请输入有效的 HTTPS Qoder OAuth 管理员端点。",
+  "@llmAccountUiPleaseEnterA": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterQODER": "请输入 QODER_OAUTH_CLIENT_ID 和 client secret。",
+  "@llmAccountUiPleaseEnterQODER": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValid": "请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。",
+  "@llmAccountUiPleaseEnterAValid": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidCloudflare": "请输入有效的 Cloudflare Account ID。",
+  "@llmAccountUiPleaseEnterAValidCloudflare": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCloudflareWorkers": "Cloudflare Workers AI 仅提供已验证的固定模型目录。",
+  "@llmAccountUiCloudflareWorkers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeAccounts": "Kimi Code 账号只能使用已验证的 Coding Plan 模型。",
+  "@llmAccountUiKimiCodeAccounts": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseRefresh": "请先刷新该模型目录，并选择其 supportedApiProtocols 中的协议。",
+  "@llmAccountUiPleaseRefresh": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityValues": "能力值只能是 true 或 false。",
+  "@llmAccountUiAbilityValues": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCommandCode": "Command Code 模型能力只能由上游目录声明。",
+  "@llmAccountUiCommandCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidGitHub": "请输入有效的 GitHub Enterprise HTTPS 实例地址。",
+  "@llmAccountUiPleaseEnterAValidGitHub": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseFill": "请填写官方 Devin CLI 可执行文件的完整路径。",
+  "@llmAccountUiPleaseFill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseConfirm": "请确认此可执行文件来自 Devin 官方安装渠道。",
+  "@llmAccountUiPleaseConfirm": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheSelected": "所选 CLI 路径无效或不可执行。",
+  "@llmAccountUiTheSelected": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterTheAmazon": "请输入包含 AWS Builder ID refresh token 的 Amazon Q 凭据 JSON。",
+  "@llmAccountUiPleaseEnterTheAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidAmazon": "请输入有效的 Amazon Q OAuth 凭据 JSON 和受支持区域。",
+  "@llmAccountUiPleaseEnterAValidAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAIStudio": "旧版 AI Studio 网页会话连接已停用，请改用 API Key 或受支持的 OAuth。",
+  "@llmAccountUiLegacyAIStudio": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseProvide": "请提供 Google OAuth Desktop client ID 和对应的 client secret。",
+  "@llmAccountUiPleaseProvide": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYourCredentials": "请输入凭据。",
+  "@llmAccountUiPleaseEnterYourCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupName": "模型组名称",
+  "@llmAccountUiModelGroupName": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountAnd": "账号与上游模型",
+  "@llmAccountUiAccountAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelGroup": "模型组当前没有成员。",
+  "@llmAccountUiTheModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalReferences": "本地引用用于兼容已有会话模型 ID；账号成员只会在这个稳定组内参与选择。",
+  "@llmAccountUiLocalReferences": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGroupMembers": "同一模型引用下的组成员必须使用相同聊天协议。",
+  "@llmAccountUiGroupMembers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountHas": "账号已删除",
+  "@llmAccountUiAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOldSession": "旧会话引用所需成员",
+  "@llmAccountUiOldSession": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemoveMember": "移除成员",
+  "@llmAccountUiRemoveMember": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalModel": "本地模型引用 ID",
+  "@llmAccountUiLocalModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSamePriority": "同优先级选择",
+  "@llmAccountUiSamePriority": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCrossAccount": "跨账号回退范围",
+  "@llmAccountUiCrossAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConcurrencyLimit": "并发上限",
+  "@llmAccountUiConcurrencyLimit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankToIndicate": "留空表示不限制；账号和模型组分别配置。",
+  "@llmAccountUiLeaveBlankToIndicate": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRollingWindow": "滚动窗口",
+  "@llmAccountUiRollingWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarWindow": "日历窗口",
+  "@llmAccountUiCalendarWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarTime": "日历时区",
+  "@llmAccountUiCalendarTime": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiForExample": "例如 Asia/Taipei 或 UTC",
+  "@llmAccountUiForExample": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemainingCredit": "剩余额度保留线",
+  "@llmAccountUiRemainingCredit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWindowUsage": "窗口使用量上限",
+  "@llmAccountUiWindowUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedValue": "固定值",
+  "@llmAccountUiFixedValue": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPercentageText": "百分比",
+  "@llmAccountUiPercentageText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnitText": "单位",
+  "@llmAccountUiUnitText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConcurrency": "并发上限必须是正整数，或留空表示不限。",
+  "@llmAccountUiTheConcurrency": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCalendar": "日历窗口需要填写时区。",
+  "@llmAccountUiTheCalendar": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndUsage": "额度和使用上限必须是非负数；百分比不能超过 100。",
+  "@llmAccountUiQuotaAndUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHourWindow": "5 小时窗口",
+  "@llmAccountUiHourWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDayWindow": "日窗口",
+  "@llmAccountUiDayWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyWindow": "周窗口",
+  "@llmAccountUiWeeklyWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthWindow": "月窗口",
+  "@llmAccountUiMonthWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmImportStoppedAfterLegacySyncFailure": "已导入 {count} 个账号，但旧配置同步失败。",
+  "@llmImportStoppedAfterLegacySyncFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmImportStoppedAfterCredentialFailure": "已导入 {count} 个账号；后续凭据未导入，因为钥匙串项目已更改、访问被拒绝或安全存储不可用。",
+  "@llmImportStoppedAfterCredentialFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmRequestUsedAccount": "本轮使用账号",
+  "@llmRequestUsedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmLastAttemptedAccount": "最后尝试账号",
+  "@llmLastAttemptedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmRouteDecisionSessionAffinity": "沿用此对话最近成功的账号",
+  "@llmRouteDecisionSessionAffinity": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSessionAffinityPersistenceFailed": "本次账号连续性未能保存",
+  "@llmRouteDecisionSessionAffinityPersistenceFailed": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionExplicitAccountSelection": "按用户选择的账号路由",
+  "@llmRouteDecisionExplicitAccountSelection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSelectedAccountOutsideGroup": "所选账号不属于当前模型组",
+  "@llmRouteDecisionSelectedAccountOutsideGroup": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConversationIdInvalid": "对话标识无效，未使用会话亲和",
+  "@llmRouteDecisionConversationIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupMissing": "没有找到此模型的稳定模型组",
+  "@llmRouteDecisionModelGroupMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupAmbiguous": "此模型同时关联多个模型组",
+  "@llmRouteDecisionModelGroupAmbiguous": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectorProtocolIncompatible": "连接器协议不适用于此聊天模型",
+  "@llmRouteDecisionConnectorProtocolIncompatible": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectionUnknown": "连接状态未知",
+  "@llmRouteDecisionConnectionUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountMissing": "账号已删除",
+  "@llmRouteDecisionAccountMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountIdInvalid": "账号标识无效",
+  "@llmRouteDecisionAccountIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountUnavailable": "账号已暂停或需要重新认证",
+  "@llmRouteDecisionAccountUnavailable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelMappingMismatch": "账号没有映射到所选模型",
+  "@llmRouteDecisionModelMappingMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelNotMapped": "账号中找不到对应的上游模型",
+  "@llmRouteDecisionModelNotMapped": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCapabilityMismatch": "账号模型不支持此请求所需能力",
+  "@llmRouteDecisionCapabilityMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionFallbackScope": "回退范围不允许切换到此连接器",
+  "@llmRouteDecisionFallbackScope": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCooldown": "账号仍在故障冷却期",
+  "@llmRouteDecisionCooldown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConcurrencyLimit": "账号或模型组已达到并发上限",
+  "@llmRouteDecisionConcurrencyLimit": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceUnknownOrIncomparable": "额度未知或计量单位不可比较",
+  "@llmRouteDecisionBalanceUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceAtOrBelowReserve": "余额已达到或低于保留线",
+  "@llmRouteDecisionBalanceAtOrBelowReserve": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnknown": "使用量未知，无法判断限制",
+  "@llmRouteDecisionUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveBalanceUnknown": "剩余额度未知，无法判断保留线",
+  "@llmRouteDecisionReserveBalanceUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUnitUnknownOrIncomparable": "保留线计量单位未知或不可比较",
+  "@llmRouteDecisionReserveUnitUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknownOrIncomparable": "额度总量未知或不可比较",
+  "@llmRouteDecisionReserveTotalUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknown": "额度总量未知，无法计算保留线",
+  "@llmRouteDecisionReserveTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUsageEstimateUnknown": "请求用量估算未知，无法判断保留线",
+  "@llmRouteDecisionReserveUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveInFlightUsageUnknown": "进行中的请求用量未知，无法判断保留线",
+  "@llmRouteDecisionReserveInFlightUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloorReached": "剩余额度低于保留线",
+  "@llmRouteDecisionReserveFloorReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingReached": "已达到使用上限",
+  "@llmRouteDecisionUsageCeilingReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingTotalUnknown": "使用总额未知，无法判断上限",
+  "@llmRouteDecisionUsageCeilingTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnitMismatch": "使用量计量单位不匹配",
+  "@llmRouteDecisionUsageUnitMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageSourceMismatch": "使用量与额度数据来源不匹配",
+  "@llmRouteDecisionUsageSourceMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageInFlightUnknown": "进行中的请求用量未知，无法判断上限",
+  "@llmRouteDecisionUsageInFlightUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageEstimateUnknown": "请求用量估算未知，无法判断上限",
+  "@llmRouteDecisionUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionInvalidWindowTimezone": "额度窗口时区配置无效",
+  "@llmRouteDecisionInvalidWindowTimezone": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloor": "剩余额度低于保留线",
+  "@llmRouteDecisionReserveFloor": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeiling": "已达到使用上限",
+  "@llmRouteDecisionUsageCeiling": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestAuthentication": "上游拒绝了认证",
+  "@llmRouteDecisionRequestAuthentication": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestQuotaExhausted": "上游报告额度耗尽",
+  "@llmRouteDecisionRequestQuotaExhausted": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestRateLimited": "上游限流",
+  "@llmRouteDecisionRequestRateLimited": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestConnection": "连接上游失败",
+  "@llmRouteDecisionRequestConnection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestServer": "上游服务错误",
+  "@llmRouteDecisionRequestServer": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestInvalidRequest": "上游拒绝了请求参数",
+  "@llmRouteDecisionRequestInvalidRequest": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestCancelled": "请求已取消",
+  "@llmRouteDecisionRequestCancelled": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestOther": "上游请求失败",
+  "@llmRouteDecisionRequestOther": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  }
 }

@@ -538,6 +538,10 @@
   "chatAutoContinuePrompt": "تابع إذا لم تكن قد انتهيت.",
   "chatSearchCurrent": "البحث في هذه المحادثة...",
   "chatSearchAll": "البحث في جميع المحادثات...",
+  "chatSearchCurrentMode": "المحادثة الحالية",
+  "chatSearchAllMode": "كل المحادثات",
+  "chatSearchRetry": "إعادة البحث",
+  "chatSearchError": "فشل البحث",
   "searchPrevious": "النتيجة السابقة",
   "searchNext": "النتيجة التالية",
   "searchClose": "إغلاق البحث",
@@ -5425,8 +5429,12 @@
   "bgTaskOcrRequestSizeExceeded": "حجم JSON لطلب OCR هو {encodedBytes} بايت، ويتجاوز الحد المُعدّ البالغ {budgetBytes} بايت.",
   "@bgTaskOcrRequestSizeExceeded": {
     "placeholders": {
-      "encodedBytes": {"type": "int"},
-      "budgetBytes": {"type": "int"}
+      "encodedBytes": {
+        "type": "int"
+      },
+      "budgetBytes": {
+        "type": "int"
+      }
     }
   },
   "bgTaskOcrError": "فشل OCR: {details}",
@@ -7185,12 +7193,1563 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "قيمة درجة الحرارة المحفوظة خارج النطاق 0–2. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.",
-  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "@ocrSamplingTemperatureOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR temperature."
+  },
   "ocrSamplingTopPOutOfRange": "قيمة top-P المحفوظة خارج النطاق 0–1. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.",
-  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "@ocrSamplingTopPOutOfRange": {
+    "description": "Explains how to repair an invalid stored OCR top-P value."
+  },
   "ocrSamplingSliderRepairRequired": "اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "@ocrSamplingSliderRepairRequired": {
+    "description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."
+  },
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو."
-
+  "providerResponsesEndpointHelp": "استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو.",
+  "llmAccountLabel": "الحساب",
+  "llmAccountForThisRequest": "الحساب المستخدم لهذا الطلب",
+  "llmAccountUseModelGroup": "استخدام توجيه مجموعة النماذج",
+  "llmAccountManagementTitle": "حسابات LLM ومجموعات النماذج",
+  "llmAccountAdd": "إضافة حساب",
+  "llmAccountEmpty": "لا توجد حسابات LLM بعد.",
+  "llmAccountEditTitleAdd": "إضافة حساب LLM",
+  "llmAccountEditTitleEdit": "تعديل حساب LLM",
+  "traeAuthorizationTitle": "الاتصال بـ Trae SOLO",
+  "traeAuthorizationLoadError": "تعذر تحميل صفحة تسجيل الدخول. ألغِ العملية وحاول مرة أخرى.",
+  "llmOcrAccountSyncFailed": "تعذرت مزامنة حسابات OCR. تحقق من الإعدادات في إدارة الحسابات.",
+  "llmOcrAccountMigrationFailed": "تعذّر ترحيل حسابات OCR. لا يزال الإعداد الأصلي محفوظًا.",
+  "llmAccountsTab": "الحسابات",
+  "llmModelGroupsTab": "مجموعات النماذج",
+  "llmAccountsSummary": "يحفظ كل حساب بيانات اعتماده وقدرات النموذج والحصة وحدود التزامن الخاصة به. وتظل الحصة غير المعروفة غير معروفة.",
+  "llmModelGroupsSummary": "تربط مجموعات النماذج الثابتة أسماء نماذج Stroom بالحسابات والنماذج upstream. يظل الرجوع ضمن المجموعة.",
+  "llmAccountName": "اسم الحساب",
+  "llmConnectorLabel": "الموصل",
+  "llmProviderPresetLabel": "إعداد مسبق للمزوّد",
+  "llmAuthenticationMethodLabel": "طريقة المصادقة",
+  "llmDefaultApiProtocolLabel": "بروتوكول API الافتراضي",
+  "llmConnectionStatusLabel": "حالة الاتصال",
+  "llmConfigureModelLabel": "النموذج المطلوب إعداده",
+  "llmModelApiProtocolLabel": "بروتوكول API للنموذج",
+  "llmUpstreamModelsCapabilitiesLabel": "النماذج upstream والقدرات",
+  "llmModelGroupNameLabel": "اسم مجموعة النماذج",
+  "llmStableModelIdLabel": "معرّف نموذج Stroom الثابت",
+  "llmPriorityTierLabel": "مستوى الأولوية",
+  "llmUpstreamModelLabel": "النموذج upstream",
+  "llmSamePrioritySelectionLabel": "الاختيار بين الحسابات ذات الأولوية نفسها",
+  "llmFallbackScopeLabel": "نطاق الرجوع بين الحسابات",
+  "llmConcurrencyLimitLabel": "حد التزامن",
+  "llmWindowModeLabel": "وضع النافذة",
+  "llmCalendarTimezoneLabel": "المنطقة الزمنية للتقويم",
+  "llmValueLabel": "القيمة",
+  "llmTypeLabel": "النوع",
+  "llmRemainingQuotaFloorLabel": "الحد الأدنى للحصة المتبقية",
+  "llmWindowUsageCeilingLabel": "حد استخدام النافذة",
+  "llmImportZedCredentials": "استيراد بيانات اعتماد API من Zed",
+  "llmAddModelGroupTooltip": "إضافة مجموعة نماذج",
+  "llmNoModelGroups": "لا توجد مجموعات نماذج بعد.",
+  "llmAccountPolicies": "سياسات الحساب",
+  "llmQuotaConcurrencyPolicy": "سياسة الحصة والتزامن",
+  "llmAccountAuthSource": "مصدر المصادقة: {source}",
+  "llmAccountRecentError": "الخطأ الأخير: {error}",
+  "llmNoRecord": "لا يوجد سجل",
+  "llmConnectorUnavailableForChat": "هذا الموصل غير مدعوم في Chat.",
+  "llmAccountUnavailableInSelectors": "لن تظهر نماذج هذا الحساب في محددات Chat أو Task Flow.",
+  "llmModelsCapabilitiesHeading": "النماذج والقدرات",
+  "llmNoModelsConfigured": "لم يتم إعداد نماذج",
+  "llmUsageQuotaHeading": "الاستخدام والحصة",
+  "llmQuotaUnknown": "الحصة غير معروفة",
+  "llmQuotaLimitsHeading": "حدود الحصة",
+  "llmLocalObservedUsageHeading": "الاستخدام المرصود محليًا",
+  "llmUsageHistoryDisclaimer": "إحصاءات محلية لآخر 62 يومًا؛ ولا تمثل رصيد المزوّد.",
+  "llmLastRouteHeading": "آخر توجيه",
+  "llmMembersHeading": "الأعضاء",
+  "llmNoRoutableMembers": "لا يوجد أعضاء حساب قابلون للتوجيه",
+  "llmLegacyMemberRequired": "يلزم الاحتفاظ بعضو للحفاظ على مرجع نموذج المحادثات السابقة ومعرّف النموذج المحلي.",
+  "llmAccountGroupLoadError": "تعذر تحميل الحساب أو مجموعة النماذج.",
+  "llmRetryLoad": "إعادة المحاولة",
+  "llmGroupFallbackWithinMembers": "لا تسمح المجموعة المحفوظة بالرجوع إلا بين أعضائها.",
+  "llmMixedGroupProtocolError": "يجب أن يستخدم جميع أعضاء مرجع النموذج نفسه بروتوكول الدردشة نفسه.",
+  "llmAddMember": "إضافة عضو",
+  "llmNoGroupMembers": "لا يوجد أعضاء في مجموعة النماذج هذه.",
+  "llmStableModelGroupHelp": "يحافظ معرّف النموذج المحلي على التوافق مع المحادثات الحالية. ويظل الرجوع ضمن هذه المجموعة الثابتة.",
+  "llmSignInProvider": "تسجيل الدخول إلى {provider}",
+  "llmOAuthInstructions": "افتح صفحة تفويض {provider} وأدخل الرمز أدناه. سيحفظ Stroom الحساب بعد التفويض.",
+  "llmOpenProviderAuthorization": "فتح {provider}",
+  "llmAuthorizationSource": "مصدر التفويض: {source}",
+  "llmAccountDeleteFailed": "تعذر حذف الحساب.",
+  "llmAccountDeleteCleanupFailed": "حُذف الحساب، لكن تعذر تنظيف الإعداد القديم.",
+  "llmSaveBeforeModelRefresh": "احفظ الحساب وتعديلاته قبل تحديث دليل النماذج.",
+  "llmRefreshModelCatalog": "تحديث دليل النماذج",
+  "llmReauthorize": "إعادة التفويض",
+  "llmSave": "حفظ",
+  "llmCancel": "إلغاء",
+  "llmDelete": "حذف",
+  "llmEdit": "تعديل",
+  "llmContinueKeychainScan": "متابعة الفحص",
+  "llmImportCredentialsConfirmTitle": "هل تريد استيراد بيانات اعتماد {provider}؟",
+  "llmImportThisAccount": "استيراد هذا الحساب",
+  "llmImportedAccounts": "تم استيراد {count} من حسابات المزوّدين بأمان.",
+  "llmSamePriorityStrategySummary": "سياسة الأولوية المتساوية: {strategy}",
+  "llmKeepLegacyGroup": "الاحتفاظ بمجموعة النماذج للمحادثات السابقة",
+  "llmGroupUsageSummary": "استخدام المجموعة: {usage}",
+  "llmModelGroupSettings": "إعدادات مجموعة النماذج",
+  "llmAddModelGroupMemberTitle": "إضافة عضو إلى مجموعة النماذج",
+  "llmSavePolicy": "حفظ السياسة",
+  "llmOpenferenceCatalogNote": "تعتمد النماذج المتاحة على خطة حساب Openference. ولا يعني دليل النماذج غير المتصل وجود صلاحية.",
+  "llmTestLocalCli": "اختبار CLI المحلي لـ {cli}",
+  "llmCheckLocalCodexCli": "التحقق من تسجيل دخول Codex CLI المحلي",
+  "llmCliReady": "تم تثبيت CLI لـ {cli} وهي جاهزة.",
+  "llmCodexCliReady": "تم تسجيل الدخول إلى Codex CLI وهي جاهزة.",
+  "llmCheckZedKeychain": "هل تريد فحص سلسلة مفاتيح Zed؟",
+  "llmRoutingPolicyTitle": "سياسة التوجيه لـ {target}",
+  "llmSupportedAuthRequired": "اختر طريقة مصادقة مدعومة قبل حفظ هذا الحساب.",
+  "llmTraeCallbackPrivacy": "يُستقبل رد تسجيل الدخول على هذا الجهاز فقط ويُحفظ في مخزن بيانات الاعتماد الآمن. لا يُحفظ عنوان URL أو سجل التصفح.",
+  "llmCloudflareAccountIdLabel": "معرّف حساب Cloudflare",
+  "llmCloudflareAccountIdHint": "ابحث عن معرّف الحساب في الجانب الأيمن من لوحة Cloudflare.",
+  "llmDevinExecutablePathLabel": "مسار الملف التنفيذي الرسمي لـ Devin CLI",
+  "llmDevinExecutablePathHelp": "انسخ المسار الكامل لملف Devin التنفيذي من موقع التثبيت الرسمي.",
+  "llmExecutableIntegrityHint": "يسجل Stroom قيمة SHA-256 لهذا الملف ويرفض تشغيله إذا تغير.",
+  "llmDevinReauthTitle": "تسجيل الدخول مجددًا إلى Devin CLI الرسمي",
+  "llmDevinReauthSubtitle": "أعد مصادقة تسجيل CLI المستقل لهذا الحساب.",
+  "llmKeepOAuthClientSecretHelp": "يُحفظ فقط في مخزن النظام الأساسي الآمن؛ اتركه فارغًا للاحتفاظ بسر عميل OAuth الحالي.",
+  "llmPublicOauthClientSecretHelp": "يُحفظ فقط في مخزن النظام الأساسي الآمن؛ يمكن للعملاء العموميين تركه فارغًا.",
+  "llmGitlabApplicationsHint": "إعدادات مستخدم GitLab → Applications",
+  "llmAzureDeploymentIdHelp": "يُستخدم معرّف النشر كمعرّف نموذج upstream الفريد لهذا الحساب.",
+  "llmAzureApiVersionHelp": "تتبع القيمة الافتراضية إعداد دليل نماذج Azure.",
+  "llmAmazonQRegionLabel": "منطقة Amazon Q Developer",
+  "llmQwenCloudRegionLabel": "معرّف منطقة Qwen Cloud",
+  "llmQwenCloudRegionHelp": "يرتبط مفتاح API بمنطقة. المناطق المدعومة: ap-southeast-1، cn-beijing، eu-central-1، cn-hongkong، ap-northeast-1، us-east-1.",
+  "llmGoogleCloudProjectLabel": "معرّف مشروع Google Cloud",
+  "llmModelCapabilitiesInputHint": "عنصر واحد في كل سطر: معرّف النموذج,streaming,vision,tools",
+  "llmGoogleOAuthPrerequisites": "يستخدم هذا الاتصال OAuth لـ Google Generative Language API. ويتطلب مشروع Google Cloud تديره بنفسك، وتفعيل Generative Language API، وعميل OAuth Desktop مُعدًا. تُحتسب الطلبات على المشروع، ولا يستخدم Code Assist أو تسجيل الدخول إلى AI Studio على الويب.",
+  "llmGitlabOAuthPrerequisites": "يتطلب OAuth لـ GitLab Duo تطبيق GitLab مسجلًا مع callback ‏http://localhost:20128/callback وإذن ai_features read_user. أدخل client ID وclient secret بحسب نوع التطبيق. تُحفظ الرموز بأمان وتُحدّث عند الدعم. ويمكن اختيار PAT بشكل منفصل.",
+  "llmAmazonQOAuthPrerequisites": "استورد JSON لبيانات OAuth في AWS Builder ID يتضمن refresh_token؛ أما access_token وclientId وclientSecret فهي اختيارية. عند غياب بيانات العميل، يسجل Stroom عميلًا عبر AWS OIDC لتحديث الرمز. تُحفظ الرموز مباشرة بأمان ولا تُقرأ ملفات تعريف ارتباط المتصفح. المناطق المدعومة: us-east-1 وeu-central-1.",
+  "llmTraeTokenSecurity": "يستخدم SOLO نقطة نهاية Trae ثابتة ويرسل إليها Cloud-IDE-JWT فقط. تنتهي صلاحية الرموز المستوردة بعد نحو 14 يومًا ويجب إدخالها مجددًا.",
+  "llmAccountUsageUsedLabel": "المستخدم",
+  "@llmAccountUsageUsedLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageRemainingLabel": "المتبقي",
+  "@llmAccountUsageRemainingLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountUsageTotalLabel": "الإجمالي",
+  "@llmAccountUsageTotalLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountRemainingQuotaLabel": "الحصة المتبقية:",
+  "@llmAccountRemainingQuotaLabel": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountMetricUnitUnknown": "وحدة غير معروفة",
+  "@llmAccountMetricUnitUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilitySupported": "مدعوم",
+  "@llmAccountCapabilitySupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnsupported": "غير مدعوم",
+  "@llmAccountCapabilityUnsupported": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountCapabilityUnknown": "غير معروف",
+  "@llmAccountCapabilityUnknown": {
+    "description": "Account usage and capability labels."
+  },
+  "llmAccountQuotaReserveThreshold": "احتياطي الحصة المتبقية لـ{window}: {threshold}",
+  "@llmAccountQuotaReserveThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUsageCeilingThreshold": "حد الاستخدام لـ{window}: {threshold}",
+  "@llmAccountUsageCeilingThreshold": {
+    "description": "Quota policy threshold summary.",
+    "placeholders": {
+      "window": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccountWithOAuth": "هل تريد حذف “{account}” وإلغاء تفويض OAuth وإزالة الحساب من مجموعات النماذج؟",
+  "@llmConfirmDeleteAccountWithOAuth": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteAccount": "هل تريد حذف “{account}” وإزالة الحساب من مجموعات النماذج؟",
+  "@llmConfirmDeleteAccount": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "llmConfirmDeleteModelGroup": "هل تريد حذف توجيه “{group}”؟ لن تتغير مراجع النماذج في المحادثات الحالية.",
+  "@llmConfirmDeleteModelGroup": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportAccountSource": "استيراد “{account}” من سلسلة المفاتيح المحلية إلى حساب Stroom API لموفر {provider}.",
+  "@llmKeychainImportAccountSource": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmKeychainImportExistingAccountNotice": "سيؤدي ذلك إلى تحديث مفتاح حساب Stroom مع الاحتفاظ بالاسم والنماذج وإعدادات التوجيه.",
+  "@llmKeychainImportExistingAccountNotice": {
+    "description": "LLM account management UI text."
+  },
+  "llmKeychainImportSecurityNote": "بعد التأكيد، يعيد Stroom قراءة بيانات الاعتماد والتحقق منها. لن يظهر المفتاح في الواجهة.",
+  "@llmKeychainImportSecurityNote": {
+    "description": "LLM account management UI text."
+  },
+  "llmProviderAuthorizationFailed": "فشل تفويض {provider}. يرجى بدء تسجيل الدخول مرة أخرى.",
+  "@llmProviderAuthorizationFailed": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountConcurrencySummary": "التزامن للحساب: {value}",
+  "@llmAccountConcurrencySummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountGroupUsageSummary": "الاستخدام المحلي لمجموعة النماذج: {usage}",
+  "@llmAccountGroupUsageSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "usage": {
+        "type": "String"
+      }
+    }
+  },
+  "llmPriorityTierValue": "المستوى {tier}",
+  "@llmPriorityTierValue": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "tier": {
+        "type": "int"
+      }
+    }
+  },
+  "llmGroupMemberSummary": "{upstream} · الأولوية {priority} · المعرّف المحلي {localId}",
+  "@llmGroupMemberSummary": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "upstream": {
+        "type": "String"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "localId": {
+        "type": "String"
+      }
+    }
+  },
+  "llmNoAccountCanProcessModel": "لا يوجد حساب يمكنه معالجة {model}.",
+  "@llmNoAccountCanProcessModel": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "llmOAuthLimitationSaveMessage": "{limitation}\nاختر طريقة مصادقة مدعومة قبل حفظ هذا الحساب.",
+  "@llmOAuthLimitationSaveMessage": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "limitation": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderEnterpriseCredentials": "بيانات اعتماد المؤسسة المقدمة من {provider}",
+  "@llmProviderEnterpriseCredentials": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderSessionToken": "رمز الجلسة المقدم من {provider}",
+  "@llmProviderSessionToken": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmProviderCredential": "بيانات الاعتماد المقدمة من {provider}",
+  "@llmProviderCredential": {
+    "description": "LLM account management UI text.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "llmAccountUiAccountSaving": "فشل حفظ الحساب. يرجى التحقق من معلومات حسابك وحالة التخزين الآمنة.",
+  "@llmAccountUiAccountSaving": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountDeletion": "فشل حذف الحساب.",
+  "@llmAccountUiAccountDeletion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccount": "تم حذف الحساب، ولكن فشلت عملية تنظيف التكوين القديم.",
+  "@llmAccountUiTheAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountWas": "تم حذف الحساب، لكن فشل إلغاء OAuth. يرجى الانتقال إلى إعدادات حساب المزود لإلغاء التفويض.",
+  "@llmAccountUiTheAccountWas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckZed": "تحقق من سلسلة المفاتيح Zed؟",
+  "@llmAccountUiCheckZed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMacOSMay": "قد يسألك نظام التشغيل macOS، عنصرًا تلو الآخر، عما إذا كان سيسمح لـ Stroom بالتحقق من مطابقة إدخالات سلسلة المفاتيح عند إنشاء بيان قابل للاستيراد.",
+  "@llmAccountUiMacOSMay": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisStep": "هذه الخطوة لن تحفظ الحساب؛ لا تزال بحاجة إلى تأكيد الحسابات التي تريد استيرادها واحدًا تلو الآخر لاحقًا.",
+  "@llmAccountUiThisStep": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepChecking": "استمر في التحقق",
+  "@llmAccountUiKeepChecking": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnableTo": "غير قادر على قراءة سلسلة مفاتيح النظام. يرجى التحقق من أذونات الوصول إلى سلسلة مفاتيح النظام لديك والمحاولة مرة أخرى.",
+  "@llmAccountUiUnableTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoReadable": "لم يتم العثور على بيانات اعتماد Zed OpenAI أو Anthropic أو Google أو Mistral أو xAI القابلة للقراءة.",
+  "@llmAccountUiNoReadable": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiProviderText": "مزود",
+  "@llmAccountUiProviderText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomWill": "سيقوم Stroom بإعادة قراءة بيانات الاعتماد والتحقق منها بعد التأكيد. لن يتم عرض المفتاح في الواجهة.",
+  "@llmAccountUiStroomWill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportThis": "استيراد هذا الحساب",
+  "@llmAccountUiImportThis": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsNot": "لم يتم استيراد بيانات الاعتماد. ربما تم تغيير عنصر سلسلة المفاتيح، أو تم رفض الوصول إليه، أو أن التخزين الآمن غير متوفر.",
+  "@llmAccountUiCredentialsNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseAdd": "يرجى إضافة نماذج إلى حسابك أولاً، ثم قم بإنشاء مجموعة نماذج.",
+  "@llmAccountUiPleaseAdd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModel": "فشلت المجموعة النموذجية في الحفظ. يرجى التأكد من وجود النموذج الأولي المقابل في حساب العضو.",
+  "@llmAccountUiTheModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroup": "فشل حذف المجموعة النموذجية.",
+  "@llmAccountUiModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLLMAccount": "حساب LLM والمجموعة النموذجية",
+  "@llmAccountUiLLMAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupText": "مجموعة نموذجية",
+  "@llmAccountUiModelGroupText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachAccount": "يقوم كل حساب بشكل مستقل بحفظ بيانات الاعتماد وإمكانيات النموذج والحصص واستراتيجيات التزامن. المبلغ المجهول يبقى مجهولا.",
+  "@llmAccountUiEachAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiImportAPI": "استيراد بيانات اعتماد API من Zed",
+  "@llmAccountUiImportAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRouting": "فشل حفظ سياسة التوجيه.",
+  "@llmAccountUiTheRouting": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStableModel": "تقوم مجموعات النماذج الثابتة بتعيين معرفات نماذج الجلسة القديمة للحسابات الاختيارية والنماذج الأولية. يمكن للأعضاء التراجع فقط داخل هذه المجموعة.",
+  "@llmAccountUiStableModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddModel": "إضافة مجموعة النماذج",
+  "@llmAccountUiAddModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCode": "فشل ترخيص Kimi Code، يرجى محاولة تسجيل الدخول مرة أخرى.",
+  "@llmAccountUiKimiCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginTo": "قم بتسجيل الدخول إلى Kimi Code CLI",
+  "@llmAccountUiLoginTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenThe": "افتح صفحة التحقق من Kimi وأدخل الرمز أدناه. بعد اكتمال التفويض، سيقوم Stroom بحفظ الحساب تلقائيًا.",
+  "@llmAccountUiOpenThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKimi": "افتح كيمي",
+  "@llmAccountUiOpenKimi": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCode": "فشل ترخيص Kilo Code، يرجى محاولة تسجيل الدخول مرة أخرى.",
+  "@llmAccountUiKiloCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginToKilo": "الدخول إلى كيلو كود",
+  "@llmAccountUiLoginToKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheKilo": "افتح صفحة التحقق من رمز الكيلو وأدخل الرمز. بعد اكتمال التفويض، سيقوم Stroom بحفظ الحساب تلقائيًا.",
+  "@llmAccountUiOpenTheKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenKilo": "فتح كيلو كود",
+  "@llmAccountUiOpenKilo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuse": "فشل ترخيص Meta Muse، يرجى محاولة تسجيل الدخول مرة أخرى.",
+  "@llmAccountUiMetaMuse": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginMeta": "تسجيل الدخول كود ميتا ميوز",
+  "@llmAccountUiLoginMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenTheMeta": "افتح صفحة التحقق التعريفي وأدخل الرمز أدناه. بعد اكتمال التفويض، سيقوم Stroom بحفظ الحساب تلقائيًا.",
+  "@llmAccountUiOpenTheMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenMeta": "افتح ميتا",
+  "@llmAccountUiOpenMeta": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountOr": "لا يمكن قراءة الحساب أو المجموعة النموذجية.",
+  "@llmAccountUiTheAccountOr": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAnd": "استراتيجية الحصص والتزامن",
+  "@llmAccountUiQuotaAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAvailableModels": "تعتمد النماذج المتوفرة على خطة حساب Openference؛ كتالوج النماذج غير المتصلة بالإنترنت لا يعني التفويض.",
+  "@llmAccountUiAvailableModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoRecord": "لا يوجد سجل",
+  "@llmAccountUiNoRecord": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoes": "لا يدعم ChatAdapter هذا الموصل حاليًا.",
+  "@llmAccountUiChatAdapterDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAccount": "لن تظهر مجموعة نماذج هذا الحساب في محددات نماذج الدردشة وتدفق المهام.",
+  "@llmAccountUiThisAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAnd": "النماذج والقدرات",
+  "@llmAccountUiModelsAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservation": "استخدام المراقبة المحلية",
+  "@llmAccountUiLocalObservation": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoLocal": "لا توجد سجلات محلية (آخر 62 يومًا)",
+  "@llmAccountUiNoLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalObservationUsage": "استخدام المراقبة المحلية غير معروف (لا يمكن قراءة سجل التوجيه)",
+  "@llmAccountUiLocalObservationUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalStatistics": "الإحصائيات المحلية لآخر 62 يومًا لا تمثل رصيد الحساب.",
+  "@llmAccountUiLocalStatistics": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndFallback": "استراتيجية الحصص والاحتياطي",
+  "@llmAccountUiQuotaAndFallback": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKeepOld": "احتفظ بمجموعة نماذج الجلسة القديمة",
+  "@llmAccountUiKeepOld": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDeleteModel": "حذف مجموعة النماذج",
+  "@llmAccountUiDeleteModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocal": "الاستخدام التراكمي المحلي للمجموعة النموذجية: غير معروف",
+  "@llmAccountUiModelGroupLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupLocalCumulative": "الاستخدام التراكمي المحلي لمجموعة النماذج: غير معروف (لا يمكن قراءة سجل التوجيه)",
+  "@llmAccountUiModelGroupLocalCumulative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCorresponding": "يجب الاحتفاظ بالأعضاء المقابلين ومعرفات المرجع المحلية لمراجع نموذج الجلسة القديمة.",
+  "@llmAccountUiTheCorresponding": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThereAre": "لا يوجد أعضاء حساب قابل للتوجيه",
+  "@llmAccountUiThereAre": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHoursText": "5 ساعات",
+  "@llmAccountUiHoursText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyText": "يوميا",
+  "@llmAccountUiDailyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyText": "أسبوعيا",
+  "@llmAccountUiWeeklyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyText": "شهريا",
+  "@llmAccountUiMonthlyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMainWindow": "الرصيد المتبقي في النافذة الرئيسية",
+  "@llmAccountUiMainWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheRemaining": "المبلغ المتبقي من النافذة الفرعية",
+  "@llmAccountUiTheRemaining": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDailyQuota": "الحصة اليومية المتبقية",
+  "@llmAccountUiDailyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyQuota": "الحصة الأسبوعية المتبقية",
+  "@llmAccountUiWeeklyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthlyQuota": "الحصة الشهرية المتبقية",
+  "@llmAccountUiMonthlyQuota": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeReview": "الحصة المتبقية لمراجعة التعليمات البرمجية",
+  "@llmAccountUiCodeReview": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestText": "طلب",
+  "@llmAccountUiRequestText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityUnknown": "القدرة غير معروفة",
+  "@llmAccountUiAbilityUnknown": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatus": "حالة الاتصال غير معروفة",
+  "@llmAccountUiConnectionStatus": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReadyText": "جاهز",
+  "@llmAccountUiReadyText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSuspendedText": "مع وقف التنفيذ",
+  "@llmAccountUiSuspendedText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReAuthentication": "إعادة المصادقة مطلوبة",
+  "@llmAccountUiReAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConnection": "حالة الاتصال غير معروفة؛ لا يزال بإمكان المسار محاولة الطلب، يرجى تحديث الحالة وفقًا لنتيجة الطلب.",
+  "@llmAccountUiTheConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountsCan": "يمكن للحسابات المشاركة في توجيه المجموعة النموذجية الخاصة بهم.",
+  "@llmAccountUiAccountsCan": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountHas": "تم تعليق الحساب ولن يشارك في التوجيه.",
+  "@llmAccountUiTheAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAccountNeeds": "يحتاج الحساب إلى إعادة المصادقة قبل أن يتمكن من المشاركة في التوجيه.",
+  "@llmAccountUiTheAccountNeeds": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteCloud": "الصق Cloud-IDE-JWT",
+  "@llmAccountUiPasteCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeDevice": "كيلو كود جهاز OAuth",
+  "@llmAccountUiKiloCodeDevice": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousFree": "مجهول (نماذج مجانية فقط)",
+  "@llmAccountUiAnonymousFree": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderAdministrator": "يقوم مسؤول Qoder بتكوين OAuth",
+  "@llmAccountUiQoderAdministrator": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyDomestic": "CodeBuddy الجهاز المحلي OAuth",
+  "@llmAccountUiCodeBuddyDomestic": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodeBuddyInternational": "جهاز CodeBuddy الدولي OAuth",
+  "@llmAccountUiCodeBuddyInternational": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWorkBuddyCLI": "WorkBuddy CLI جهاز OAuth",
+  "@llmAccountUiWorkBuddyCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyOAuth": "OAuth القديم (غير مدعوم)",
+  "@llmAccountUiLegacyOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubscribeTo": "اشترك في OAuth",
+  "@llmAccountUiSubscribeTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleService": "حساب خدمة جوجل",
+  "@llmAccountUiGoogleService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSAccess": "AWS Access + المفتاح السري (الرمز المميز للجلسة اختياري)",
+  "@llmAccountUiAWSAccess": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSDefault": "سلسلة بيانات الاعتماد الافتراضية لـ AWS",
+  "@llmAccountUiAWSDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSessionToken": "رمز الجلسة",
+  "@llmAccountUiSessionToken": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevin": "تسجيل الدخول المستقل الرسمي لـ Devin CLI",
+  "@llmAccountUiOfficialDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAI": "تتابع Legacy AI Studio (تم إيقافه)",
+  "@llmAccountUiLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoCertification": "لا شهادة",
+  "@llmAccountUiNoCertification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOpenVerification": "افتح صفحة التحقق",
+  "@llmAccountUiOpenVerification": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUserProvided": "مفتاح API المنبع المقدم من المستخدم",
+  "@llmAccountUiUserProvided": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBedrock": "بيانات الاعتماد الثابتة التي يقدمها المستخدم في AWS Bedrock",
+  "@llmAccountUiAWSBedrock": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomDevin": "تم إنشاء تكوين تسجيل الدخول لـ Stroom Devin CLI بشكل منفصل لهذا الحساب",
+  "@llmAccountUiStroomDevin": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacy": "لقد تم إيقاف مرحل AI Studio القديم؛ يرجى استخدام مفتاح API أو OAuth المدعوم بدلاً من ذلك.",
+  "@llmAccountUiTheLegacy": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNativeCompatible": "نقطة نهاية متوافقة أصلية، لا توجد بيانات اعتماد",
+  "@llmAccountUiNativeCompatible": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamAuthentication": "فشلت المصادقة الأولية",
+  "@llmAccountUiUpstreamAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInsufficientUpstream": "حصة غير كافية في المنبع",
+  "@llmAccountUiInsufficientUpstream": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequests": "طلبات المنبع محدودة",
+  "@llmAccountUiUpstreamRequests": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamConnection": "فشل الاتصال المنبع",
+  "@llmAccountUiUpstreamConnection": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamService": "خطأ في الخدمة الأولية",
+  "@llmAccountUiUpstreamService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRejects": "المنبع يرفض الطلب",
+  "@llmAccountUiUpstreamRejects": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRequestCanceled": "تم إلغاء الطلب",
+  "@llmAccountUiRequestCanceled": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamRequest": "فشل طلب المنبع",
+  "@llmAccountUiUpstreamRequest": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSameConnector": "نفس حساب الموصل",
+  "@llmAccountUiSameConnector": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCurrentModel": "مجموعة النماذج الحالية",
+  "@llmAccountUiCurrentModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeastUsed": "الأقل استخداما",
+  "@llmAccountUiLeastUsed": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPollingText": "الاقتراع",
+  "@llmAccountUiPollingText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeHigher": "إعطاء الأولوية للأرصدة الأعلى",
+  "@llmAccountUiPrioritizeHigher": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPrioritizeConsumption": "إعطاء الأولوية لاستهلاك الأرصدة المنخفضة",
+  "@llmAccountUiPrioritizeConsumption": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAddLLM": "إضافة حساب LLM",
+  "@llmAccountUiAddLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEditLLM": "تحرير حساب LLM",
+  "@llmAccountUiEditLLM": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceProvider": "الافتراضي لمزود الخدمة",
+  "@llmAccountUiServiceProvider": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCustomOpenAI": "نقطة نهاية مخصصة متوافقة مع OpenAI",
+  "@llmAccountUiCustomOpenAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogIn": "قم بتسجيل الدخول إلى Trae SOLO داخل Stroom",
+  "@llmAccountUiLogIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLoginCallbacks": "يتم تلقي عمليات رد اتصال تسجيل الدخول محليًا فقط وكتابتها إلى مخزن بيانات الاعتماد الآمن؛ لا يتم حفظ عناوين رد الاتصال أو سجل التصفح.",
+  "@llmAccountUiLoginCallbacks": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiChatAdapterDoesNot": "لا يدعم ChatAdapter هذا الموصل حاليًا؛ بعد الحفظ، لن تظهر مجموعة نماذج الحساب في محددات نماذج الدردشة وتدفق المهام.",
+  "@llmAccountUiChatAdapterDoesNot": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuthenticationMethod": "طريقة المصادقة",
+  "@llmAccountUiAuthenticationMethod": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFindThe": "ابحث عن معرف الحساب على الجانب الأيمن من لوحة تحكم Cloudflare.",
+  "@llmAccountUiFindThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAPIKeys": "يمكن إضافة مفاتيح API كاتصالات مستقلة متعددة واستقصائها من خلال مجموعات النماذج. الوضع المجهول يعرض فقط النماذج المجانية المؤكدة ويتصل بها؛ لا يتم استخدام دليل الحساب.",
+  "@llmAccountUiAPIKeys": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEachCline": "يجب حفظ كل مفتاح Cline API كحساب مستقل. يتم تحديث كتالوج النماذج بشكل منفصل بواسطة Cline أو ClinePass؛ الكتالوج نفسه لا يعني أن الحساب لديه ترخيص الاشتراك.",
+  "@llmAccountUiEachCline": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyLaunch": "فقط قم بتشغيل devin CLI الرسمي. يتم حفظ تكوين تسجيل الدخول في دليل تطبيق Stroom بشكل مستقل عن هذا الحساب؛ لن تتم قراءة تسجيل دخول المضيف Devin أو مفتاح API.",
+  "@llmAccountUiOnlyLaunch": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseThe": "استخدم Codex CLI الأصلي. الرجاء تشغيل تسجيل دخول المخطوطة في المحطة أولاً؛ لا يقرأ Stroom أو يحفظ بيانات تسجيل الدخول إلى CLI.",
+  "@llmAccountUiUseThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUseTheNative": "استخدم خادم تطبيق ZCode الأصلي وخطة ترميز GLM. يرجى تسجيل الدخول إلى تطبيق ZCode الرسمي أولاً إذا لزم الأمر؛ لا يقرأ Stroom أو يحفظ بيانات تسجيل الدخول ZCode.",
+  "@llmAccountUiUseTheNative": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOfficialDevinCLI": "المسار المطلق الرسمي القابل للتنفيذ لـ Devin CLI",
+  "@llmAccountUiOfficialDevinCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCopyThe": "انسخ المسار الكامل إلى ملف devin القابل للتنفيذ من موقع تثبيت Devin الرسمي.",
+  "@llmAccountUiCopyThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRetrustCurrent": "أعد الثقة في CLI الحالي القابل للتنفيذ وقم بتحديث SHA-256",
+  "@llmAccountUiRetrustCurrent": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiIHave": "لقد قمت بتثبيت هذا الملف القابل للتنفيذ والوثوق به من قنوات Devin الرسمية",
+  "@llmAccountUiIHave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiStroomFixes": "يقوم Stroom بإصلاح SHA-256 للملف الحالي؛ يرفض البدء إذا تم تغيير الملف.",
+  "@llmAccountUiStroomFixes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLogBack": "قم بتسجيل الدخول مرة أخرى إلى Devin CLI الرسمي",
+  "@llmAccountUiLogBack": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiReauthenticateThe": "قم بإعادة مصادقة تكوين تسجيل الدخول المستقل لـ CLI لهذا الحساب.",
+  "@llmAccountUiReauthenticateThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseSelect": "الرجاء تحديد طريقة مصادقة مدعومة قبل حفظ هذا الحساب.",
+  "@llmAccountUiPleaseSelect": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheLegacyAI": "لقد تم إيقاف اتصال جلسة الويب القديمة لـ AI Studio. الرجاء تحديد مفتاح API أو OAuth مدعوم وإعادة التفويض.",
+  "@llmAccountUiTheLegacyAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQoderOAuth": "يتطلب Qoder OAuth من مسؤول الخدمة توفير تفويض OAuth الكامل والرمز المميز وعنوان URL لمعلومات المستخدم وبيانات اعتماد العميل. يتم فقط حفظ مفتاح DashScope API وبيانات اعتماد OAuth الحساسة في التخزين الآمن للنظام الأساسي بعد التفويض؛ لا يتم استخدام ملفات تعريف الارتباط للمتصفح. لم يتم تعريف منحة التحديث المنبع؛ يرجى إعادة التفويض إذا انتهت صلاحية بيانات الاعتماد.",
+  "@llmAccountUiQoderOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSubmitTo": "إرسال إلى منصة التخزين الآمنة فقط؛ اتركه فارغًا للحفاظ على سر عميل OAuth الحالي.",
+  "@llmAccountUiSubmitTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterThe": "أدخل رمز الوصول الشخصي لـ Qoder بدءًا من pt-. تم الاتصال به من خلال qodercli الأصلي؛ يتم دعم الدردشة النصية فقط، ولا يتم دعم أدوات المتصل، وسيتم تخزين الردود مؤقتًا وإعادتها، بحد أقصى 45 ثانية لطلب واحد.",
+  "@llmAccountUiEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitLabUser": "إعدادات مستخدم GitLab → التطبيقات",
+  "@llmAccountUiGitLabUser": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlySaved": "يتم حفظها فقط في التخزين الآمن للنظام الأساسي؛ يمكن تركها فارغة للعملاء العموميين.",
+  "@llmAccountUiOnlySaved": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnlyStored": "يتم تخزينها فقط في التخزين الآمن للمنصة.",
+  "@llmAccountUiOnlyStored": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGitHubEnterprise": "يجب أن يكون Copilot ممكّنًا في GitHub Enterprise Cloud أو Server وأن يسمح بـ OAuth للجهاز. استخدم عنوان مثيل HTTPS؛ يمكن توفير معرف عميل تطبيق OAuth بواسطة المسؤول، أو تركه فارغًا لاستخدام معرف العميل العام.",
+  "@llmAccountUiGitHubEnterprise": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiClineUses": "يستخدم Cline نقاط نهاية الخدمة الثابتة",
+  "@llmAccountUiClineUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHorde": "يستخدم AI Horde نقطة نهاية دردشة HTTPS الثابتة",
+  "@llmAccountUiAIHorde": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUncloseAIUses": "يستخدم Un CloseAI نقطة نهاية ثابتة لإكمال محادثة OpenAI",
+  "@llmAccountUiUncloseAIUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKiloCodeUses": "يستخدم Kilo Code نقاط نهاية الخدمة الثابتة",
+  "@llmAccountUiKiloCodeUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedService": "نقطة نهاية الخدمة الثابتة",
+  "@llmAccountUiFixedService": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEndpointAddress": "عنوان نقطة النهاية (املأه إذا طلب الموصل ذلك)",
+  "@llmAccountUiEndpointAddress": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiEnterAzure": "أدخل مورد Azure OpenAI أو مضيف Azure AI Foundry؛ يتم تكوين النشر والإصدار بشكل منفصل.",
+  "@llmAccountUiEnterAzure": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlank": "اتركه فارغًا لاستخدام كتالوج النموذج الرسمي ونقاط نهاية واجهة برمجة التطبيقات (API) لنوع الحساب هذا.",
+  "@llmAccountUiLeaveBlank": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPS": "تم إصلاح نقطة نهاية HTTPS API باستخدام رمز الأمر.",
+  "@llmAccountUiFixedHTTPS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSEndpoint": "تم إصلاح نقطة نهاية HTTPS باستخدام بوابة نموذج Kilo Code.",
+  "@llmAccountUiFixedHTTPSEndpoint": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedHTTPSChat": "تم إصلاح نقطة نهاية إكمال دردشة HTTPS باستخدام Cline.",
+  "@llmAccountUiFixedHTTPSChat": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiNoAPI": "لا يوجد مفتاح API مطلوب؛ يتم استخدام المفتاح الاختياري لتحديد الهوية فقط.",
+  "@llmAccountUiNoAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeS": "يتم إرسال المفتاح المجهول أو مفتاح API ذو الأولوية الخاص بـ AI Horde فقط إلى نقطة نهاية خدمة الدردشة الثابتة الخاصة به.",
+  "@llmAccountUiAIHordeS": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSOLOUses": "يستخدم SOLO نقطة نهاية خدمة Trae ثابتة؛ أرسل Cloud-IDE-JWT فقط إلى نقطة النهاية تلك. يجب إعادة إدخال الرموز المميزة الملصقة بعد 14 يومًا تقريبًا.",
+  "@llmAccountUiSOLOUses": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDeployment": "سيتم استخدام معرف النشر كمعرف النموذج الأصلي الفريد للحساب.",
+  "@llmAccountUiTheDeployment": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheDefault": "يتم تكوين القيمة الافتراضية وفقًا لكتالوج طراز Azure.",
+  "@llmAccountUiTheDefault": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAmazonQ": "منطقة مطوري أمازون كيو",
+  "@llmAccountUiAmazonQ": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSRegion": "منطقة أوس",
+  "@llmAccountUiAWSRegion": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexArea": "منطقة قمة الرأس",
+  "@llmAccountUiVertexArea": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQwenCloud": "معرف منطقة Qwen Cloud",
+  "@llmAccountUiQwenCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGoogleCloud": "معرف مشروع جوجل كلاود",
+  "@llmAccountUiGoogleCloud": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThePartner": "يتطلب نموذج الشريك معرف المشروع؛ يمكن قراءة حساب الخدمة تلقائيًا من project_id الخاص بـ JSON.",
+  "@llmAccountUiThePartner": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCanBe": "يمكن تركه فارغًا لاستخدام project_id من حساب الخدمة JSON.",
+  "@llmAccountUiCanBe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSBuilder": "معرف AWS Builder، بيانات اعتماد OAuth، JSON",
+  "@llmAccountUiAWSBuilder": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiThisAuthentication": "لا تتطلب طريقة المصادقة هذه إدخال بيانات الاعتماد",
+  "@llmAccountUiThisAuthentication": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAWSCredentials": "بيانات اعتماد AWS JSON",
+  "@llmAccountUiAWSCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiServiceAccount": "حساب الخدمة JSON",
+  "@llmAccountUiServiceAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAIHordeAPI": "مفتاح AI Horde API (أولوية اختيارية)",
+  "@llmAccountUiAIHordeAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCredentialsText": "أوراق الاعتماد",
+  "@llmAccountUiCredentialsText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPasteThe": "الصق JWT نفسه أو قيمة رأس الطلب الكاملة \"Cloud-IDE-JWT <token>\". لا يتم تحديث الرموز المميزة للاستيراد تلقائيًا؛ يتم تحديث بيانات الاعتماد الخاصة بتسجيلات الدخول Trae داخل التطبيق تلقائيًا عند انتهاء صلاحيتها.",
+  "@llmAccountUiPasteThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGetThe": "احصل على مفتاح واجهة برمجة تطبيقات المستخدم (crsr_... أو grok_...) من cursor.com/dashboard/api. لن تتم قراءة تسجيل دخول المؤشر IDE.",
+  "@llmAccountUiGetThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheOptional": "يعمل مفتاح AI Horde API الاختياري على زيادة أولوية قائمة الانتظار (المجد) فقط ولا يزيد من أذونات النموذج. حدد \"لا توجد مصادقة\" لاستخدام الوضع المجهول.",
+  "@llmAccountUiTheOptional": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUsingThe": "استخدام سلسلة بيانات الاعتماد الافتراضية لـ AWS لبيئة التشغيل",
+  "@llmAccountUiUsingThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSavedIn": "تم الحفظ في التخزين الآمن للمنصة",
+  "@llmAccountUiSavedIn": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankTo": "اتركه فارغًا للاحتفاظ ببيانات اعتماد الأمان الحالية",
+  "@llmAccountUiLeaveBlankTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDefaultAPI": "بروتوكول API الافتراضي",
+  "@llmAccountUiDefaultAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConnectionStatusText": "حالة الاتصال",
+  "@llmAccountUiConnectionStatusText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelTo": "نموذج للتكوين",
+  "@llmAccountUiModelTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelAPI": "بروتوكول API النموذجي",
+  "@llmAccountUiModelAPI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiInheritAccount": "وراثة الاتفاقية الافتراضية للحساب",
+  "@llmAccountUiInheritAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUpstreamModels": "نماذج وقدرات المنبع",
+  "@llmAccountUiUpstreamModels": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOnePer": "واحد في كل سطر: معرف النموذج، والبث، والرؤية، والأدوات",
+  "@llmAccountUiOnePer": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelID": "يأتي معرف النموذج وطول السياق من كتالوج ثابت؛ القدرات الأخرى لا تزال مجهولة.",
+  "@llmAccountUiModelID": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAnonymousMode": "الوضع المجهول يسمح فقط بجهاز توجيه مفتوح/مجاني. بعد ربط الحساب، يمكنك استخدام النماذج الموجودة في دليل الحساب.",
+  "@llmAccountUiAnonymousMode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsCome": "تأتي النماذج من دليل Kilo Code؛ يستخدم مفتاح API وOAuth للجهاز بيانات الاعتماد المحفوظة الخاصة بهما.",
+  "@llmAccountUiModelsCome": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsAndCapabilities": "النماذج والإمكانيات تأتي من الدليل الأولي؛ أعلاه لكل نموذج، حدد بروتوكولات API التي يعلن أنها تدعمها.",
+  "@llmAccountUiModelsAndCapabilities": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiACPDoes": "لا توفر ACP كتالوجًا نموذجيًا ثابتًا؛ استخدم النموذج الافتراضي الحالي لـ CLI الرسمي.",
+  "@llmAccountUiACPDoes": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeCLI": "يفتح Kimi Code CLI فقط دليل نموذج خطة الترميز الذي تم التحقق منه.",
+  "@llmAccountUiKimiCodeCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGrokBuild": "يفتح Grok Build فقط كتالوجات نماذج الاشتراك التي تم التحقق منها.",
+  "@llmAccountUiGrokBuild": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiXAIOAuth": "يفتح xAI OAuth فقط دليل النموذج الذي حصل عليه الحساب من واجهة برمجة التطبيقات (API).",
+  "@llmAccountUiXAIOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMetaMuseOAuth": "يفتح Meta Muse OAuth فقط دليل النموذج الذي حصل عليه حساب الاشتراك من واجهة برمجة التطبيقات (API).",
+  "@llmAccountUiMetaMuseOAuth": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelsComeFrom": "تأتي النماذج من كتالوج إكمالات الدردشة الخاص بـ Cline؛ يتم تحديد التوفر من خلال الحساب والاشتراك المقابلين.",
+  "@llmAccountUiModelsComeFrom": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheAbility": "تم الإعلان عن القدرة بشكل صريح؛ استخدم Vision=false لتعطيله بشكل صريح، واتركه غير معروف إذا لم يتم ملؤه.",
+  "@llmAccountUiTheAbility": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRefreshModel": "تحديث دليل النموذج",
+  "@llmAccountUiRefreshModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTestThe": "اختبر Auggie CLI المحلي",
+  "@llmAccountUiTestThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCheckLocal": "تحقق من حالة تسجيل الدخول إلى Codex CLI المحلية",
+  "@llmAccountUiCheckLocal": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelDirectory": "يمكن تحديث دليل النموذج بعد حفظ الحساب والتعديلات.",
+  "@llmAccountUiTheModelDirectory": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLI": "لم تُرجع قائمة نماذج Auggie CLI الكتالوج؛ تم الاحتفاظ بكتالوج النماذج الثابتة.",
+  "@llmAccountUiAuggieCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAI": "يتطلب Vertex AI Partners مشروع Google Cloud صالحًا وحساب خدمة يتمتع بالأذونات؛ يدعم Express API Key الجوزاء فقط.",
+  "@llmAccountUiVertexAI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedTo": "فشل في قراءة دليل النموذج، يرجى التحقق من مصادقة الحساب وإعدادات الاتصال.",
+  "@llmAccountUiFailedTo": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAuggieCLIIs": "تم تثبيت Auggie CLI وتشغيله.",
+  "@llmAccountUiAuggieCLIIs": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCodexCLI": "تم تسجيل دخول Codex CLI وهو جاهز للتشغيل.",
+  "@llmAccountUiCodexCLI": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiVertexAIPartners": "يتطلب Vertex AI Partners معرف مشروع صالحًا؛ يمكن قراءة حساب الخدمة من JSON، ويجب ربط مفتاح API بالمشروع.",
+  "@llmAccountUiVertexAIPartners": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFailedToSave": "فشل حفظ الحساب، يرجى التحقق من إعدادات الاتصال والمحاولة مرة أخرى.",
+  "@llmAccountUiFailedToSave": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTraeThe": "لم يكتمل تسجيل الدخول، يرجى المحاولة مرة أخرى أو استخدام Cloud-IDE-JWT للاستيراد يدويًا.",
+  "@llmAccountUiTraeThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnter": "الرجاء إدخال اسم الحساب.",
+  "@llmAccountUiPleaseEnter": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterThe": "الرجاء إدخال مفتاح واجهة برمجة تطبيقات مستخدم المؤشر بدءًا من crsr_.",
+  "@llmAccountUiPleaseEnterThe": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYour": "الرجاء إدخال معرف عميل GitLab Duo OAuth الخاص بك.",
+  "@llmAccountUiPleaseEnterYour": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterA": "الرجاء إدخال نقطة نهاية مشرف HTTPS Qoder OAuth صالحة.",
+  "@llmAccountUiPleaseEnterA": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterQODER": "الرجاء إدخال QODER_OAUTH_CLIENT_ID وسر العميل.",
+  "@llmAccountUiPleaseEnterQODER": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValid": "الرجاء إدخال مضيف مورد Azure HTTPS صالح، ومعرف النشر، وإصدار API.",
+  "@llmAccountUiPleaseEnterAValid": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidCloudflare": "الرجاء إدخال معرف حساب Cloudflare صالح.",
+  "@llmAccountUiPleaseEnterAValidCloudflare": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCloudflareWorkers": "يوفر Cloudflare Workers AI فقط كتالوجًا للنماذج الثابتة التي تم التحقق منها.",
+  "@llmAccountUiCloudflareWorkers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiKimiCodeAccounts": "يمكن لحسابات Kimi Code استخدام نماذج خطة الترميز التي تم التحقق منها فقط.",
+  "@llmAccountUiKimiCodeAccounts": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseRefresh": "يرجى تحديث دليل النموذج أولاً وتحديد البروتوكول في ApiProtocols المدعوم الخاص به.",
+  "@llmAccountUiPleaseRefresh": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAbilityValues": "يمكن أن تكون قيم القدرة صحيحة أو خاطئة فقط.",
+  "@llmAccountUiAbilityValues": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCommandCode": "لا يمكن الإعلان عن إمكانات نموذج رمز الأمر إلا من خلال الدلائل الأولية.",
+  "@llmAccountUiCommandCode": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidGitHub": "الرجاء إدخال عنوان مثيل GitHub Enterprise HTTPS صالح.",
+  "@llmAccountUiPleaseEnterAValidGitHub": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseFill": "برجاء ملء المسار الكامل لملف Devin CLI الرسمي القابل للتنفيذ.",
+  "@llmAccountUiPleaseFill": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseConfirm": "يرجى التأكد من أن هذا الملف القابل للتنفيذ يأتي من قناة التثبيت الرسمية لـ Devin.",
+  "@llmAccountUiPleaseConfirm": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheSelected": "مسار واجهة سطر الأوامر (CLI) المحدد غير صالح أو غير قابل للتنفيذ.",
+  "@llmAccountUiTheSelected": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterTheAmazon": "يرجى إدخال بيانات اعتماد Amazon Q JSON التي تحتوي على رمز تحديث AWS Builder ID.",
+  "@llmAccountUiPleaseEnterTheAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterAValidAmazon": "يرجى إدخال بيانات اعتماد Amazon Q OAuth صالحة JSON والمنطقة المدعومة.",
+  "@llmAccountUiPleaseEnterAValidAmazon": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLegacyAIStudio": "لقد تم إيقاف اتصالات جلسة الويب Legacy AI Studio، يرجى استخدام مفتاح API أو OAuth المدعوم بدلاً من ذلك.",
+  "@llmAccountUiLegacyAIStudio": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseProvide": "يرجى تقديم معرف عميل Google OAuth Desktop وسر العميل المقابل.",
+  "@llmAccountUiPleaseProvide": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPleaseEnterYourCredentials": "الرجاء إدخال بيانات الاعتماد الخاصة بك.",
+  "@llmAccountUiPleaseEnterYourCredentials": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiModelGroupName": "اسم المجموعة النموذجية",
+  "@llmAccountUiModelGroupName": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountAnd": "الحساب ونموذج المنبع",
+  "@llmAccountUiAccountAnd": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheModelGroup": "المجموعة النموذجية ليس لديها أعضاء حاليا.",
+  "@llmAccountUiTheModelGroup": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalReferences": "يتم استخدام المراجع المحلية للتوافق مع معرفات نماذج الجلسة الحالية؛ لن يشارك أعضاء الحساب إلا في الاختيار ضمن هذه المجموعة الثابتة.",
+  "@llmAccountUiLocalReferences": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiGroupMembers": "يجب على أعضاء المجموعة تحت نفس مرجع النموذج استخدام نفس بروتوكول الدردشة.",
+  "@llmAccountUiGroupMembers": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiAccountHas": "تم حذف الحساب",
+  "@llmAccountUiAccountHas": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiOldSession": "مرجع الجلسة القديم مطلوب عضوًا",
+  "@llmAccountUiOldSession": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemoveMember": "إزالة العضو",
+  "@llmAccountUiRemoveMember": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLocalModel": "معرف مرجع النموذج المحلي",
+  "@llmAccountUiLocalModel": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiSamePriority": "نفس اختيار الأولوية",
+  "@llmAccountUiSamePriority": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCrossAccount": "نطاق التراجع عبر الحسابات",
+  "@llmAccountUiCrossAccount": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiConcurrencyLimit": "حد التزامن",
+  "@llmAccountUiConcurrencyLimit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiLeaveBlankToIndicate": "اتركه فارغًا للإشارة إلى عدم وجود قيود؛ يتم تكوين الحساب ومجموعة النماذج بشكل منفصل.",
+  "@llmAccountUiLeaveBlankToIndicate": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRollingWindow": "نافذة المتداول",
+  "@llmAccountUiRollingWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarWindow": "نافذة التقويم",
+  "@llmAccountUiCalendarWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiCalendarTime": "المنطقة الزمنية للتقويم",
+  "@llmAccountUiCalendarTime": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiForExample": "على سبيل المثال آسيا/تايبيه أو UTC",
+  "@llmAccountUiForExample": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiRemainingCredit": "خط الائتمان المتبقي",
+  "@llmAccountUiRemainingCredit": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWindowUsage": "حد استخدام النافذة",
+  "@llmAccountUiWindowUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiFixedValue": "قيمة ثابتة",
+  "@llmAccountUiFixedValue": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiPercentageText": "النسبة المئوية",
+  "@llmAccountUiPercentageText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiUnitText": "وحدة",
+  "@llmAccountUiUnitText": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheConcurrency": "يجب أن يكون الحد الأعلى للتزامن عددًا صحيحًا موجبًا، أو تركه فارغًا للإشارة إلى عدم وجود حد.",
+  "@llmAccountUiTheConcurrency": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiTheCalendar": "يجب ملء نافذة التقويم بالمنطقة الزمنية.",
+  "@llmAccountUiTheCalendar": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiQuotaAndUsage": "يجب أن تكون الحصة والحد الأقصى للاستخدام غير سالب؛ لا يمكن أن تتجاوز النسبة 100.",
+  "@llmAccountUiQuotaAndUsage": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiHourWindow": "نافذة لمدة 5 ساعات",
+  "@llmAccountUiHourWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiDayWindow": "نافذة اليوم",
+  "@llmAccountUiDayWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiWeeklyWindow": "نافذة أسبوعية",
+  "@llmAccountUiWeeklyWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmAccountUiMonthWindow": "نافذة الشهر",
+  "@llmAccountUiMonthWindow": {
+    "description": "Account management UI copy."
+  },
+  "llmImportStoppedAfterLegacySyncFailure": "تم استيراد {count} حساب، لكن تعذرت مزامنة الإعدادات القديمة.",
+  "@llmImportStoppedAfterLegacySyncFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmImportStoppedAfterCredentialFailure": "تم استيراد {count} حساب. لم يتم استيراد بيانات الاعتماد المتبقية لأن عنصر سلسلة المفاتيح تغير أو رُفض الوصول أو تعذر استخدام التخزين الآمن.",
+  "@llmImportStoppedAfterCredentialFailure": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "llmRequestUsedAccount": "الحساب المستخدم لهذا الطلب",
+  "@llmRequestUsedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmLastAttemptedAccount": "آخر حساب تمت تجربته",
+  "@llmLastAttemptedAccount": {
+    "description": "LLM account import and route diagnostic text.",
+    "placeholders": {}
+  },
+  "llmRouteDecisionSessionAffinity": "استخدم أحدث حساب ناجح في هذه المحادثة",
+  "@llmRouteDecisionSessionAffinity": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSessionAffinityPersistenceFailed": "تعذر حفظ استمرارية الحساب هذه المرة",
+  "@llmRouteDecisionSessionAffinityPersistenceFailed": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionExplicitAccountSelection": "التوجيه حسب الحساب الذي اختاره المستخدم",
+  "@llmRouteDecisionExplicitAccountSelection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionSelectedAccountOutsideGroup": "الحساب المحدد لا ينتمي إلى مجموعة النماذج الحالية",
+  "@llmRouteDecisionSelectedAccountOutsideGroup": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConversationIdInvalid": "معرّف المحادثة غير صالح، ولم يتم استخدام تقارب الجلسة",
+  "@llmRouteDecisionConversationIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupMissing": "لم يتم العثور على مجموعة نماذج مستقرة لهذا النموذج",
+  "@llmRouteDecisionModelGroupMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelGroupAmbiguous": "يرتبط هذا النموذج بأكثر من مجموعة نماذج في نفس الوقت",
+  "@llmRouteDecisionModelGroupAmbiguous": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectorProtocolIncompatible": "بروتوكول الموصل غير قابل للتطبيق على نموذج الدردشة هذا",
+  "@llmRouteDecisionConnectorProtocolIncompatible": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConnectionUnknown": "حالة الاتصال غير معروفة",
+  "@llmRouteDecisionConnectionUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountMissing": "تم حذف الحساب",
+  "@llmRouteDecisionAccountMissing": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountIdInvalid": "معرف الحساب غير صالح",
+  "@llmRouteDecisionAccountIdInvalid": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionAccountUnavailable": "تم تعليق الحساب أو يحتاج إلى إعادة التحقق",
+  "@llmRouteDecisionAccountUnavailable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelMappingMismatch": "الحساب غير مرتبط بالطراز المحدد",
+  "@llmRouteDecisionModelMappingMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionModelNotMapped": "تعذر العثور على النموذج العلوي المقابل في الحساب",
+  "@llmRouteDecisionModelNotMapped": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCapabilityMismatch": "لا يدعم نموذج الحساب القدرات المطلوبة لهذا الطلب",
+  "@llmRouteDecisionCapabilityMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionFallbackScope": "لا يسمح نطاق التراجع بالتبديل إلى هذا الموصل",
+  "@llmRouteDecisionFallbackScope": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionCooldown": "لا يزال الحساب في فترة التعافي من العطل",
+  "@llmRouteDecisionCooldown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionConcurrencyLimit": "وصل الحساب أو مجموعة النماذج إلى الحد الأقصى للتزامن",
+  "@llmRouteDecisionConcurrencyLimit": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceUnknownOrIncomparable": "الحد غير معروف أو وحدة القياس غير قابلة للمقارنة",
+  "@llmRouteDecisionBalanceUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionBalanceAtOrBelowReserve": "الرصيد قد وصل إلى خط الاحتفاظ أو أصبح أقل منه",
+  "@llmRouteDecisionBalanceAtOrBelowReserve": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnknown": "كمية الاستخدام غير معروفة، ولا يمكن تحديد الحد",
+  "@llmRouteDecisionUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveBalanceUnknown": "الحد المتبقي غير معروف، ولا يمكن تحديد الحد الأدنى للرصيد",
+  "@llmRouteDecisionReserveBalanceUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUnitUnknownOrIncomparable": "وحدة قياس خط الاحتفاظ غير معروفة أو غير قابلة للمقارنة",
+  "@llmRouteDecisionReserveUnitUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknownOrIncomparable": "إجمالي الحد الائتماني غير معروف أو غير قابل للمقارنة",
+  "@llmRouteDecisionReserveTotalUnknownOrIncomparable": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveTotalUnknown": "إجمالي الحد غير معروف، ولا يمكن حساب خط الاحتفاظ",
+  "@llmRouteDecisionReserveTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveUsageEstimateUnknown": "تقدير استخدام الطلب غير معروف، ولا يمكن تحديد خط الاحتفاظ",
+  "@llmRouteDecisionReserveUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveInFlightUsageUnknown": "استخدام الطلب قيد التنفيذ غير معروف، ولا يمكن تحديد حد الاحتفاظ",
+  "@llmRouteDecisionReserveInFlightUsageUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloorReached": "الحد المتبقي أقل من الحد الأدنى للرصيد",
+  "@llmRouteDecisionReserveFloorReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingReached": "تم الوصول إلى الحد الأقصى للاستخدام",
+  "@llmRouteDecisionUsageCeilingReached": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeilingTotalUnknown": "إجمالي الاستخدام غير معروف، ولا يمكن تحديد الحد الأقصى",
+  "@llmRouteDecisionUsageCeilingTotalUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageUnitMismatch": "وحدة قياس الاستخدام غير متطابقة",
+  "@llmRouteDecisionUsageUnitMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageSourceMismatch": "لا يتطابق مقدار الاستخدام مع مصدر بيانات الحد الأقصى",
+  "@llmRouteDecisionUsageSourceMismatch": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageInFlightUnknown": "كمية الاستخدام للطلب قيد التنفيذ غير معروفة، ولا يمكن تحديد الحد الأقصى",
+  "@llmRouteDecisionUsageInFlightUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageEstimateUnknown": "تقدير استخدام الطلب غير معروف، ولا يمكن تحديد الحد الأقصى",
+  "@llmRouteDecisionUsageEstimateUnknown": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionInvalidWindowTimezone": "تكوين المنطقة الزمنية لنافذة الحد غير صالح",
+  "@llmRouteDecisionInvalidWindowTimezone": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionReserveFloor": "الرصيد المتبقي أقل من الحد الأدنى",
+  "@llmRouteDecisionReserveFloor": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionUsageCeiling": "تم الوصول إلى الحد الأقصى للاستخدام",
+  "@llmRouteDecisionUsageCeiling": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestAuthentication": "رفض الطرف الأعلى مستوى المصادقة",
+  "@llmRouteDecisionRequestAuthentication": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestQuotaExhausted": "أبلغت الجهة العليا عن نفاد الرصيد",
+  "@llmRouteDecisionRequestQuotaExhausted": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestRateLimited": "الحد من التدفق من المصدر",
+  "@llmRouteDecisionRequestRateLimited": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestConnection": "فشل الاتصال بالخدمة الرئيسية",
+  "@llmRouteDecisionRequestConnection": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestServer": "خطأ في الخدمة من المصدر",
+  "@llmRouteDecisionRequestServer": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestInvalidRequest": "رفض الخادم الرئيسي معلمات الطلب",
+  "@llmRouteDecisionRequestInvalidRequest": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestCancelled": "تم إلغاء الطلب",
+  "@llmRouteDecisionRequestCancelled": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  },
+  "llmRouteDecisionRequestOther": "فشل الطلب من المصدر",
+  "@llmRouteDecisionRequestOther": {
+    "description": "Route diagnostic reason shown on account/model-group cards."
+  }
 }

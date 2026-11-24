@@ -13,8 +13,6 @@ import 'simple_model_config_page.dart';
 import 'provider_settings_panel.dart';
 import '../widgets/constrained_text.dart';
 
-import '../widgets/constrained_text.dart';
-
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
@@ -105,6 +103,38 @@ class _ProviderConfigDetailPageState
     return null;
   }
 
+  ProviderEntry _entryWithConfigs(
+    ProviderEntry entry,
+    List<ProviderConfigItem> configs,
+  ) =>
+      ProviderEntry(
+        id: entry.id,
+        type: entry.type,
+        name: entry.name,
+        configs: configs,
+        enabled: entry.enabled,
+        legacyFields: entry.legacyFields,
+      );
+
+  void _showSaveFailure() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('保存失败，供应商配置未更新')));
+  }
+
+  Future<bool> _saveModelUpdate(ProviderEntry updated) async {
+    try {
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(updated.id, updated, requirePersistence: true);
+      return true;
+    } catch (_) {
+      _showSaveFailure();
+      return false;
+    }
+  }
+
   List<ModelConfig> get _models =>
       _isExistingConfig ? (_config?.models ?? []) : _pendingModels;
 
@@ -156,6 +186,7 @@ class _ProviderConfigDetailPageState
   Future<void> _openSettingsPanel() async {
     final entry = _entry;
     if (entry == null) return;
+    final editingConfigId = _isExistingConfig ? _config?.id : null;
 
     // Build a ProviderConfigItem from current state (including pending models for new configs)
     final currentConfig = _isExistingConfig && _config != null
@@ -165,17 +196,6 @@ class _ProviderConfigDetailPageState
             host: _hostController.text,
             key: _keyController.text,
             models: _pendingModels.map((m) => m.copy()).toList(),
-            // Seed all recommended ASR options for newly created providers.
-            typeConfig: entry.type == 'asr'
-                ? {
-                    'chunking': 'silence',
-                    'compression': 'flac',
-                    'fallbackMethod': 'all',
-                  }
-                : {},
-            reasoningParams: entry.type == 'llm'
-                ? defaultLlmProviderReasoningParams()
-                : const [],
           );
 
     final result = await showProviderSettingsPanel(
@@ -185,65 +205,64 @@ class _ProviderConfigDetailPageState
     );
 
     if (result != null && mounted) {
-      // Update local controllers with saved values
-      _providerNameController.text = result.providerName;
-      _hostController.text = result.host;
-      _keyController.text = result.key;
-
-      // If existing config, persist immediately
-      if (_isExistingConfig) {
-        final currentEntry = _entry;
-        if (currentEntry != null) {
-          var configs = currentEntry.configs.map((c) => c.copy()).toList();
-          configs[_configIndex] = result;
-          final updated = ProviderEntry(
-            id: currentEntry.id,
-            type: currentEntry.type,
-            name: currentEntry.name,
-            configs: configs,
-          );
-          await ref
-              .read(providerEntriesProvider.notifier)
-              .update(currentEntry.id, updated);
-        }
-      } else {
-        // For new config, save to provider and stay on this page
-        final currentEntry = _entry;
-        if (currentEntry != null) {
-          var configs = currentEntry.configs.map((c) => c.copy()).toList();
-          // Use the models from pending or from the returned result
-          final configWithModels = ProviderConfigItem(
-            id: result.id,
-            providerName: result.providerName,
-            host: result.host,
-            key: result.key,
-            endpointType: result.endpointType,
-            enabled: result.enabled,
-            models: result.models.isNotEmpty
-                ? result.models
-                : _pendingModels.map((m) => m.copy()).toList(),
-            typeConfig: result.typeConfig,
-            customParams: result.customParams,
-            reasoningParams: result.reasoningParams,
-          );
-          configs.insert(0, configWithModels);
-          final updated = ProviderEntry(
-            id: currentEntry.id,
-            type: currentEntry.type,
-            name: currentEntry.name,
-            configs: configs,
-          );
-          await ref
-              .read(providerEntriesProvider.notifier)
-              .update(currentEntry.id, updated);
-          // 新建配置保存后不返回供应商列表，而是留在本页：切换到新配置
-          // （configs[0]）的模型列表视图，方便继续添加模型。
-          if (mounted) {
-            setState(() => _savedConfigIndex = 0);
+      try {
+        final currentState = ref.read(providerEntriesProvider);
+        ProviderEntry? currentEntry;
+        for (final candidate in currentState.entries) {
+          if (candidate.id == entry.id) {
+            currentEntry = candidate;
+            break;
           }
         }
+        if (currentEntry == null) {
+          throw StateError('Provider entry was removed before save.');
+        }
+
+        final configs = currentEntry.configs.map((c) => c.copy()).toList();
+        var savedConfigIndex = _configIndex;
+        if (_isExistingConfig) {
+          final configId = editingConfigId;
+          if (configId == null) {
+            throw StateError('Provider config was removed before save.');
+          }
+          savedConfigIndex = configs.indexWhere(
+            (config) => config.id == configId,
+          );
+          if (savedConfigIndex < 0) {
+            throw StateError('Provider config was removed before save.');
+          }
+          final existingConfig = configs[savedConfigIndex];
+          configs[savedConfigIndex] = result.copy()
+            ..credentialRef = existingConfig.credentialRef
+            ..legacyFields.addAll(existingConfig.legacyFields);
+        } else {
+          final configWithModels = result.copy()
+            ..models = result.models.isNotEmpty
+                ? result.models.map((model) => model.copy()).toList()
+                : _pendingModels.map((model) => model.copy()).toList();
+          configs.insert(0, configWithModels);
+          savedConfigIndex = 0;
+        }
+        final updated = ProviderEntry(
+          id: currentEntry.id,
+          type: currentEntry.type,
+          name: currentEntry.name,
+          configs: configs,
+          legacyFields: currentEntry.legacyFields,
+        );
+        await ref
+            .read(providerEntriesProvider.notifier)
+            .update(currentEntry.id, updated, requirePersistence: true);
+        if (!mounted) return;
+        _providerNameController.text = result.providerName;
+        _hostController.text = result.host;
+        _keyController.text = result.key;
+        setState(() {
+          if (!_isExistingConfig) _savedConfigIndex = savedConfigIndex;
+        });
+      } catch (_) {
+        _showSaveFailure();
       }
-      if (mounted) setState(() {});
     }
   }
 
@@ -254,6 +273,7 @@ class _ProviderConfigDetailPageState
   Future<void> _addModel() async {
     final entry = _entry;
     if (entry == null) return;
+    final selectedConfigId = _isExistingConfig ? _config?.id : null;
 
     final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
@@ -268,7 +288,10 @@ class _ProviderConfigDetailPageState
             ),
           );
           if (result != null && mounted) {
-            await _insertModelResult(result);
+            await _insertModelResult(
+              result,
+              selectedConfigId: selectedConfigId,
+            );
           }
           break;
         }
@@ -279,7 +302,10 @@ class _ProviderConfigDetailPageState
             MaterialPageRoute(builder: (_) => const AsrModelConfigPage()),
           );
           if (result != null && mounted) {
-            await _insertModelResult(result);
+            await _insertModelResult(
+              result,
+              selectedConfigId: selectedConfigId,
+            );
           }
           break;
         }
@@ -300,7 +326,10 @@ class _ProviderConfigDetailPageState
             ),
           );
           if (result != null && mounted) {
-            await _insertModelResult(result);
+            await _insertModelResult(
+              result,
+              selectedConfigId: selectedConfigId,
+            );
           }
           break;
         }
@@ -311,7 +340,10 @@ class _ProviderConfigDetailPageState
             MaterialPageRoute(builder: (_) => const SimpleModelConfigPage()),
           );
           if (result != null && mounted) {
-            await _insertModelResult(result);
+            await _insertModelResult(
+              result,
+              selectedConfigId: selectedConfigId,
+            );
           }
           break;
         }
@@ -340,36 +372,29 @@ class _ProviderConfigDetailPageState
   }
 
   /// 插入 LLM/Simple 类型的模型结果（共用逻辑）
-  Future<void> _insertModelResult(ModelConfig result) async {
+  Future<void> _insertModelResult(
+    ModelConfig result, {
+    String? selectedConfigId,
+  }) async {
     final currentEntry = _entry;
-    if (currentEntry == null) return;
-    if (_isExistingConfig && _configIndex < currentEntry.configs.length) {
+    if (currentEntry == null) {
+      _showSaveFailure();
+      return;
+    }
+    if (_isExistingConfig) {
+      final configIndex = selectedConfigId == null
+          ? -1
+          : currentEntry.configs.indexWhere(
+              (config) => config.id == selectedConfigId,
+            );
+      if (configIndex < 0) {
+        _showSaveFailure();
+        return;
+      }
       var configs = currentEntry.configs.map((c) => c.copy()).toList();
-      // 在完整副本上追加模型：保留供应商的 typeConfig / customParams /
-      // reasoningParams / endpointType（重建会丢配置，推理参数继承
-      // 视图与请求构建都依赖供应商级参数）。
-      final base = configs[_configIndex];
-      configs[_configIndex] = ProviderConfigItem(
-        id: base.id,
-        providerName: base.providerName,
-        host: base.host,
-        key: base.key,
-        models: [...base.models, result],
-        typeConfig: base.typeConfig,
-        customParams: base.customParams,
-        reasoningParams: base.reasoningParams,
-        endpointType: base.endpointType,
-        enabled: base.enabled,
-      );
-      final updated = ProviderEntry(
-        id: currentEntry.id,
-        type: currentEntry.type,
-        name: currentEntry.name,
-        configs: configs,
-      );
-      await ref
-          .read(providerEntriesProvider.notifier)
-          .update(currentEntry.id, updated);
+      configs[configIndex].models = [...configs[configIndex].models, result];
+      final updated = _entryWithConfigs(currentEntry, configs);
+      if (!await _saveModelUpdate(updated)) return;
     } else {
       _pendingModels.insert(0, result);
     }
@@ -379,6 +404,7 @@ class _ProviderConfigDetailPageState
   Future<void> _editModel(int modelIndex) async {
     final entry = _entry;
     if (entry == null) return;
+    final editingConfigId = _isExistingConfig ? _config?.id : null;
 
     final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
@@ -404,7 +430,11 @@ class _ProviderConfigDetailPageState
               ),
             );
             if (result != null && mounted) {
-              await _updateModelInConfig(modelIndex, result);
+              await _updateModelInConfig(
+                modelIndex,
+                result,
+                configId: editingConfigId,
+              );
             }
           } else {
             if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
@@ -442,7 +472,11 @@ class _ProviderConfigDetailPageState
               ),
             );
             if (result != null && mounted) {
-              await _updateModelInConfig(modelIndex, result);
+              await _updateModelInConfig(
+                modelIndex,
+                result,
+                configId: editingConfigId,
+              );
             }
           } else {
             if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
@@ -487,7 +521,11 @@ class _ProviderConfigDetailPageState
               ),
             );
             if (result != null && mounted) {
-              await _updateModelInConfig(modelIndex, result);
+              await _updateModelInConfig(
+                modelIndex,
+                result,
+                configId: editingConfigId,
+              );
             }
           } else {
             if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
@@ -530,7 +568,11 @@ class _ProviderConfigDetailPageState
               ),
             );
             if (result != null && mounted) {
-              await _updateModelInConfig(modelIndex, result);
+              await _updateModelInConfig(
+                modelIndex,
+                result,
+                configId: editingConfigId,
+              );
             }
           } else {
             if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
@@ -590,46 +632,36 @@ class _ProviderConfigDetailPageState
   }
 
   /// 更新 LLM/Simple 类型在已有配置中的模型（共用逻辑）
-  Future<void> _updateModelInConfig(int modelIndex, ModelConfig result) async {
+  Future<void> _updateModelInConfig(
+    int modelIndex,
+    ModelConfig result, {
+    required String? configId,
+  }) async {
     final currentEntry = _entry;
-    if (currentEntry == null) return;
-    var configs = currentEntry.configs.map((c) => c.copy()).toList();
-    if (_configIndex >= 0 && _configIndex < configs.length) {
-      // 在完整副本上更新模型：保留供应商的 typeConfig / customParams /
-      // reasoningParams / endpointType（重建会丢配置，推理参数继承
-      // 视图与请求构建都依赖供应商级参数）。
-      final base = configs[_configIndex];
-      final models = List<ModelConfig>.from(base.models);
-      final connectivityTest =
-          models[modelIndex].typeConfig['connectivityTest'];
-      if (connectivityTest is Map) {
-        result.typeConfig = Map<String, dynamic>.from(result.typeConfig)
-          ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
-      }
-      models[modelIndex] = result;
-      configs[_configIndex] = ProviderConfigItem(
-        id: base.id,
-        providerName: base.providerName,
-        host: base.host,
-        key: base.key,
-        models: models,
-        typeConfig: base.typeConfig,
-        customParams: base.customParams,
-        reasoningParams: base.reasoningParams,
-        endpointType: base.endpointType,
-        enabled: base.enabled,
-      );
-      final updated = ProviderEntry(
-        id: currentEntry.id,
-        type: currentEntry.type,
-        name: currentEntry.name,
-        configs: configs,
-      );
-      await ref
-          .read(providerEntriesProvider.notifier)
-          .update(currentEntry.id, updated);
-      if (mounted) setState(() {});
+    if (currentEntry == null || configId == null) {
+      _showSaveFailure();
+      return;
     }
+    var configs = currentEntry.configs.map((c) => c.copy()).toList();
+    final configIndex = configs.indexWhere((config) => config.id == configId);
+    if (configIndex < 0) {
+      _showSaveFailure();
+      return;
+    }
+    final models = configs[configIndex].models;
+    if (modelIndex < 0 || modelIndex >= models.length) {
+      _showSaveFailure();
+      return;
+    }
+    final connectivityTest = models[modelIndex].typeConfig['connectivityTest'];
+    if (connectivityTest is Map) {
+      result.typeConfig = Map<String, dynamic>.from(result.typeConfig)
+        ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+    }
+    models[modelIndex] = result;
+    final updated = _entryWithConfigs(currentEntry, configs);
+    if (!await _saveModelUpdate(updated)) return;
+    if (mounted) setState(() {});
   }
 
   /// 拖动排序模型：把本配置在全局顺序中的子序列替换为拖动后的新顺序，
@@ -687,40 +719,42 @@ class _ProviderConfigDetailPageState
 
   Future<void> _deleteModel(int modelIndex) async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null) {
+      _showSaveFailure();
+      return;
+    }
+    final configId = _isExistingConfig ? _config?.id : null;
+    if (_isExistingConfig && configId == null) {
+      _showSaveFailure();
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: ConstrainedText(
-          AppLocalizations.of(context)!.providerDeleteModel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(AppLocalizations.of(context)!.providerDeleteModel),
         content: Text(AppLocalizations.of(context)!.providerDeleteModelConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.fileManagerDelete,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),
     );
 
     if (confirmed != true) return;
+
+    final currentEntry = _entry;
+    if (currentEntry == null) {
+      _showSaveFailure();
+      return;
+    }
 
     if (!_isExistingConfig) {
       if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
@@ -729,35 +763,23 @@ class _ProviderConfigDetailPageState
       return;
     }
 
-    final config = _config;
-    if (config == null) return;
-
-    var configs = entry.configs.map((c) => c.copy()).toList();
-    var models = List<ModelConfig>.from(config.models);
+    final configs = currentEntry.configs.map((c) => c.copy()).toList();
+    final currentConfigIndex = configs.indexWhere(
+      (config) => config.id == configId,
+    );
+    if (currentConfigIndex < 0) {
+      _showSaveFailure();
+      return;
+    }
+    final models = configs[currentConfigIndex].models;
+    if (modelIndex < 0 || modelIndex >= models.length) {
+      _showSaveFailure();
+      return;
+    }
     models.removeAt(modelIndex);
-    // 在完整副本上删除模型：保留供应商的 typeConfig / customParams /
-    // reasoningParams / endpointType（重建会丢配置，推理参数继承
-    // 视图与请求构建都依赖供应商级参数）。
-    configs[_configIndex] = ProviderConfigItem(
-      id: config.id,
-      providerName: config.providerName,
-      host: config.host,
-      key: config.key,
-      models: models,
-      typeConfig: config.typeConfig,
-      customParams: config.customParams,
-      reasoningParams: config.reasoningParams,
-      endpointType: config.endpointType,
-      enabled: config.enabled,
-    );
 
-    final updated = ProviderEntry(
-      id: entry.id,
-      type: entry.type,
-      name: entry.name,
-      configs: configs,
-    );
-    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    final updated = _entryWithConfigs(currentEntry, configs);
+    if (!await _saveModelUpdate(updated)) return;
     if (!mounted) return;
     setState(() {});
   }
@@ -830,6 +852,7 @@ class _ProviderConfigDetailPageState
                         ConstrainedText(
                           _hostController.text,
                           maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,

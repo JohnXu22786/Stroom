@@ -12,6 +12,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/provider_config_detail_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
 
 // ===========================================================================
 // Helpers (from provider_config_asr_test.dart)
@@ -197,8 +198,8 @@ String _savedDataWithOcrConfig() {
               'modelId': 'qwen-vl-max',
               'voices': <Map<String, dynamic>>[],
               'customParams': <Map<String, dynamic>>[],
-              'typeConfig': <String, dynamic>{},
-            },
+              'typeConfig': <String, dynamic>{}
+            }
           ],
         },
       ],
@@ -309,7 +310,9 @@ void main() {
         providerName: 'My OCR',
         host: 'https://ocr.example.com',
         key: 'sk-1234',
-        models: [ModelConfig(name: 'Qwen-VL', modelId: 'qwen-vl-max')],
+        models: [
+          ModelConfig(name: 'Qwen-VL', modelId: 'qwen-vl-max'),
+        ],
       );
       final entry = ProviderEntry(
         id: 'ocr_roundtrip',
@@ -336,6 +339,70 @@ void main() {
   // 5. ProviderEntriesNotifier - ASR entry loading
   // =================================================================
   group('ProviderEntriesNotifier - ASR entry loading', () {
+    test(
+        'keeps saved provider entries readable when group preferences are malformed',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _savedDataWithoutAsr(),
+        LlmAccountMigrationService.modelGroupsPreferenceKey: '{malformed',
+      });
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(providerEntriesProvider.notifier).load();
+
+      final state = container.read(providerEntriesProvider);
+      expect(state.isLoaded, isTrue);
+      expect(state.entries.any((entry) => entry.id == 'builtin_llm'), isTrue);
+      expect(state.entries.any((entry) => entry.id == 'builtin_ocr'), isTrue);
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
+    });
+
+    test('provider edits preserve unavailable model-group catalog state',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final entry = ProviderEntry(
+        id: 'legacy-llm',
+        type: 'llm',
+        name: 'LLM供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Legacy OpenAI',
+            host: 'https://legacy.example.test/v1',
+          ),
+        ],
+      );
+      final notifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [entry],
+          llmModelGroupCatalogUnavailable: true,
+        );
+      final container = ProviderContainer(
+        overrides: [providerEntriesProvider.overrideWith((ref) => notifier)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(providerEntriesProvider.notifier).update(
+            entry.id,
+            ProviderEntry(
+              id: entry.id,
+              type: entry.type,
+              name: 'Edited LLM供应商',
+              configs: entry.configs,
+            ),
+          );
+
+      final state = container.read(providerEntriesProvider);
+      expect(state.entries.single.name, 'Edited LLM供应商');
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
+    });
+
     test('default entries include ASR when no saved data', () async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
@@ -423,32 +490,34 @@ void main() {
       },
     );
 
-    test('ASR entry preserves existing provider configs (TTS, LLM, OCR)',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithoutAsr(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
-      );
-      addTearDown(() => container.dispose());
+    test(
+      'ASR entry preserves existing provider configs (TTS, LLM, OCR)',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithoutAsr(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
 
-      // Wait for load() to complete
-      await container.read(providerEntriesProvider.notifier).load();
+        // Wait for load() to complete
+        await container.read(providerEntriesProvider.notifier).load();
 
-      final state = container.read(providerEntriesProvider);
-      // Verify existing entries are still present (includes MCP auto-migration)
-      expect(state.entries.length, equals(5));
-      expect(state.entries[0].type, equals('tts'));
-      expect(state.entries[1].type, equals('llm'));
-      expect(state.entries[2].type, equals('ocr'));
-      expect(state.entries[3].type, equals('asr'));
-      expect(state.entries[4].type, equals('mcp'));
-    });
+        final state = container.read(providerEntriesProvider);
+        // Verify existing entries are still present (includes MCP auto-migration)
+        expect(state.entries.length, equals(5));
+        expect(state.entries[0].type, equals('tts'));
+        expect(state.entries[1].type, equals('llm'));
+        expect(state.entries[2].type, equals('ocr'));
+        expect(state.entries[3].type, equals('asr'));
+        expect(state.entries[4].type, equals('mcp'));
+      },
+    );
 
     test('saved ASR config is preserved through load', () async {
       SharedPreferences.setMockInitialValues({
@@ -517,50 +586,36 @@ void main() {
       await container.read(providerEntriesProvider.notifier).load();
 
       final state = container.read(providerEntriesProvider);
-      expect(
-        state.entries.any((e) => e.type == 'ocr'),
-        isTrue,
-        reason: 'OCR entry should be migrated in',
-      );
-      expect(
-        state.entries.any((e) => e.id == 'builtin_tts'),
-        isTrue,
-        reason: 'TTS entry should be preserved',
-      );
-      expect(
-        state.entries.any((e) => e.id == 'builtin_llm'),
-        isTrue,
-        reason: 'LLM entry should be preserved',
-      );
+      expect(state.entries.any((e) => e.type == 'ocr'), isTrue,
+          reason: 'OCR entry should be migrated in');
+      expect(state.entries.any((e) => e.id == 'builtin_tts'), isTrue,
+          reason: 'TTS entry should be preserved');
+      expect(state.entries.any((e) => e.id == 'builtin_llm'), isTrue,
+          reason: 'LLM entry should be preserved');
     });
 
-    test(
-      'OCR entry is not duplicated when it already exists in saved data',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': _savedDataWithOcr(),
-        });
-        final container = ProviderContainer(
-          overrides: [
-            providerEntriesProvider.overrideWith(
-              (ref) => ProviderEntriesNotifier(),
-            ),
-          ],
-        );
-        addTearDown(() => container.dispose());
+    test('OCR entry is not duplicated when it already exists in saved data',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _savedDataWithOcr(),
+      });
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      addTearDown(() => container.dispose());
 
-        // Wait for load() to complete
-        await container.read(providerEntriesProvider.notifier).load();
+      // Wait for load() to complete
+      await container.read(providerEntriesProvider.notifier).load();
 
-        final state = container.read(providerEntriesProvider);
-        final ocrEntries = state.entries.where((e) => e.type == 'ocr').toList();
-        expect(
-          ocrEntries.length,
-          equals(1),
-          reason: 'Should have exactly one OCR entry, not duplicated',
-        );
-      },
-    );
+      final state = container.read(providerEntriesProvider);
+      final ocrEntries = state.entries.where((e) => e.type == 'ocr').toList();
+      expect(ocrEntries.length, equals(1),
+          reason: 'Should have exactly one OCR entry, not duplicated');
+    });
 
     test('OCR entry preserves existing provider configs (TTS, LLM)', () async {
       SharedPreferences.setMockInitialValues({
@@ -630,27 +685,94 @@ void main() {
     });
 
     test(
-      'ProviderConfigItem toMap/fromMap preserves provider-level params',
-      () {
-        final item = ProviderConfigItem(
-          providerName: 'Test',
-          host: 'host',
-          key: 'key',
-          typeConfig: {'context': 4096},
-          customParams: [CustomParam(paramName: 'top_k', defaultValue: '10')],
-          reasoningParams: [
-            ReasoningParam(paramName: 'effort', options: ['low', 'high']),
-          ],
-        );
-        final map = item.toMap();
-        final restored = ProviderConfigItem.fromMap(map);
-        expect(restored.typeConfig['context'], equals(4096));
-        expect(restored.customParams.length, equals(1));
-        expect(restored.customParams[0].paramName, equals('top_k'));
-        expect(restored.reasoningParams.length, equals(1));
-        expect(restored.reasoningParams[0].paramName, equals('effort'));
-      },
-    );
+        'ordinary serialization redacts legacy keys but migration input keeps them',
+        () {
+      final item = ProviderConfigItem(
+        providerName: 'Legacy provider',
+        key: 'legacy-secret',
+      );
+
+      expect(item.toMap().containsKey('key'), isFalse);
+      expect(item.toCredentialMigrationMap()['key'], 'legacy-secret');
+    });
+
+    test('ordinary provider serialization redacts unknown legacy tokens', () {
+      const secret = 'legacy-token-secret';
+      final item = ProviderConfigItem.fromMap({
+        'id': 'config-with-legacy-token',
+        'providerName': 'Legacy provider',
+        'key': 'legacy-api-key',
+        'token': secret,
+      });
+      final entry = ProviderEntry(
+        id: 'llm-with-legacy-token',
+        type: 'llm',
+        name: 'Legacy LLM',
+        configs: [item],
+      );
+      final saved = entry.toMap();
+      final migrationInput = entry.toCredentialMigrationMap();
+
+      expect(jsonEncode(saved), isNot(contains(secret)));
+      expect((saved['configs'] as List).single, isNot(contains('token')));
+      expect(jsonEncode(migrationInput), isNot(contains(secret)));
+      expect(
+        ((migrationInput['configs'] as List).single as Map)['key'],
+        'legacy-api-key',
+      );
+    });
+
+    test('ordinary config serialization recursively redacts credentials', () {
+      const secret = 'nested-provider-token-secret';
+      final item = ProviderConfigItem(
+        providerName: 'Nested provider',
+        typeConfig: const {
+          'auth': {
+            'apiKey': secret,
+            'credentialRef': 'stroom.llm.credential.account-1',
+          },
+        },
+        legacyFields: const {
+          'futureAuth': {'token': secret},
+        },
+      );
+
+      final serialized = jsonEncode(item.toMap());
+      final entrySerialized = jsonEncode(
+        ProviderEntry(
+          id: 'nested-provider-entry',
+          type: 'llm',
+          name: 'Nested provider',
+          configs: [item],
+        ).toMap(),
+      );
+
+      expect(serialized, isNot(contains(secret)));
+      expect(entrySerialized, isNot(contains(secret)));
+      expect(serialized, contains('credentialRef'));
+      expect(serialized, contains('stroom.llm.credential.account-1'));
+    });
+
+    test('ProviderConfigItem toMap/fromMap preserves provider-level params',
+        () {
+      final item = ProviderConfigItem(
+        providerName: 'Test',
+        host: 'host',
+        key: 'key',
+        typeConfig: {'context': 4096},
+        customParams: [CustomParam(paramName: 'top_k', defaultValue: '10')],
+        reasoningParams: [
+          ReasoningParam(paramName: 'effort', options: ['low', 'high']),
+        ],
+      );
+      final map = item.toMap();
+      final restored = ProviderConfigItem.fromMap(map);
+      expect(restored.typeConfig['context'], equals(4096));
+      expect(restored.customParams.length, equals(1));
+      expect(restored.customParams[0].paramName, equals('top_k'));
+      expect(restored.reasoningParams.length, equals(1));
+      expect(restored.reasoningParams[0].paramName, equals('effort'));
+    });
   });
 
   // =================================================================
@@ -722,8 +844,8 @@ void main() {
           ],
           child: MaterialApp(
             locale: const Locale('zh', 'CN'),
-            supportedLocales: AppLocalizations.supportedLocales,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: ProviderConfigDetailPage(
               entryId: 'test_entry_id',
               configIndex: 0,

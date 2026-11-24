@@ -12,6 +12,8 @@ import 'package:stroom/pages/assistant/assistant_shared.dart'
     as assistant_shared;
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/utils/emojis.dart'
     show EmojiCategories, EmojiCategoryType;
 import 'package:stroom/widgets/constrained_text.dart';
@@ -56,11 +58,39 @@ Widget createTestApp({
   );
 }
 
-Widget _localizedAssistantSelectionApp() => MaterialApp(
-      locale: const Locale('zh', 'CN'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const AssistantSelectionPage(),
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+}
+
+Widget _localizedAssistantSelectionApp() => ProviderScope(
+      overrides: [
+        providerEntriesProvider.overrideWith((ref) {
+          final notifier = ProviderEntriesNotifier(
+            credentialStore: _MemoryCredentialStore(),
+          );
+          notifier.load();
+          return notifier;
+        }),
+      ],
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const AssistantSelectionPage(),
+      ),
     );
 
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {

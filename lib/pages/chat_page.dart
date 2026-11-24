@@ -9,7 +9,6 @@ import '../l10n/app_localizations.dart';
 
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +22,6 @@ import '../widgets/markdown_extensions.dart';
 import '../widgets/constrained_text.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
-import '../widgets/temporary_conversation_dialog.dart';
 import '../widgets/chat_conversation_state.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
@@ -61,6 +59,7 @@ import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart' show filesRefreshSignalProvider;
 import 'chat/dialogs/message_save_destination_dialog.dart'
     show MessageSaveDestination, showMessageSaveDestinationDialog;
+import 'chat/dialogs/chat_account_override_dialog.dart';
 import 'message_search_page.dart';
 import 'assistant_selection_page.dart' show ChatTabVisibility;
 import 'provider_config_page.dart';
@@ -173,6 +172,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The manager owns the adapter lifecycle, not the page.
   ChatAdapter get _adapter => ref.read(chatStreamManagerProvider).adapter;
   int _selectedModelIndex = 0;
+  String? _nextRequestAccountId;
+  String? _nextRequestAccountName;
+  String? _nextRequestAccountConversationId;
+  (String, String, String)? _nextRequestAccountModelIdentity;
 
   /// Saved model display name order for drag-sort persistence.
   List<String>? _savedModelOrder;
@@ -343,9 +346,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
+  String? _searchError;
+  String? _pendingSearchMessageId;
   final List<SearchMatch> _searchMatches = [];
   final Map<String, int> _searchMatchFirstIndexByMessageId = {};
   int _currentMatchIndex = 0;
+  Timer? _searchDebounceTimer;
+  int _searchGeneration = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
   final ValueNotifier<int> _streamingBubbleRevision = ValueNotifier(0);
@@ -385,14 +392,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Number of messages to load per page.
   static const int _pageSize = 20;
 
-  /// Index in [_history] pointing to the first message that is loaded into
-  /// the chat controller. All messages from [_loadedUpToIndex] to the end of
-  /// [_history] are visible. When [_loadedUpToIndex] is 0, all messages are
-  /// already loaded.
+  /// Index in the current [_history] window pointing to the first message
+  /// already loaded into the chat controller. Repository pages older than this
+  /// window are fetched separately as the user scrolls.
   int _loadedUpToIndex = 0;
 
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
+  bool _isLoadingNewer = false;
+  int? _loadingNewerConversationGeneration;
+  bool _pendingNewerConversationLoad = false;
 
   /// True once the user has reached the top of the list while no older
   /// messages remain — shows the "没有更多内容了" hint above the first
@@ -430,7 +439,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   int _conversationLoadGeneration = 0;
 
   /// Whether there are more older messages to load.
-  bool get _hasMoreMessages => _loadedUpToIndex > 0;
+  bool get _hasMoreMessages {
+    if (_loadedUpToIndex > 0) return true;
+    final conversationId = _loadedConversationId;
+    return conversationId != null &&
+        ref
+            .read(conversationsProvider.notifier)
+            .hasEarlierRepositoryMessages(conversationId);
+  }
 
   @override
   void initState() {
@@ -470,6 +486,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchDebounceTimer?.cancel();
+    _searchGeneration++;
     // 使进行中的加载失效：卡在 0.5 秒最少显示延迟里的加载在延迟结束后
     // 不得再向已 dispose 的控制器插入消息。
     _loadMoreGeneration++;
@@ -753,11 +771,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 buildPageLayout(constraints.maxHeight < 450),
           );
 
-    return PopScope(
-      canPop: true,
-      child: SafeArea(
-        child: pageLayout,
-      ),
-    );
+    return PopScope(canPop: true, child: SafeArea(child: pageLayout));
   }
 }

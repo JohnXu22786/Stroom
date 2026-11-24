@@ -50,7 +50,12 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
         providerName: settings.title.providerName,
         modelDisplayName: settings.title.modelDisplayName,
       );
-      if (svc == null) return;
+      if (svc == null) {
+        if (settings.title.hasModel) {
+          debugPrint('[ChatStreamManager] 标题助手配置的模型不可用');
+        }
+        return;
+      }
 
       // 标题请求是真实 API 请求（每次发送都会产生），其 cost 同样是
       // 该对话的计费事实：usage 数据返回后立即累加（事件驱动、
@@ -100,7 +105,9 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
           .read(conversationsProvider.notifier)
           .updateTitle(convId, cleaned);
       await AppLogService.info(
-          'ChatStreamManager', '[TITLE] 自动标题生成完成: $cleaned');
+        'ChatStreamManager',
+        '[TITLE] 自动标题生成完成: $cleaned',
+      );
     } catch (e) {
       // fire-and-forget 路径：任何异常都静默，避免 unhandled async error
       debugPrint('[ChatStreamManager] 自动标题失败: $e');

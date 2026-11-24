@@ -9,6 +9,7 @@ class _ProviderEntriesNotifier extends ProviderEntriesNotifier {
   _ProviderEntriesNotifier() {
     state = ProviderEntriesState(
       entries: [ProviderEntry(id: 'test_llm', type: 'llm', name: 'LLM')],
+      llmCredentialMigrationUnavailable: true,
     );
   }
 }
