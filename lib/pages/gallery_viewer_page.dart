@@ -25,13 +25,61 @@ Future<T> withGalleryVisibleNameLock<T>(
   String folder,
   Future<T> Function() action,
 ) =>
-    ImageManifest.withFolderMutationLock(
-      folder,
-      () => _galleryVisibleNameLocks.withLock(
-        'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
-        action,
+    withGalleryVisibleNameLocks([folder], action);
+
+/// Serializes Gallery path mutations across every folder they can affect.
+Future<T> withGalleryVisibleNameLocks<T>(
+  Iterable<String> folders,
+  Future<T> Function() action,
+) =>
+    _galleryVisibleNameLocks.withLocks(
+      folders.map(
+        (folder) =>
+            'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
       ),
+      action,
     );
+
+String galleryRecordVisiblePath(ImageRecord record) => record.folder.isEmpty
+    ? '${record.name}.${record.format}'
+    : '${record.folder}/${record.name}.${record.format}';
+
+/// Whether [path] overlaps an existing visible file or folder path.
+bool galleryVisiblePathHasConflict({
+  required String path,
+  required bool isFolder,
+  required Iterable<ImageRecord> records,
+  required Iterable<String> folders,
+  bool allowExistingFolderDescendants = false,
+  Set<String> excludedRecordIds = const {},
+  Set<String> excludedFolderPaths = const {},
+}) {
+  final pathKey = userVisibleExportPathComparisonKey(path);
+
+  for (final record in records) {
+    if (excludedRecordIds.contains(record.id)) continue;
+    final recordKey = userVisibleExportPathComparisonKey(
+      galleryRecordVisiblePath(record),
+    );
+    if (isFolder
+        ? recordKey == pathKey || pathKey.startsWith('$recordKey/')
+        : recordKey == pathKey || recordKey.startsWith('$pathKey/')) {
+      return true;
+    }
+  }
+  for (final folder in folders) {
+    if (excludedFolderPaths.contains(folder)) continue;
+    final folderKey = userVisibleExportPathComparisonKey(folder);
+    if (isFolder
+        ? folderKey == pathKey ||
+            (!allowExistingFolderDescendants &&
+                folderKey.startsWith('$pathKey/'))
+        : folderKey == pathKey || folderKey.startsWith('$pathKey/')) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// Finds a free Gallery filename, preserving [baseName] when available.
 String uniqueGalleryVisibleName({
@@ -110,22 +158,17 @@ Future<bool> createGalleryFolderIfNameAvailable(
 ) async {
   final parentFolder = ImageManifest.getParentFolderPath(folderPath);
   return withGalleryVisibleNameLock(parentFolder, () async {
-    final candidateKey = userVisibleExportPathComparisonKey(folderPath);
     final records = await ImageManifest.loadRecordsStrict();
     final existingFolders = await ImageManifest.getAllFolders();
-
-    final conflictsWithFile = records.any((record) {
-      final filePath = record.folder.isEmpty
-          ? '${record.name}.${record.format}'
-          : '${record.folder}/${record.name}.${record.format}';
-      return userVisibleExportPathComparisonKey(filePath) == candidateKey;
-    });
-    final conflictsWithFolder = existingFolders.any((existingFolder) {
-      final existingKey = userVisibleExportPathComparisonKey(existingFolder);
-      return existingKey == candidateKey ||
-          existingKey.startsWith('$candidateKey/');
-    });
-    if (conflictsWithFile || conflictsWithFolder) return false;
+    if (galleryVisiblePathHasConflict(
+      path: folderPath,
+      isFolder: true,
+      records: records,
+      folders: existingFolders,
+      allowExistingFolderDescendants: true,
+    )) {
+      return false;
+    }
 
     await createFolder();
     return true;
@@ -439,11 +482,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
               deleteFile: ImageManifest.deleteFile,
             ),
           );
-      if (isSaveAs) {
-        await withGalleryVisibleNameLock(file.folder, save);
-      } else {
-        await ImageManifest.withFolderReadLock(file.folder, save);
-      }
+      await withGalleryVisibleNameLock(file.folder, save);
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.

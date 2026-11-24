@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -298,6 +299,93 @@ void main() {
             for (final record in records) '${record.name}.${record.format}'
           ],
           folders: folders,
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('folder name reservation does not deadlock folder deletion', () async {
+      await ImageManifest.addFolder('parent');
+      final enteredCreate = Completer<void>();
+      final releaseCreate = Completer<void>();
+      final create = createGalleryFolderIfNameAvailable(
+        'parent/child',
+        () async {
+          enteredCreate.complete();
+          await releaseCreate.future;
+          await ImageManifest.addFolder('parent/child');
+        },
+      );
+
+      await enteredCreate.future;
+      final delete = ImageManifest.removeFolder('parent');
+      await Future<void>.delayed(Duration.zero);
+      releaseCreate.complete();
+
+      await Future.wait([create, delete]).timeout(
+        const Duration(seconds: 2),
+      );
+      for (final folder in (await ImageManifest.getAllFolders()).toList()) {
+        await ImageManifest.removeFolder(folder);
+      }
+    });
+
+    test('record rename shares the Save As visible-name reservation', () async {
+      final source = _makeRecord(
+        id: 'rename_source',
+        name: 'trip',
+        format: 'png',
+        folder: '',
+      );
+      await ImageManifest.addRecord(source);
+
+      Future<String> saveAs() => withGalleryVisibleNameLock('', () async {
+            final records = await ImageManifest.loadRecordsStrict();
+            final folders = await ImageManifest.getAllFolders();
+            final name = uniqueGallerySaveAsName(
+              records: records,
+              folder: '',
+              sourceName: 'trip',
+              format: 'png',
+              existingFolders: folders,
+            );
+            await Future<void>.delayed(Duration.zero);
+            await ImageManifest.addRecord(
+              _makeRecord(
+                id: 'save_as',
+                name: name,
+                format: 'png',
+                folder: '',
+              ),
+            );
+            return name;
+          });
+      Future<bool> rename() => withGalleryVisibleNameLock('', () async {
+            final records = await ImageManifest.loadRecordsStrict();
+            final folders = await ImageManifest.getAllFolders();
+            if (galleryVisiblePathHasConflict(
+              path: 'trip_edited.png',
+              isFolder: false,
+              records: records,
+              folders: folders,
+              excludedRecordIds: {source.id},
+            )) {
+              return false;
+            }
+            await ImageManifest.renameRecord(source.id, 'trip_edited');
+            return true;
+          });
+
+      final outcomes = await Future.wait<Object>([saveAs(), rename()]);
+      final saveAsName = outcomes[0] as String;
+      final renameSucceeded = outcomes[1] as bool;
+      expect(saveAsName, renameSucceeded ? 'trip_edited (2)' : 'trip_edited');
+      final records = await ImageManifest.loadRecordsStrict();
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: [
+            for (final record in records) galleryRecordVisiblePath(record)
+          ],
         ),
         returnsNormally,
       );

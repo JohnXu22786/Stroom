@@ -29,6 +29,151 @@ import 'gallery_viewer_page.dart';
 
 import '../widgets/constrained_text.dart';
 
+Future<bool> _mutateGalleryFolderPath({
+  required String sourcePath,
+  required String destinationPath,
+  required bool copy,
+  required Future<void> Function() mutate,
+}) async {
+  final records = await ImageManifest.loadRecordsStrict();
+  final folders = await ImageManifest.getAllFolders();
+  final sourcePrefix = '$sourcePath/';
+  final sourceRecords = records
+      .where(
+        (record) =>
+            record.folder == sourcePath ||
+            record.folder.startsWith(sourcePrefix),
+      )
+      .toList();
+  final sourceRecordLocations = {
+    for (final record in sourceRecords) record.id: record.folder,
+  };
+  final sourceFolders = folders
+      .where(
+        (folder) => folder == sourcePath || folder.startsWith(sourcePrefix),
+      )
+      .toSet()
+    ..add(sourcePath);
+  final mappedFolders = sourceFolders
+      .map(
+        (folder) => folder == sourcePath
+            ? destinationPath
+            : '$destinationPath${folder.substring(sourcePath.length)}',
+      )
+      .toSet();
+  final mappedRecords = sourceRecords.map((record) {
+    final folder = record.folder == sourcePath
+        ? destinationPath
+        : '$destinationPath${record.folder.substring(sourcePath.length)}';
+    return record.copyWith(folder: folder);
+  }).toList();
+  final destinationParents = <String>{
+    ImageManifest.getParentFolderPath(sourcePath),
+    ImageManifest.getParentFolderPath(destinationPath),
+    ...mappedFolders,
+    for (final record in mappedRecords) record.folder,
+  };
+
+  return withGalleryVisibleNameLocks(
+    {
+      sourcePath,
+      ...sourceFolders,
+      ...destinationParents,
+    },
+    () async {
+      // Recheck all manifest paths while the source and destination namespaces
+      // are reserved. Retry is unnecessary: callers can invoke again after the
+      // competing mutation has completed.
+      final currentRecords = await ImageManifest.loadRecordsStrict();
+      final currentFolders = await ImageManifest.getAllFolders();
+      final currentSourceRecords = currentRecords
+          .where(
+            (record) =>
+                record.folder == sourcePath ||
+                record.folder.startsWith(sourcePrefix),
+          )
+          .toList();
+      final currentSourceFolders = currentFolders
+          .where(
+            (folder) => folder == sourcePath || folder.startsWith(sourcePrefix),
+          )
+          .toSet()
+        ..add(sourcePath);
+      final currentRecordLocations = {
+        for (final record in currentSourceRecords) record.id: record.folder,
+      };
+      bool sameSet<T>(Set<T> left, Set<T> right) =>
+          left.length == right.length && left.containsAll(right);
+      if (currentRecordLocations.length != sourceRecordLocations.length ||
+          currentRecordLocations.entries.any(
+            (entry) => sourceRecordLocations[entry.key] != entry.value,
+          ) ||
+          !sameSet(currentSourceFolders, sourceFolders)) {
+        return false;
+      }
+
+      final liveExcludedIds = copy
+          ? const <String>{}
+          : currentSourceRecords.map((record) => record.id).toSet();
+      final liveExcludedFolders =
+          copy ? const <String>{} : currentSourceFolders;
+      final liveUnrelatedRecords = currentRecords
+          .where((record) => !liveExcludedIds.contains(record.id))
+          .toList();
+      final liveUnrelatedFolders = currentFolders
+          .where((folder) => !liveExcludedFolders.contains(folder))
+          .toList();
+      final liveMappedFolders = currentSourceFolders
+          .map(
+            (folder) => folder == sourcePath
+                ? destinationPath
+                : '$destinationPath${folder.substring(sourcePath.length)}',
+          )
+          .toSet();
+      final liveMappedRecords = currentSourceRecords.map((record) {
+        final folder = record.folder == sourcePath
+            ? destinationPath
+            : '$destinationPath${record.folder.substring(sourcePath.length)}';
+        return record.copyWith(folder: folder);
+      }).toList();
+
+      for (final folder in liveMappedFolders) {
+        if (galleryVisiblePathHasConflict(
+          path: folder,
+          isFolder: true,
+          records: liveUnrelatedRecords,
+          folders: liveUnrelatedFolders,
+        )) {
+          return false;
+        }
+      }
+      final outputFileKeys = <String>{};
+      for (final record in liveMappedRecords) {
+        final path = galleryRecordVisiblePath(record);
+        final pathKey = userVisibleExportPathComparisonKey(path);
+        if (!outputFileKeys.add(pathKey) ||
+            galleryVisiblePathHasConflict(
+              path: path,
+              isFolder: false,
+              records: liveUnrelatedRecords,
+              folders: liveUnrelatedFolders,
+            )) {
+          return false;
+        }
+        if (liveMappedFolders.any((folder) {
+          final folderKey = userVisibleExportPathComparisonKey(folder);
+          return pathKey == folderKey || folderKey.startsWith('$pathKey/');
+        })) {
+          return false;
+        }
+      }
+
+      await mutate();
+      return true;
+    },
+  );
+}
+
 class GalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
@@ -186,40 +331,53 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       const format = 'jpg';
       final fileName = '$hash.$format';
       final destinationFolder = _currentFolder;
-      await ImageManifest.withFilePublicationLock(hash, destinationFolder,
-          () async {
-        await publishStorageFiles<void, ImageRecord>(
-          publish: (writeFile) async {
-            await writeFile(fileName, bytes);
-            final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
-              bytes,
-            );
-            if (thumbnailBytes != null) {
-              await writeFile(imageThumbFileName(hash), thumbnailBytes);
-            }
-            final now = DateTime.now();
-            final timestamp =
-                '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
-            await ImageManifest.addRecord(
-              ImageRecord(
-                name: '照片_$timestamp',
-                hash: hash,
-                format: format,
-                createdAt: DateTime.now(),
-                size: bytes.length,
-                folder: destinationFolder,
-              ),
-            );
-          },
-          loadRecords: ImageManifest.loadRecordsStrict,
-          isReferenced: (record, name) =>
-              record.hash == hash &&
-              (name == record.storageFileName ||
-                  name == imageThumbFileName(record.hash)),
-          writeFile: ImageManifest.writeFile,
-          readFile: ImageManifest.readFile,
-          fileExists: ImageManifest.fileExists,
-          deleteFile: ImageManifest.deleteFile,
+      await withGalleryVisibleNameLock(destinationFolder, () async {
+        final records = await ImageManifest.loadRecordsStrict();
+        final existingFolders = await ImageManifest.getAllFolders();
+        final now = DateTime.now();
+        final timestamp =
+            '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
+        final visibleName = uniqueGalleryVisibleName(
+          records: records,
+          folder: destinationFolder,
+          baseName: '照片_$timestamp',
+          format: format,
+          existingFolders: existingFolders,
+        );
+        await ImageManifest.withFilePublicationLock(
+          hash,
+          destinationFolder,
+          () async => publishStorageFiles<void, ImageRecord>(
+            publish: (writeFile) async {
+              await writeFile(fileName, bytes);
+              final thumbnailBytes =
+                  await ImageThumbnailLoader.generateThumbnail(
+                bytes,
+              );
+              if (thumbnailBytes != null) {
+                await writeFile(imageThumbFileName(hash), thumbnailBytes);
+              }
+              await ImageManifest.addRecord(
+                ImageRecord(
+                  name: visibleName,
+                  hash: hash,
+                  format: format,
+                  createdAt: DateTime.now(),
+                  size: bytes.length,
+                  folder: destinationFolder,
+                ),
+              );
+            },
+            loadRecords: ImageManifest.loadRecordsStrict,
+            isReferenced: (record, name) =>
+                record.hash == hash &&
+                (name == record.storageFileName ||
+                    name == imageThumbFileName(record.hash)),
+            writeFile: ImageManifest.writeFile,
+            readFile: ImageManifest.readFile,
+            fileExists: ImageManifest.fileExists,
+            deleteFile: ImageManifest.deleteFile,
+          ),
         );
       });
       success = true;
@@ -935,34 +1093,93 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onRenameFile: (id, newName) async {
-        await ref.read(imageRecordsProvider.notifier).renameRecord(id, newName);
+        final source = records.firstWhere((record) => record.id == id);
+        final conflictMessage = AppLocalizations.of(context)!
+            .fileManagerFileExists(source.format, newName);
+        final renamed =
+            await withGalleryVisibleNameLock(source.folder, () async {
+          final currentRecords = await ImageManifest.loadRecordsStrict();
+          final currentFolders = await ImageManifest.getAllFolders();
+          final current = currentRecords.firstWhere(
+            (record) => record.id == id,
+          );
+          if (current.folder != source.folder) return false;
+          final candidatePath = current.folder.isEmpty
+              ? '$newName.${current.format}'
+              : '${current.folder}/$newName.${current.format}';
+          if (galleryVisiblePathHasConflict(
+            path: candidatePath,
+            isFolder: false,
+            records: currentRecords,
+            folders: currentFolders,
+            excludedRecordIds: {id},
+          )) {
+            return false;
+          }
+          await ref
+              .read(imageRecordsProvider.notifier)
+              .renameRecord(id, newName);
+          return true;
+        });
+        if (!renamed) throw StateError(conflictMessage);
       },
       onMoveFile: (id, targetFolder) async {
-        await ref
-            .read(imageRecordsProvider.notifier)
-            .moveRecord(id, targetFolder);
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerMoveNameConflict;
+        final source = records.firstWhere((record) => record.id == id);
+        final moved = await withGalleryVisibleNameLocks(
+          [source.folder, targetFolder],
+          () async {
+            final currentRecords = await ImageManifest.loadRecordsStrict();
+            final currentFolders = await ImageManifest.getAllFolders();
+            final current = currentRecords.firstWhere(
+              (record) => record.id == id,
+            );
+            if (current.folder != source.folder) return false;
+            final candidatePath = targetFolder.isEmpty
+                ? '${current.name}.${current.format}'
+                : '$targetFolder/${current.name}.${current.format}';
+            if (galleryVisiblePathHasConflict(
+              path: candidatePath,
+              isFolder: false,
+              records: currentRecords,
+              folders: currentFolders,
+              excludedRecordIds: {id},
+            )) {
+              return false;
+            }
+            await ref
+                .read(imageRecordsProvider.notifier)
+                .moveRecord(id, targetFolder);
+            return true;
+          },
+        );
+        if (!moved) throw StateError(conflictMessage);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onCopyFile: (id, selectedFolder) async {
-        final source = records.firstWhere((r) => r.id == id);
-        String copyName = '${source.name}_副本';
-        int copyIdx = 2;
-        while (records.any(
-          (r) => r.name == copyName && r.folder == selectedFolder,
-        )) {
-          copyName = '${source.name}_副本 ($copyIdx)';
-          copyIdx++;
-        }
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: copyName,
-            hash: source.hash,
-            format: source.format,
-            createdAt: DateTime.now(),
-            size: source.size,
+        await withGalleryVisibleNameLock(selectedFolder, () async {
+          final currentRecords = await ImageManifest.loadRecordsStrict();
+          final currentFolders = await ImageManifest.getAllFolders();
+          final source = currentRecords.firstWhere((record) => record.id == id);
+          final copyName = uniqueGalleryVisibleName(
+            records: currentRecords,
             folder: selectedFolder,
-          ),
-        );
+            baseName: '${source.name}_副本',
+            format: source.format,
+            existingFolders: currentFolders,
+          );
+          await ImageManifest.addRecord(
+            ImageRecord(
+              name: copyName,
+              hash: source.hash,
+              format: source.format,
+              createdAt: DateTime.now(),
+              size: source.size,
+              folder: selectedFolder,
+            ),
+          );
+        });
         await ref.read(imageRecordsProvider.notifier).loadRecords();
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
@@ -989,18 +1206,61 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onMoveFiles: (ids, targetFolder) async {
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerMoveNameConflict;
         for (final id in ids) {
-          await ref
-              .read(imageRecordsProvider.notifier)
-              .moveRecord(id, targetFolder);
+          final source = records.firstWhere((record) => record.id == id);
+          final moved = await withGalleryVisibleNameLocks(
+            [source.folder, targetFolder],
+            () async {
+              final currentRecords = await ImageManifest.loadRecordsStrict();
+              final currentFolders = await ImageManifest.getAllFolders();
+              final current = currentRecords.firstWhere(
+                (record) => record.id == id,
+              );
+              if (current.folder != source.folder) return false;
+              final candidatePath = targetFolder.isEmpty
+                  ? '${current.name}.${current.format}'
+                  : '$targetFolder/${current.name}.${current.format}';
+              if (galleryVisiblePathHasConflict(
+                path: candidatePath,
+                isFolder: false,
+                records: currentRecords,
+                folders: currentFolders,
+                excludedRecordIds: {id},
+              )) {
+                return false;
+              }
+              await ref
+                  .read(imageRecordsProvider.notifier)
+                  .moveRecord(id, targetFolder);
+              return true;
+            },
+          );
+          if (!moved) throw StateError(conflictMessage);
         }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onMoveFolders: (names, targetFolder) async {
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerFolderSelfConflict;
         for (final name in names) {
-          await ref
-              .read(imageRecordsProvider.notifier)
-              .moveFolder(name, targetFolder);
+          final baseName = ImageManifest.getFolderBaseName(name);
+          final targetParent = targetFolder.trim().replaceAll(
+                RegExp(r'/+$'),
+                '',
+              );
+          final destinationPath =
+              targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+          final moved = await _mutateGalleryFolderPath(
+            sourcePath: name,
+            destinationPath: destinationPath,
+            copy: false,
+            mutate: () => ref
+                .read(imageRecordsProvider.notifier)
+                .moveFolder(name, targetFolder),
+          );
+          if (!moved) throw StateError(conflictMessage);
         }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
@@ -1011,21 +1271,65 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         return _exportFolder(name);
       },
       onRenameFolder: (oldName, newName) async {
-        await ref
-            .read(imageRecordsProvider.notifier)
-            .renameFolder(oldName, newName);
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerTargetFolderConflict;
+        final parent = ImageManifest.getParentFolderPath(oldName);
+        final trimmedName = newName.trim();
+        final destinationPath =
+            parent.isEmpty ? trimmedName : '$parent/$trimmedName';
+        final renamed = await _mutateGalleryFolderPath(
+          sourcePath: oldName,
+          destinationPath: destinationPath,
+          copy: false,
+          mutate: () => ref
+              .read(imageRecordsProvider.notifier)
+              .renameFolder(oldName, newName),
+        );
+        if (!renamed) throw StateError(conflictMessage);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onMoveFolder: (sourceName, targetParent) async {
-        await ref
-            .read(imageRecordsProvider.notifier)
-            .moveFolder(sourceName, targetParent);
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerFolderSelfConflict;
+        final baseName = ImageManifest.getFolderBaseName(sourceName);
+        final targetParentClean = targetParent.trim().replaceAll(
+              RegExp(r'/+$'),
+              '',
+            );
+        final destinationPath = targetParentClean.isEmpty
+            ? baseName
+            : '$targetParentClean/$baseName';
+        final moved = await _mutateGalleryFolderPath(
+          sourcePath: sourceName,
+          destinationPath: destinationPath,
+          copy: false,
+          mutate: () => ref
+              .read(imageRecordsProvider.notifier)
+              .moveFolder(sourceName, targetParent),
+        );
+        if (!moved) throw StateError(conflictMessage);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onCopyFolder: (sourceName, targetParent) async {
-        await ref
-            .read(imageRecordsProvider.notifier)
-            .copyFolder(sourceName, targetParent);
+        final conflictMessage =
+            AppLocalizations.of(context)!.fileManagerFolderConflict;
+        final baseName = ImageManifest.getFolderBaseName(sourceName);
+        final targetParentClean = targetParent.trim().replaceAll(
+              RegExp(r'/+$'),
+              '',
+            );
+        final destinationPath = targetParentClean.isEmpty
+            ? baseName
+            : '$targetParentClean/$baseName';
+        final copied = await _mutateGalleryFolderPath(
+          sourcePath: sourceName,
+          destinationPath: destinationPath,
+          copy: true,
+          mutate: () => ref
+              .read(imageRecordsProvider.notifier)
+              .copyFolder(sourceName, targetParent),
+        );
+        if (!copied) throw StateError(conflictMessage);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onDeleteFolder: (name) async {
@@ -1038,7 +1342,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onCreateFolder: (name) async {
-        final messenger = ScaffoldMessenger.of(context);
         final conflictMessage =
             AppLocalizations.of(context)!.fileManagerFolderConflict;
         final created = await createGalleryFolderIfNameAvailable(
@@ -1046,12 +1349,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           () => ref.read(imageRecordsProvider.notifier).createFolder(name),
         );
         if (!created) {
-          if (messenger.mounted) {
-            messenger.showSnackBar(
-              SnackBar(content: Text(conflictMessage)),
-            );
-          }
-          return;
+          throw StateError(conflictMessage);
         }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
