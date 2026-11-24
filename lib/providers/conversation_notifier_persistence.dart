@@ -1547,9 +1547,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (prefs.getString('conversations') == corruptJson) {
         await prefs.remove('conversations');
       }
-      if (_corruptConversationDataAwaitingBackup == corruptJson) {
-        _corruptConversationDataAwaitingBackup = null;
-      }
+      await corruptConversationBackupAfterWrite?.call();
       debugPrint(
         'ConversationsNotifier: backed up corrupt conversations to $backupKey',
       );
@@ -1751,11 +1749,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           return false;
         }
       }
-      return _persistSnapshot(
+      final persisted = await _persistSnapshot(
         snapshot,
         requestGeneration,
         preserveNewerConversationsJson: corruptJson,
       );
+      if (corruptJson != null &&
+          _corruptConversationDataAwaitingBackup == corruptJson) {
+        _corruptConversationDataAwaitingBackup = null;
+      }
+      return persisted;
     });
     final trackedWrite = write.whenComplete(() {
       _queuedDraftAttachmentPathsByPersistRequest.remove(requestGeneration);

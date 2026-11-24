@@ -41,24 +41,27 @@ void main() {
       const corruptJson = '{"broken":';
       const recoveredJson = '[{"id":"recovered"}]';
       SharedPreferences.setMockInitialValues({'conversations': corruptJson});
-      final backupStored = Completer<void>();
-      final completeBackup = Completer<bool>();
+      final backupFinalizationStarted = Completer<void>();
+      final completeBackupFinalization = Completer<void>();
       var backupAttempts = 0;
+      late ConversationsNotifier backupNotifier;
       final container = ProviderContainer(
         overrides: [
           conversationsProvider.overrideWith((ref) {
-            final notifier = ConversationsNotifier(
+            backupNotifier = ConversationsNotifier(
               ref,
               corruptConversationBackupWriter: (prefs, key, value) async {
                 backupAttempts++;
                 if (backupAttempts == 1) return false;
-                await prefs.setString(key, value);
-                backupStored.complete();
-                return completeBackup.future;
+                return prefs.setString(key, value);
+              },
+              corruptConversationBackupAfterWrite: () async {
+                backupFinalizationStarted.complete();
+                await completeBackupFinalization.future;
               },
             );
-            notifier.loadForTesting();
-            return notifier;
+            backupNotifier.loadForTesting();
+            return backupNotifier;
           }),
         ],
       );
@@ -67,8 +70,7 @@ void main() {
       final notifier = container.read(conversationsProvider.notifier);
       await notifier.ready;
       final retry = notifier.persistNowForTesting();
-      await backupStored.future;
-      final queuedSave = notifier.persistNowForTesting();
+      await backupFinalizationStarted.future;
 
       final prefs = await SharedPreferences.getInstance();
       final fallbackSaved = await persistConversationFallbackIfRecovered(
@@ -77,7 +79,8 @@ void main() {
       );
       expect(fallbackSaved, isTrue);
 
-      completeBackup.complete(true);
+      final queuedSave = notifier.persistNowForTesting();
+      completeBackupFinalization.complete();
       expect(await retry, isFalse);
       expect(await queuedSave, isFalse);
 

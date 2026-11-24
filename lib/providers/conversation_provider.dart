@@ -586,12 +586,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     String key,
     String value,
   )? corruptConversationBackupWriter;
+  @visibleForTesting
+  final Future<void> Function()? corruptConversationBackupAfterWrite;
   List<dynamic> _unparsedConversationRecords = [];
   String? _corruptConversationDataAwaitingBackup;
 
   ConversationsNotifier(
     this._ref, {
     @visibleForTesting this.corruptConversationBackupWriter,
+    @visibleForTesting this.corruptConversationBackupAfterWrite,
   }) : super([]);
 
   List<Conversation> get currentConversations => state;
