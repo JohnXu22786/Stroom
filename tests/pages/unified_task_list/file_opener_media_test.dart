@@ -5,9 +5,37 @@ import 'package:path/path.dart' as p;
 import 'package:stroom/pages/unified_task_list/file_opener.dart';
 
 void main() {
+  test('file existence preflight skips unsupported web IO only', () {
+    var existsChecks = 0;
+    bool existsSync() {
+      existsChecks++;
+      return false;
+    }
+
+    expect(
+      shouldAbortFileOpenForMissingFile(isWeb: true, existsSync: existsSync),
+      isFalse,
+    );
+    expect(existsChecks, 0);
+
+    expect(
+      shouldAbortFileOpenForMissingFile(isWeb: false, existsSync: existsSync),
+      isTrue,
+    );
+    expect(existsChecks, 1);
+  });
+
   test('routes .ts as video while .tsx remains text', () async {
     expect(await fileOpenKind('/tmp/recording.ts'), FileOpenKind.video);
     expect(await fileOpenKind('/tmp/app.tsx'), FileOpenKind.text);
+  });
+
+  test('routes ambiguous containers to a browser viewer without IO probing',
+      () async {
+    expect(
+      await fileOpenKind('/tmp/recording.mov', isWeb: true),
+      FileOpenKind.video,
+    );
   });
 
   for (final fixture in [

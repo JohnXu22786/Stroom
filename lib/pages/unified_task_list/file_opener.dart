@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -118,12 +119,24 @@ final Set<String> _audioExtensions = {
 
 enum FileOpenKind { text, video, audio, system }
 
+bool shouldAbortFileOpenForMissingFile({
+  required bool isWeb,
+  required bool Function() existsSync,
+}) {
+  if (isWeb) return false;
+  return !existsSync();
+}
+
 /// Some containers can contain either audio or video. Probe their saved bytes
 /// instead of treating their extensions as a media kind.
-Future<FileOpenKind> fileOpenKind(String filePath) async {
+Future<FileOpenKind> fileOpenKind(String filePath, {bool? isWeb}) async {
+  final isWebPlatform = isWeb ?? kIsWeb;
   final ext = p.extension(filePath).replaceAll('.', '').toLowerCase();
   if (_textExtensions.contains(ext)) return FileOpenKind.text;
   if (const {'mov', 'flv', 'avi', 'mpeg', 'mpg'}.contains(ext)) {
+    // The native probe reads the saved file with dart:io. On web, route these
+    // ambiguous containers to the browser video player instead.
+    if (isWebPlatform) return FileOpenKind.video;
     final kind = await catCatchMediaKindFromPath(filePath);
     if (kind == CatCatchMediaKind.audio) return FileOpenKind.audio;
     if (kind == CatCatchMediaKind.video) return FileOpenKind.video;
@@ -142,8 +155,10 @@ Future<FileOpenKind> fileOpenKind(String filePath) async {
 /// - Other files → OS default application
 Future<void> openFile(String filePath, BuildContext context) async {
   try {
-    final file = File(filePath);
-    if (!file.existsSync()) {
+    if (shouldAbortFileOpenForMissingFile(
+      isWeb: kIsWeb,
+      existsSync: () => File(filePath).existsSync(),
+    )) {
       debugPrint('File not found: $filePath');
       return;
     }
