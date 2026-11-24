@@ -4,7 +4,12 @@ import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show
+        debugPrint,
+        defaultTargetPlatform,
+        kIsWeb,
+        TargetPlatform,
+        visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -138,6 +143,17 @@ class NotificationService {
       }
     });
     return completer.future;
+  }
+
+  /// Lets widget tests drain work before a fake-async zone is closed.
+  @visibleForTesting
+  Future<void> get notificationSettingQueueForTesting =>
+      _notificationSettingQueue;
+
+  /// Detaches the next test from a previous test's async zone.
+  @visibleForTesting
+  void resetNotificationSettingQueueForTesting() {
+    _notificationSettingQueue = Future<void>.value();
   }
 
   Future<void> _writeEnabled(bool value) async {

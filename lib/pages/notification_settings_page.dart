@@ -15,7 +15,7 @@ import '../widgets/constrained_text.dart';
 /// A page that detects current system environment, checks notification
 /// permission status, and provides a switch to enable/disable task completion
 /// notifications. The switch is only enabled when the system permission is
-/// granted.
+/// granted or provisionally granted.
 class NotificationSettingsPage extends ConsumerStatefulWidget {
   const NotificationSettingsPage({super.key});
 
@@ -36,6 +36,7 @@ class _NotificationSettingsPageState
   bool _isCheckingPermission = true;
   PermissionStatus _permissionStatus = PermissionStatus.denied;
   bool _notificationsEnabled = false;
+  int _notificationSettingRevision = 0;
 
   @override
   void initState() {
@@ -101,12 +102,22 @@ class _NotificationSettingsPageState
   // ── Permission Check ─────────────────────────────────────────────────
 
   Future<void> _loadSettings() async {
+    final revision = _notificationSettingRevision;
     await _checkPermission();
     final enabled = await NotificationService().isEnabled;
-    if (mounted) {
+    if (mounted && revision == _notificationSettingRevision) {
       setState(() {
         _notificationsEnabled = enabled;
       });
+    }
+  }
+
+  Future<void> _reloadSettingsAfterFailedSave(int revision) async {
+    if (!mounted || revision != _notificationSettingRevision) return;
+    try {
+      await _loadSettings();
+    } catch (_) {
+      // Keep the save error as the visible failure if the preference read fails.
     }
   }
 
@@ -142,6 +153,7 @@ class _NotificationSettingsPageState
   }
 
   Future<void> _requestPermission() async {
+    final revision = ++_notificationSettingRevision;
     final service = NotificationService();
     final granted = await service.requestPermission(
       usageReason: _strings.notificationSettingsUsageReason,
@@ -152,9 +164,11 @@ class _NotificationSettingsPageState
     try {
       await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
     } catch (_) {
+      await _reloadSettingsAfterFailedSave(revision);
       _showNotificationSaveError();
       return;
     }
+    if (!mounted || revision != _notificationSettingRevision) return;
     setState(() {
       _notificationsEnabled = granted;
     });
@@ -183,7 +197,7 @@ class _NotificationSettingsPageState
   bool get _canToggle {
     // Only allow toggling when permission is granted and we're not on web
     if (kIsWeb) return false;
-    return _permissionStatus.isGranted;
+    return _permissionStatus.isGranted || _permissionStatus.isProvisional;
   }
 
   // ── Permission status label ──────────────────────────────────────────
@@ -437,16 +451,20 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
+                            final revision = ++_notificationSettingRevision;
                             try {
                               await ref
                                   .read(notificationSettingsProvider.notifier)
                                   .setEnabled(value);
-                              if (mounted) {
-                                setState(() {
-                                  _notificationsEnabled = value;
-                                });
+                              if (!mounted ||
+                                  revision != _notificationSettingRevision) {
+                                return;
                               }
+                              setState(() {
+                                _notificationsEnabled = value;
+                              });
                             } catch (_) {
+                              await _reloadSettingsAfterFailedSave(revision);
                               _showNotificationSaveError();
                             }
                           }
