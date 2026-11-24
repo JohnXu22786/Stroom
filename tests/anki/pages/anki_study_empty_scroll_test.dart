@@ -122,7 +122,8 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       final noCardsLabel = AppLocalizations.of(
         tester.element(find.byType(Scaffold)),
-      )!.ankiNoCardsToStudy;
+      )!
+          .ankiNoCardsToStudy;
       expect(find.text(noCardsLabel), findsNothing);
       expect(actions.getNextCardCalls, 1);
 
@@ -165,12 +166,14 @@ void main() {
 
     final noCardsLabel = AppLocalizations.of(
       tester.element(find.byType(Scaffold)),
-    )!.ankiNoCardsToStudy;
+    )!
+        .ankiNoCardsToStudy;
     expect(find.text(noCardsLabel), findsNothing);
     expect(find.textContaining('database unavailable'), findsOneWidget);
     final retryLabel = AppLocalizations.of(
       tester.element(find.byType(Scaffold)),
-    )!.actionRetry;
+    )!
+        .actionRetry;
     expect(find.text(retryLabel), findsOneWidget);
     await tester.tap(find.text(retryLabel));
     await tester.pumpAndSettle();

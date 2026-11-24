@@ -697,9 +697,8 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
     try {
       final previousCardId = _current?.id;
       final previousCardAnswered = _currentAnswered;
-      final card = await ref
-          .read(ankiActionsProvider)
-          .getNextCard(widget.deckId);
+      final card =
+          await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
       Note? note;
       if (card != null) {
         try {
@@ -856,15 +855,15 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
       body: !_initialLoadComplete
           ? const Center(child: CircularProgressIndicator())
           : _initialLoadError != null
-          ? _buildInitialLoadError(context, cs)
-          : _studying && _current != null
-          ? Stack(
-              children: [
-                _buildContent(context, cs),
-                if (_whiteboardOn) _buildWhiteboard(),
-              ],
-            )
-          : _buildDone(context, cs),
+              ? _buildInitialLoadError(context, cs)
+              : _studying && _current != null
+                  ? Stack(
+                      children: [
+                        _buildContent(context, cs),
+                        if (_whiteboardOn) _buildWhiteboard(),
+                      ],
+                    )
+                  : _buildDone(context, cs),
     );
   }
 
