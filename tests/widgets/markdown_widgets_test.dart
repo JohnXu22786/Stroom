@@ -256,6 +256,17 @@ void main() {
     });
   });
 
+  group('Inline link titles', () {
+    test('tabs and vertical tabs separate a title from a bare destination', () {
+      for (final separator in ['\t', '\v']) {
+        expect(
+          m.markdownToHtml('[link](https://example.com$separator"title")'),
+          '<p><a href="https://example.com" title="title">link</a></p>\n',
+        );
+      }
+    });
+  });
+
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
