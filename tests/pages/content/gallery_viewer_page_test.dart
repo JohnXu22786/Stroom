@@ -353,6 +353,51 @@ void main() {
       );
     });
 
+    testWidgets(
+      'Gallery Save As serializes with descendant folder publication',
+      (tester) async {
+        final editedBytes = await tester.runAsync(_createEnginePng);
+        final source = _makeRecord(
+          id: 'actual_save_as_source',
+          hash: 'original_hash',
+          name: 'trip',
+          format: 'png',
+          folder: '',
+        );
+        await ImageManifest.addRecord(source);
+
+        final results = await Future.wait<Object>([
+          saveEditedGalleryImageRecord(
+            source,
+            editedBytes!,
+            isSaveAs: true,
+          ),
+          createGalleryFolderIfNameAvailable(
+            'trip_edited.png/child',
+            () => ImageManifest.addFolder('trip_edited.png/child'),
+          ),
+        ]);
+        final savedRecord = results[0] as ImageRecord;
+        final folderCreated = results[1] as bool;
+        final records = await ImageManifest.loadRecordsStrict();
+        final folders = await ImageManifest.getAllFolders();
+
+        expect(
+          savedRecord.name,
+          folderCreated ? 'trip_edited (2)' : 'trip_edited',
+        );
+        expect(
+          () => validateUserVisibleExportPaths(
+            files: [
+              for (final record in records) galleryRecordVisiblePath(record),
+            ],
+            folders: folders,
+          ),
+          returnsNormally,
+        );
+      },
+    );
+
     test('folder name reservation does not deadlock folder deletion', () async {
       await ImageManifest.addFolder('parent');
       final enteredCreate = Completer<void>();
