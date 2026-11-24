@@ -101,6 +101,24 @@ bool? applyTemporaryCountdownFallback(
   return null;
 }
 
+@visibleForTesting
+Future<bool> persistConversationFallbackIfRecovered(
+  SharedPreferences prefs,
+  String encodedConversations,
+) async {
+  final existingJson = prefs.getString('conversations');
+  if (existingJson != null) {
+    final hasMatchingBackup = prefs.getKeys().any(
+          (key) =>
+              key.startsWith('conversations.corrupt.') &&
+              prefs.getString(key) == existingJson,
+        );
+    if (!hasMatchingBackup) return false;
+  }
+
+  return prefs.setString('conversations', encodedConversations);
+}
+
 void _copyTemporaryCountdownState(
   Map<String, dynamic> target,
   Map<String, dynamic> source,
@@ -313,7 +331,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             _copyTemporaryCountdownState(convMap, capturedTemporaryState);
           }
           final json = jsonEncode([convMap]);
-          if (!await prefs.setString('conversations', json)) {
+          if (!await persistConversationFallbackIfRecovered(prefs, json)) {
             throw StateError('SharedPreferences Tier B save returned false');
           }
           await AppLogService.error(
