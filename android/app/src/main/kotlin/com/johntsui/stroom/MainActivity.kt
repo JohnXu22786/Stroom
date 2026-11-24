@@ -1522,10 +1522,59 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result
     ) {
         try {
-            // 使用 Environment 获取外部存储的可用空间
-            val stat = Environment.getExternalStorageDirectory()
-            val freeBytes = stat?.freeSpace ?: -1L
-            result.success(freeBytes)
+            val treeUri = Uri.parse(uriStr)
+            val authority = treeUri.authority
+            if (!DocumentsContract.isTreeUri(treeUri) || authority.isNullOrBlank()) {
+                result.success(-1L)
+                return
+            }
+
+            val documentPath =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    DocumentsContract.findDocumentPath(contentResolver, treeUri)
+                } else {
+                    null
+                }
+            val providerRootDocumentId = documentPath?.path?.firstOrNull()
+            if (providerRootDocumentId.isNullOrBlank()) {
+                result.success(-1L)
+                return
+            }
+
+            val projection =
+                arrayOf(
+                    DocumentsContract.Root.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Root.COLUMN_AVAILABLE_BYTES,
+                )
+            val roots = mutableListOf<SafRootAvailableSpace.Root>()
+            contentResolver.query(
+                DocumentsContract.buildRootsUri(authority),
+                projection,
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                val documentIdColumn =
+                    cursor.getColumnIndex(DocumentsContract.Root.COLUMN_DOCUMENT_ID)
+                val availableBytesColumn =
+                    cursor.getColumnIndex(DocumentsContract.Root.COLUMN_AVAILABLE_BYTES)
+                if (documentIdColumn >= 0 && availableBytesColumn >= 0) {
+                    while (cursor.moveToNext()) {
+                        roots.add(
+                            SafRootAvailableSpace.Root(
+                                documentId = cursor.getString(documentIdColumn),
+                                availableBytes =
+                                    if (cursor.isNull(availableBytesColumn)) {
+                                        -1L
+                                    } else {
+                                        cursor.getLong(availableBytesColumn)
+                                    },
+                            ),
+                        )
+                    }
+                }
+            }
+            result.success(SafRootAvailableSpace.select(providerRootDocumentId, roots))
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 获取可用空间失败", e)
             result.success(-1L)
