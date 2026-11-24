@@ -24,16 +24,16 @@ const _cookiesScrolledCapture =
     '../../docs/ui-constrained-text-qa/vertical-browser-dialog-body/browser-clear-cookies-de-DE-320x320-scale2-light-scrolled.png';
 
 Widget _app(Widget home, {double textScale = 2}) => MaterialApp(
-  locale: const Locale('de', 'DE'),
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  builder: (context, child) => MediaQuery(
-    data: MediaQuery.of(context)
-        .copyWith(textScaler: TextScaler.linear(textScale)),
-    child: RepaintBoundary(key: _captureKey, child: child!),
-  ),
-  home: home,
-);
+      locale: const Locale('de', 'DE'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: RepaintBoundary(key: _captureKey, child: child!),
+      ),
+      home: home,
+    );
 
 void _useViewport(WidgetTester tester, Size size) {
   tester.view.devicePixelRatio = 1;
@@ -117,7 +117,8 @@ void main() {
       final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
       await (FontLoader(
         family,
-      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
     }
   });
 
