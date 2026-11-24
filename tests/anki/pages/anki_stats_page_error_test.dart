@@ -11,34 +11,35 @@ import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 Widget _statsPageWithError(Object error) => ProviderScope(
-  overrides: [ankiDatabaseProvider.overrideWith((_) async => throw error)],
-  child: MaterialApp(
-    locale: const Locale('en'),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: const AnkiStatsPage(),
-  ),
-);
+      overrides: [ankiDatabaseProvider.overrideWith((_) async => throw error)],
+      child: MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const AnkiStatsPage(),
+      ),
+    );
 
 Widget _statsPageWithQueryError(
   Object error, {
   bool pendingRevlogCount = false,
-}) => ProviderScope(
-  overrides: [
-    ankiDatabaseProvider.overrideWith(
-      (_) async => _QueryFailingAnkiDatabase(
-        error,
-        pendingRevlogCount: pendingRevlogCount,
+}) =>
+    ProviderScope(
+      overrides: [
+        ankiDatabaseProvider.overrideWith(
+          (_) async => _QueryFailingAnkiDatabase(
+            error,
+            pendingRevlogCount: pendingRevlogCount,
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const AnkiStatsPage(),
       ),
-    ),
-  ],
-  child: MaterialApp(
-    locale: const Locale('en'),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: const AnkiStatsPage(),
-  ),
-);
+    );
 
 class _QueryFailingAnkiDatabase extends AnkiDatabase {
   _QueryFailingAnkiDatabase(this.error, {this.pendingRevlogCount = false});
@@ -47,9 +48,8 @@ class _QueryFailingAnkiDatabase extends AnkiDatabase {
 
   final Object error;
   late final CardDao _cards = _QueryFailingCardDao(error);
-  late final RevlogDao _revlog = pendingRevlogCount
-      ? _PendingRevlogDao()
-      : _StubRevlogDao();
+  late final RevlogDao _revlog =
+      pendingRevlogCount ? _PendingRevlogDao() : _StubRevlogDao();
 
   @override
   CardDao get cards => _cards;
