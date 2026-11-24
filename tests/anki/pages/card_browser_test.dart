@@ -12,6 +12,7 @@ import 'package:stroom/anki/database/note_dao.dart';
 import 'package:stroom/anki/models/card.dart' as anki;
 import 'package:stroom/anki/models/note.dart';
 import 'package:stroom/anki/pages/card_browser.dart';
+import 'package:stroom/anki/providers/anki_actions.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
@@ -38,6 +39,40 @@ class _StaticCardDao implements CardDao {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _MutableCardDao implements CardDao {
+  List<anki.Card> cards;
+  int queries = 0;
+  _MutableCardDao(this.cards);
+
+  @override
+  Future<List<anki.Card>> all() async {
+    queries++;
+    return cards;
+  }
+
+  @override
+  Future<List<anki.Card>> listByDeck(int deckId) async {
+    queries++;
+    return cards;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DelayedRemoveNoteActions extends AnkiActions {
+  final Completer<void> deletion = Completer<void>();
+  final VoidCallback onDeleted;
+
+  _DelayedRemoveNoteActions(super.ref, this.onDeleted);
+
+  @override
+  Future<void> removeNote(int nid) async {
+    await deletion.future;
+    onDeleted();
+  }
 }
 
 class _FailingCardDao implements CardDao {
@@ -179,6 +214,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('reloads cards only after note deletion completes', (
+    tester,
+  ) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    final cardDao = _MutableCardDao([card]);
+    late _DelayedRemoveNoteActions actions;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(AsyncData(cardDao)),
+          ankiNoteDaoProvider.overrideWithValue(
+            AsyncData(
+              _StaticNoteDao(Note(id: 1, notetype_id: 1, fields: ['Front'])),
+            ),
+          ),
+          ankiActionsProvider.overrideWith((ref) {
+            actions = _DelayedRemoveNoteActions(ref, () => cardDao.cards = []);
+            return actions;
+          }),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ListTile), findsOneWidget);
+    expect(cardDao.queries, 1);
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+
+    expect(cardDao.queries, 1);
+    expect(find.byType(ListTile), findsOneWidget);
+
+    actions.deletion.complete();
+    await tester.pumpAndSettle();
+
+    expect(cardDao.queries, 2);
+    expect(find.byType(ListTile), findsNothing);
+    expect(find.text('No cards'), findsOneWidget);
   });
 
   testWidgets('waits for the note DAO before rendering card content', (

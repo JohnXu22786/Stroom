@@ -173,11 +173,12 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                                     trailing: IconButton(
                                       icon: Icon(Icons.delete_outline,
                                           color: cs.error),
-                                      onPressed: () {
-                                        ref
+                                      onPressed: () async {
+                                        await ref
                                             .read(ankiActionsProvider)
                                             .removeNote(card.note_id);
-                                        _load();
+                                        if (!mounted) return;
+                                        await _load();
                                       },
                                     ),
                                   );
