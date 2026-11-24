@@ -49,9 +49,8 @@ class MPDParser {
     final mpd = document.firstWhereOrNull((node) => _isDash(node, 'MPD'));
     final root = mpd ?? _MpdElement('MPD');
     final mpdBase = _applyBaseUrl(root, baseUrl);
-    final periods = root.children
-        .where((node) => _isDash(node, 'Period'))
-        .toList();
+    final periods =
+        root.children.where((node) => _isDash(node, 'Period')).toList();
     final totalDuration = _parseIsoDuration(
       root.attributes['mediaPresentationDuration'],
     );
@@ -160,8 +159,7 @@ class MPDParser {
       if (template == null) continue;
       if (identical(element, representation)) hasRepresentationTemplate = true;
       templateAttributes.addAll(template.attributes);
-      timeline =
-          template.children.firstWhereOrNull(
+      timeline = template.children.firstWhereOrNull(
             (node) => _isDash(node, 'SegmentTimeline'),
           ) ??
           timeline;
@@ -206,9 +204,8 @@ class MPDParser {
     if (mediaTemplate == null) return result;
 
     if (timeline != null) {
-      final sElements = timeline.children
-          .where((node) => _isDash(node, 'S'))
-          .toList();
+      final sElements =
+          timeline.children.where((node) => _isDash(node, 'S')).toList();
       final timelineEntries = <({int startTime, int duration, int count})>[];
       var timelineSegmentCount = BigInt.zero;
       var currentTime = 0;
@@ -362,9 +359,8 @@ class MPDParser {
     int maxSegments,
   ) {
     final result = <({String url, double duration})>[];
-    final segments = list.children
-        .where((node) => _isDash(node, 'SegmentURL'))
-        .toList();
+    final segments =
+        list.children.where((node) => _isDash(node, 'SegmentURL')).toList();
     if (segments.length > maxSegments) {
       throw FormatException(
         'DASH SegmentList exceeds the $maxSegments segment limit',
@@ -423,9 +419,8 @@ class MPDParser {
               replacement = token;
               break;
             }
-            final outputWidth = width > valueString.length
-                ? width
-                : valueString.length;
+            final outputWidth =
+                width > valueString.length ? width : valueString.length;
             replacement = valueString.padLeft(outputWidth, '0');
             return replacement;
           default:
@@ -489,9 +484,8 @@ class MPDParser {
       offset = tagEnd + 1;
       if (tag.startsWith('<!')) continue;
       if (tag.startsWith('</')) {
-        final closingName = RegExp(r'^</\s*([^\s>]+)')
-            .firstMatch(tag)
-            ?.group(1);
+        final closingName =
+            RegExp(r'^</\s*([^\s>]+)').firstMatch(tag)?.group(1);
         if (closingName != null) {
           while (stack.isNotEmpty) {
             final closed = stack.removeLast();
@@ -523,9 +517,8 @@ class MPDParser {
       }
       final colon = qualifiedName.indexOf(':');
       final prefix = colon < 0 ? null : qualifiedName.substring(0, colon);
-      final localName = colon < 0
-          ? qualifiedName
-          : qualifiedName.substring(colon + 1);
+      final localName =
+          colon < 0 ? qualifiedName : qualifiedName.substring(colon + 1);
       final namespaceUri = prefix == null
           ? namespaces['']
           : namespaces[prefix] ?? '__unbound_namespace_prefix__';
@@ -780,14 +773,14 @@ class _Rational implements Comparable<_Rational> {
   bool get isPositive => numerator > BigInt.zero;
 
   _Rational operator +(_Rational other) => _Rational(
-    numerator * other.denominator + other.numerator * denominator,
-    denominator * other.denominator,
-  );
+        numerator * other.denominator + other.numerator * denominator,
+        denominator * other.denominator,
+      );
 
   _Rational operator -(_Rational other) => _Rational(
-    numerator * other.denominator - other.numerator * denominator,
-    denominator * other.denominator,
-  );
+        numerator * other.denominator - other.numerator * denominator,
+        denominator * other.denominator,
+      );
 
   _Rational operator *(_Rational other) =>
       _Rational(numerator * other.numerator, denominator * other.denominator);
