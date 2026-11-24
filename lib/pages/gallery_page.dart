@@ -94,14 +94,15 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     List<ImageRecord> records,
     Set<String> usedInBatch,
     Iterable<String> existingFolders,
-  ) => uniqueGalleryVisibleName(
-    records: records,
-    folder: folder,
-    baseName: baseName,
-    format: format,
-    existingFolders: existingFolders,
-    reservedFileNames: usedInBatch,
-  );
+  ) =>
+      uniqueGalleryVisibleName(
+        records: records,
+        folder: folder,
+        baseName: baseName,
+        format: format,
+        existingFolders: existingFolders,
+        reservedFileNames: usedInBatch,
+      );
 
   // ====================================================================
   // Image preview (full-screen gallery viewer)

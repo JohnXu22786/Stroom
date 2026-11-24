@@ -24,13 +24,14 @@ final ContentHashSaveLock _galleryVisibleNameLocks = ContentHashSaveLock();
 Future<T> withGalleryVisibleNameLock<T>(
   String folder,
   Future<T> Function() action,
-) => ImageManifest.withFolderMutationLock(
-  folder,
-  () => _galleryVisibleNameLocks.withLock(
-    'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
-    action,
-  ),
-);
+) =>
+    ImageManifest.withFolderMutationLock(
+      folder,
+      () => _galleryVisibleNameLocks.withLock(
+        'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
+        action,
+      ),
+    );
 
 /// Finds a free Gallery filename, preserving [baseName] when available.
 String uniqueGalleryVisibleName({
@@ -89,13 +90,14 @@ String uniqueGallerySaveAsName({
   required String sourceName,
   required String format,
   Iterable<String> existingFolders = const [],
-}) => uniqueGalleryVisibleName(
-  records: records,
-  folder: folder,
-  baseName: '${sourceName}_edited',
-  format: format,
-  existingFolders: existingFolders,
-);
+}) =>
+    uniqueGalleryVisibleName(
+      records: records,
+      folder: folder,
+      baseName: '${sourceName}_edited',
+      format: format,
+      existingFolders: existingFolders,
+    );
 
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
@@ -336,72 +338,74 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       final newFileName = '$newHash.${file.format}';
       late ImageRecord newRecord;
       Future<void> save() => ImageManifest.withSaveLocks(
-        [newHash, file.hash],
-        () => publishStorageFiles<void, ImageRecord>(
-          publish: (writeFile) async {
-            await writeFile(newFileName, editedBytes);
-            if (isSaveAs) {
-              final existingRecords = await ImageManifest.loadRecordsStrict();
-              final existingFolders = await ImageManifest.getAllFolders();
-              newRecord = ImageRecord(
-                name: uniqueGallerySaveAsName(
-                  records: existingRecords,
-                  folder: file.folder,
-                  sourceName: file.name,
-                  format: file.format,
-                  existingFolders: existingFolders,
-                ),
-                hash: newHash,
-                format: file.format,
-                createdAt: DateTime.now(),
-                size: editedBytes.length,
-                folder: file.folder,
-              );
-              await ImageManifest.addRecord(newRecord);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      AppLocalizations.of(context)!.imageViewerImageSavedAsCopy,
+            [newHash, file.hash],
+            () => publishStorageFiles<void, ImageRecord>(
+              publish: (writeFile) async {
+                await writeFile(newFileName, editedBytes);
+                if (isSaveAs) {
+                  final existingRecords =
+                      await ImageManifest.loadRecordsStrict();
+                  final existingFolders = await ImageManifest.getAllFolders();
+                  newRecord = ImageRecord(
+                    name: uniqueGallerySaveAsName(
+                      records: existingRecords,
+                      folder: file.folder,
+                      sourceName: file.name,
+                      format: file.format,
+                      existingFolders: existingFolders,
                     ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            } else {
-              newRecord = ImageRecord(
-                name: file.name,
-                hash: newHash,
-                format: file.format,
-                createdAt: file.createdAt,
-                size: editedBytes.length,
-                folder: file.folder,
-              );
-              await ImageManifest.addRecord(newRecord);
-              await ImageManifest.deleteRecord(file.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      AppLocalizations.of(context)!.imageViewerImageUpdated,
-                    ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            }
-          },
-          loadRecords: ImageManifest.loadRecordsStrict,
-          isReferenced: (record, name) =>
-              record.hash == newHash &&
-              (name == record.storageFileName ||
-                  name == imageThumbFileName(record.hash)),
-          writeFile: ImageManifest.writeFile,
-          readFile: ImageManifest.readFile,
-          fileExists: ImageManifest.fileExists,
-          deleteFile: ImageManifest.deleteFile,
-        ),
-      );
+                    hash: newHash,
+                    format: file.format,
+                    createdAt: DateTime.now(),
+                    size: editedBytes.length,
+                    folder: file.folder,
+                  );
+                  await ImageManifest.addRecord(newRecord);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          AppLocalizations.of(context)!
+                              .imageViewerImageSavedAsCopy,
+                        ),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } else {
+                  newRecord = ImageRecord(
+                    name: file.name,
+                    hash: newHash,
+                    format: file.format,
+                    createdAt: file.createdAt,
+                    size: editedBytes.length,
+                    folder: file.folder,
+                  );
+                  await ImageManifest.addRecord(newRecord);
+                  await ImageManifest.deleteRecord(file.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          AppLocalizations.of(context)!.imageViewerImageUpdated,
+                        ),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+              loadRecords: ImageManifest.loadRecordsStrict,
+              isReferenced: (record, name) =>
+                  record.hash == newHash &&
+                  (name == record.storageFileName ||
+                      name == imageThumbFileName(record.hash)),
+              writeFile: ImageManifest.writeFile,
+              readFile: ImageManifest.readFile,
+              fileExists: ImageManifest.fileExists,
+              deleteFile: ImageManifest.deleteFile,
+            ),
+          );
       if (isSaveAs) {
         await withGalleryVisibleNameLock(file.folder, save);
       } else {

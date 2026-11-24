@@ -146,31 +146,33 @@ void main() {
 
         final importAndSaveRecords = [original];
         Future<String> saveAsName() => withGalleryVisibleNameLock('', () async {
-          final name = uniqueGallerySaveAsName(
-            records: importAndSaveRecords,
-            folder: '',
-            sourceName: 'trip',
-            format: 'png',
-          );
-          await Future<void>.delayed(Duration.zero);
-          importAndSaveRecords.add(
-            _makeRecord(id: 'save_as', name: name, format: 'png', folder: ''),
-          );
-          return name;
-        });
+              final name = uniqueGallerySaveAsName(
+                records: importAndSaveRecords,
+                folder: '',
+                sourceName: 'trip',
+                format: 'png',
+              );
+              await Future<void>.delayed(Duration.zero);
+              importAndSaveRecords.add(
+                _makeRecord(
+                    id: 'save_as', name: name, format: 'png', folder: ''),
+              );
+              return name;
+            });
         Future<String> importName() => withGalleryVisibleNameLock('', () async {
-          final name = uniqueGalleryVisibleName(
-            records: importAndSaveRecords,
-            folder: '',
-            baseName: 'trip_edited',
-            format: 'png',
-          );
-          await Future<void>.delayed(Duration.zero);
-          importAndSaveRecords.add(
-            _makeRecord(id: 'import', name: name, format: 'png', folder: ''),
-          );
-          return name;
-        });
+              final name = uniqueGalleryVisibleName(
+                records: importAndSaveRecords,
+                folder: '',
+                baseName: 'trip_edited',
+                format: 'png',
+              );
+              await Future<void>.delayed(Duration.zero);
+              importAndSaveRecords.add(
+                _makeRecord(
+                    id: 'import', name: name, format: 'png', folder: ''),
+              );
+              return name;
+            });
         final importAndSaveNames = await Future.wait([
           saveAsName(),
           importName(),
