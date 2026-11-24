@@ -27,16 +27,33 @@ Future<T> withGalleryVisibleNameLock<T>(
 ) =>
     withGalleryVisibleNameLocks([folder], action);
 
+/// Holds the folder publication lock before callers acquire content-hash locks.
+Future<T> withGalleryVisibleNameAndFolderReadLock<T>(
+  String folder,
+  Future<T> Function() action,
+) =>
+    withGalleryVisibleNameLock(
+      folder,
+      () => ImageManifest.withFolderReadLock(folder, action),
+    );
+
+Iterable<String> _galleryVisibleNameLockKeys(String folder) sync* {
+  final normalized = userVisibleExportPathComparisonKey(folder);
+  yield 'gallery-visible-name:';
+  var current = '';
+  for (final part in normalized.split('/').where((part) => part.isNotEmpty)) {
+    current = current.isEmpty ? part : '$current/$part';
+    yield 'gallery-visible-name:$current';
+  }
+}
+
 /// Serializes Gallery path mutations across every folder they can affect.
 Future<T> withGalleryVisibleNameLocks<T>(
   Iterable<String> folders,
   Future<T> Function() action,
 ) =>
     _galleryVisibleNameLocks.withLocks(
-      folders.map(
-        (folder) =>
-            'gallery-visible-name:${userVisibleExportPathComparisonKey(folder)}',
-      ),
+      folders.expand(_galleryVisibleNameLockKeys),
       action,
     );
 
@@ -482,7 +499,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
               deleteFile: ImageManifest.deleteFile,
             ),
           );
-      await withGalleryVisibleNameLock(file.folder, save);
+      await withGalleryVisibleNameAndFolderReadLock(file.folder, save);
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.

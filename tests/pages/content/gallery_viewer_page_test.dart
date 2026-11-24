@@ -304,6 +304,55 @@ void main() {
       );
     });
 
+    test('root files serialize with descendant folder creation', () async {
+      Future<String> saveRootFile() => withGalleryVisibleNameLock('', () async {
+            final records = await ImageManifest.loadRecordsStrict();
+            final folders = await ImageManifest.getAllFolders();
+            final name = uniqueGalleryVisibleName(
+              records: records,
+              folder: '',
+              baseName: 'photo',
+              format: 'png',
+              existingFolders: folders,
+            );
+            await Future<void>.delayed(Duration.zero);
+            await ImageManifest.addRecord(
+              _makeRecord(
+                id: 'root_file',
+                name: name,
+                format: 'png',
+                folder: '',
+              ),
+            );
+            return name;
+          });
+      Future<bool> createDescendantFolder() =>
+          createGalleryFolderIfNameAvailable(
+            'photo.png/child',
+            () => ImageManifest.addFolder('photo.png/child'),
+          );
+
+      final outcomes = await Future.wait<Object>([
+        saveRootFile(),
+        createDescendantFolder(),
+      ]);
+      final savedName = outcomes[0] as String;
+      final folderCreated = outcomes[1] as bool;
+      final records = await ImageManifest.loadRecordsStrict();
+      final folders = await ImageManifest.getAllFolders();
+
+      expect(savedName, folderCreated ? 'photo (2)' : 'photo');
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: [
+            for (final record in records) galleryRecordVisiblePath(record)
+          ],
+          folders: folders,
+        ),
+        returnsNormally,
+      );
+    });
+
     test('folder name reservation does not deadlock folder deletion', () async {
       await ImageManifest.addFolder('parent');
       final enteredCreate = Completer<void>();
@@ -328,6 +377,34 @@ void main() {
       for (final folder in (await ImageManifest.getAllFolders()).toList()) {
         await ImageManifest.removeFolder(folder);
       }
+    });
+
+    test('Save As acquires folder read locks before content hash locks',
+        () async {
+      await ImageManifest.addFolder('photos');
+      await ImageManifest.addRecord(
+        _makeRecord(
+          id: 'delete_after_save',
+          hash: 'shared_hash',
+          name: 'photo',
+          folder: 'photos',
+        ),
+      );
+      final saveLocksAcquired = Completer<void>();
+      final releaseSave = Completer<void>();
+      final save = withGalleryVisibleNameAndFolderReadLock('photos', () async {
+        await ImageManifest.withSaveLock('shared_hash', () async {
+          saveLocksAcquired.complete();
+          await releaseSave.future;
+        });
+      });
+
+      await saveLocksAcquired.future;
+      final delete = ImageManifest.removeFolder('photos');
+      await Future<void>.delayed(Duration.zero);
+      releaseSave.complete();
+
+      await Future.wait([save, delete]).timeout(const Duration(seconds: 2));
     });
 
     test('record rename shares the Save As visible-name reservation', () async {
