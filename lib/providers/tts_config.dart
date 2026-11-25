@@ -298,9 +298,13 @@ final customTrimPresetsProvider =
 class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
   CustomTrimPresetsNotifier() : super([]);
 
+  static const _storageKey = 'custom_trim_presets';
+
   final List<List<TrimPreset> Function(List<TrimPreset>)> _pendingMutations =
       [];
   Future<void>? _loadFuture;
+  Future<bool>? _corruptPresetBackupFuture;
+  String? _corruptPresetsAwaitingBackup;
   bool _collectingPendingMutations = false;
 
   Future<void> load() async {
@@ -322,11 +326,13 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
   }
 
   Future<void> _loadSavedPresets() async {
+    String? rawPresets;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('custom_trim_presets');
-      if (json != null) {
-        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      rawPresets = prefs.getString(_storageKey);
+      if (rawPresets != null) {
+        final list =
+            (jsonDecode(rawPresets) as List).cast<Map<String, dynamic>>();
         state = _applyPendingMutations(
           list.map((m) => TrimPreset.fromMap(m)).toList(),
         );
@@ -334,6 +340,9 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
       }
     } catch (e) {
       debugPrint('Failed to load custom trim presets: $e');
+      if (rawPresets != null && rawPresets.isNotEmpty) {
+        _corruptPresetsAwaitingBackup = rawPresets;
+      }
     }
     state = _applyPendingMutations([]);
   }
@@ -354,11 +363,50 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
         await currentLoad;
       }
       final prefs = await SharedPreferences.getInstance();
+      if (_corruptPresetsAwaitingBackup != null &&
+          !await _backupCorruptPresets(prefs)) {
+        return;
+      }
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
-      await prefs.setString('custom_trim_presets', json);
+      await prefs.setString(_storageKey, json);
     } catch (e) {
       debugPrint('Failed to persist custom trim presets: $e');
     }
+  }
+
+  Future<bool> _backupCorruptPresets(SharedPreferences prefs) {
+    final currentBackup = _corruptPresetBackupFuture;
+    if (currentBackup != null) {
+      return currentBackup;
+    }
+
+    final corruptPresets = _corruptPresetsAwaitingBackup!;
+    final completer = Completer<bool>();
+    _corruptPresetBackupFuture = completer.future;
+    () async {
+      try {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        var backupKey = '$_storageKey.corrupt.$timestamp';
+        var suffix = 1;
+        while (prefs.containsKey(backupKey)) {
+          backupKey = '$_storageKey.corrupt.$timestamp.$suffix';
+          suffix++;
+        }
+        final saved = await prefs.setString(backupKey, corruptPresets);
+        if (saved) {
+          _corruptPresetsAwaitingBackup = null;
+        } else {
+          debugPrint('Failed to save corrupt trim presets backup $backupKey');
+        }
+        completer.complete(saved);
+      } catch (e) {
+        debugPrint('Failed to back up corrupt trim presets: $e');
+        completer.complete(false);
+      } finally {
+        _corruptPresetBackupFuture = null;
+      }
+    }();
+    return completer.future;
   }
 
   /// 添加一个自定义裁切预设
