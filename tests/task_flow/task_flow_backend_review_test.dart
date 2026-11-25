@@ -2087,7 +2087,8 @@ void main() {
         modelConfig: current.entries.single.configs.single.models.single);
     await synthesisStarted.future;
     expect(tasks.tasksForTest.single.providerConfig.key, 'new-key');
-    expect(tasks.tasksForTest.single.providerConfig.host, 'https://new.invalid');
+    expect(
+        tasks.tasksForTest.single.providerConfig.host, 'https://new.invalid');
     expect(tasks.tasksForTest.single.modelConfig.speedMax, 9);
     expect(tasks.tasksForTest.single.status, TaskStatus.running);
     expect(tasks.tasksForTest.single.text, 'input');
@@ -2098,7 +2099,9 @@ void main() {
     finishSynthesis.complete(Uint8List(0));
     final persistedTasks = File('${directory.path}/synthesis/tasks.json');
     await _waitFor(
-      () => persistedTasks.existsSync() && persistedTasks.readAsStringSync() == '[]',
+      () =>
+          persistedTasks.existsSync() &&
+          persistedTasks.readAsStringSync() == '[]',
       'resumed synthesis task removal persistence',
     );
   });
