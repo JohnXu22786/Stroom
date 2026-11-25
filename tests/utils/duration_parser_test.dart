@@ -39,6 +39,16 @@ void main() {
       expect(result.seconds, 30);
     });
 
+    test('four numbers are rejected instead of dropping the fourth', () {
+      expect(parseSmartDuration('1:2:3:4'), isNull);
+      expect(
+          parseSmartDuration('1:2:3:999999999999999999999999999999'), isNull);
+    });
+
+    test('five numbers are rejected instead of truncating the input', () {
+      expect(parseSmartDuration('1:2:3:4:5'), isNull);
+    });
+
     test('empty string returns null', () {
       expect(parseSmartDuration(''), isNull);
       expect(parseSmartDuration('   '), isNull);
