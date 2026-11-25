@@ -100,7 +100,8 @@ void main() {
     test('answerLearning Again resets to first step', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
-      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 0); // Again
+      c.answerLearning(0,
+          dayOrdinal: 10, steps: [1, 10], answerIdx: 0); // Again
       expect(c.remaining_steps, equals(2)); // back to full steps
       expect(c.due, equals(1 * 60));
     });
@@ -108,11 +109,13 @@ void main() {
     test('answerLearning Good graduates after last step', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
-      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → step 2
+      c.answerLearning(0,
+          dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → step 2
       expect(
           c.queue, equals(CardQueue.learn)); // still learning (one step left)
 
-      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → graduate
+      c.answerLearning(0,
+          dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → graduate
       expect(c.queue, equals(CardQueue.review));
       expect(c.ctype, equals(CardType.review));
       expect(c.interval, equals(1)); // graduating interval
