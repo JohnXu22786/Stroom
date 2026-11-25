@@ -126,12 +126,20 @@ class _ImageThumbnail extends StatefulWidget {
 }
 
 class _ImageThumbnailState extends State<_ImageThumbnail> {
-  late final Future<Uint8List?> _loadFuture;
+  late Future<Uint8List?> _loadFuture;
 
   @override
   void initState() {
     super.initState();
     _loadFuture = AttachmentStorage.readFile(widget.storagePath);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ImageThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.storagePath != widget.storagePath) {
+      _loadFuture = AttachmentStorage.readFile(widget.storagePath);
+    }
   }
 
   @override
