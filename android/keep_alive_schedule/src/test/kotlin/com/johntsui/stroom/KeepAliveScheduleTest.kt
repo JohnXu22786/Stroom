@@ -8,6 +8,51 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
+    fun synchronousStartFailureIncrementsFailuresWithoutLeavingAStartPending() {
+        val state = keepAliveStartStateAfterAlarm(
+            serviceRunning = false,
+            startWasPending = false,
+            startRequestFailed = true,
+            failures = 0,
+            maxFailures = 3,
+        )
+
+        assertEquals(1, state.failures)
+        assertFalse(state.startPending)
+        assertEquals(KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS, state.nextIntervalMs)
+    }
+
+    @Test
+    fun observingServiceRunningClearsFailuresAndPendingStart() {
+        val state = keepAliveStartStateAfterAlarm(
+            serviceRunning = true,
+            startWasPending = true,
+            startRequestFailed = false,
+            failures = 3,
+            maxFailures = 3,
+        )
+
+        assertEquals(0, state.failures)
+        assertFalse(state.startPending)
+        assertEquals(KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS, state.nextIntervalMs)
+    }
+
+    @Test
+    fun unconfirmedStartAtFailureThresholdSelectsBackoff() {
+        val state = keepAliveStartStateAfterAlarm(
+            serviceRunning = false,
+            startWasPending = true,
+            startRequestFailed = false,
+            failures = 2,
+            maxFailures = 3,
+        )
+
+        assertEquals(3, state.failures)
+        assertTrue(state.startPending)
+        assertEquals(KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS, state.nextIntervalMs)
+    }
+
+    @Test
     fun exactAndInexactWatchdogsAndRevocationBackupUseDistinctPendingIntentIdentity() {
         assertNotEquals(KEEP_ALIVE_ALARM_ACTION, KEEP_ALIVE_REVOCATION_BACKUP_ACTION)
         assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
