@@ -5,6 +5,13 @@ import '../../proxy_rich_text.dart';
 import '../../span_node.dart';
 import '../../widget_visitor.dart';
 
+Alignment? _tableCellAlignment(String? align) {
+  if (align?.contains('left') ?? false) return Alignment.centerLeft;
+  if (align?.contains('center') ?? false) return Alignment.center;
+  if (align?.contains('right') ?? false) return Alignment.centerRight;
+  return null;
+}
+
 class TableConfig implements ContainerConfig {
   final Map<int, TableColumnWidth>? columnWidths;
   final TableColumnWidth? defaultColumnWidth;
@@ -94,15 +101,19 @@ class THeadNode extends ElementNode {
         return TableRow(
             decoration: config.table.headerRowDecoration,
             children: List.generate(trChild.children.length, (index) {
-              final currentTh = trChild.children[index];
-              return Center(
-                child: Padding(
-                    padding: config.table.headPadding,
-                    child: ProxyRichText(
-                      currentTh.build(),
-                      richTextBuilder: visitor.richTextBuilder,
-                    )),
+              final currentTh = trChild.children[index] as ThNode;
+              final cell = Padding(
+                padding: config.table.headPadding,
+                child: ProxyRichText(
+                  currentTh.build(),
+                  richTextBuilder: visitor.richTextBuilder,
+                ),
               );
+              final alignment =
+                  _tableCellAlignment(currentTh.attribute['align']);
+              return alignment == null
+                  ? Center(child: cell)
+                  : Align(alignment: alignment, child: cell);
             }));
       });
 
@@ -153,6 +164,10 @@ class TrNode extends ElementNode {
 }
 
 class ThNode extends ElementNode {
+  final Map<String, String> attribute;
+
+  ThNode(this.attribute);
+
   @override
   TextStyle? get style => parentStyle;
 }
@@ -165,28 +180,12 @@ class TdNode extends ElementNode {
 
   @override
   InlineSpan build() {
-    final align = attribute['align'] ?? '';
+    final alignment = _tableCellAlignment(attribute['align']);
     InlineSpan result = childrenSpan;
-    if (align.contains('left')) {
+    if (alignment != null) {
       result = WidgetSpan(
           child: Align(
-              alignment: Alignment.centerLeft,
-              child: ProxyRichText(
-                childrenSpan,
-                richTextBuilder: visitor.richTextBuilder,
-              )));
-    } else if (align.contains('center')) {
-      result = WidgetSpan(
-          child: Align(
-              alignment: Alignment.center,
-              child: ProxyRichText(
-                childrenSpan,
-                richTextBuilder: visitor.richTextBuilder,
-              )));
-    } else if (align.contains('right')) {
-      result = WidgetSpan(
-          child: Align(
-              alignment: Alignment.centerRight,
+              alignment: alignment,
               child: ProxyRichText(
                 childrenSpan,
                 richTextBuilder: visitor.richTextBuilder,
