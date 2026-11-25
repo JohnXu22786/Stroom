@@ -29,9 +29,9 @@ class ImageSyntax extends LinkSyntax {
       // An image description may contain links. Fetch text from the alt
       // attribute if this nested link is an image.
       if (node is Element && node.tag == 'img') {
-        return node.attributes['alt'];
+        return node.attributes['alt'] ?? '';
       }
-      return node.textContent;
+      return decodeHtmlCharacters(node.textContent);
     }).join();
     if (title != null && title.isNotEmpty) {
       element.attributes['title'] = normalizeLinkTitle(title);

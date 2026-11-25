@@ -139,18 +139,14 @@ class HtmlRenderer implements NodeVisitor {
     buffer.write('<${element.tag}');
 
     for (final entry in element.attributes.entries) {
-      buffer.write(
-        ' ${entry.key}="${htmlEscape.convert(decodeHtmlCharacters(entry.value))}"',
-      );
+      buffer.write(' ${entry.key}="${_escapeAttributeValue(entry.value)}"');
     }
 
     final generatedId = element.generatedId;
 
     // attach header anchor ids generated from text
     if (generatedId != null) {
-      buffer.write(
-        ' id="${htmlEscape.convert(decodeHtmlCharacters(uniquifyId(generatedId)))}"',
-      );
+      buffer.write(' id="${_escapeAttributeValue(uniquifyId(generatedId))}"');
     }
 
     _lastVisitedTag = element.tag;
@@ -203,6 +199,9 @@ class HtmlRenderer implements NodeVisitor {
     uniqueIds.add(suffixedId);
     return suffixedId;
   }
+
+  String _escapeAttributeValue(String value) =>
+      escapeHtmlAttribute(value);
 
   /// Filters some particular tags, see:
   /// https://github.github.com/gfm/#disallowed-raw-html-extension-
