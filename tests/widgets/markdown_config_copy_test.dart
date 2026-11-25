@@ -39,17 +39,17 @@ void main() {
       configs: [const PConfig(textStyle: TextStyle(color: Colors.red))],
     );
     Widget build(MarkdownConfig config) => MaterialApp(
-      home: Scaffold(
-        body: MarkdownWidget(
-          data: 'Paragraph',
-          selectable: false,
-          incremental: true,
-          incrementalKey: 'config-copy',
-          fullTextOnInvalidation: () => 'Paragraph',
-          config: config,
-        ),
-      ),
-    );
+          home: Scaffold(
+            body: MarkdownWidget(
+              data: 'Paragraph',
+              selectable: false,
+              incremental: true,
+              incrementalKey: 'config-copy',
+              fullTextOnInvalidation: () => 'Paragraph',
+              config: config,
+            ),
+          ),
+        );
 
     await tester.pumpWidget(build(original));
 
