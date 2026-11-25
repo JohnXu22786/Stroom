@@ -221,6 +221,79 @@ class DelimiterRun implements Delimiter {
     ']',
   );
 
+  /// Unicode 17 punctuation ranges outside the basic multilingual plane.
+  ///
+  /// This uses the Unicode punctuation categories from the CommonMark
+  /// definition, represented as code point ranges because Dart's strings are
+  /// indexed by UTF-16 code units.
+  static const _supplementaryPunctuationRanges = <(int, int)>[
+    (0x10100, 0x10102),
+    (0x1039F, 0x1039F),
+    (0x103D0, 0x103D0),
+    (0x1056F, 0x1056F),
+    (0x10857, 0x10857),
+    (0x1091F, 0x1091F),
+    (0x1093F, 0x1093F),
+    (0x10A50, 0x10A58),
+    (0x10A7F, 0x10A7F),
+    (0x10AF0, 0x10AF6),
+    (0x10B39, 0x10B3F),
+    (0x10B99, 0x10B9C),
+    (0x10D6E, 0x10D6E),
+    (0x10EAD, 0x10EAD),
+    (0x10ED0, 0x10ED0),
+    (0x10F55, 0x10F59),
+    (0x10F86, 0x10F89),
+    (0x11047, 0x1104D),
+    (0x110BB, 0x110BC),
+    (0x110BE, 0x110C1),
+    (0x11140, 0x11143),
+    (0x11174, 0x11175),
+    (0x111C5, 0x111C8),
+    (0x111CD, 0x111CD),
+    (0x111DB, 0x111DB),
+    (0x111DD, 0x111DF),
+    (0x11238, 0x1123D),
+    (0x112A9, 0x112A9),
+    (0x113D4, 0x113D5),
+    (0x113D7, 0x113D8),
+    (0x1144B, 0x1144F),
+    (0x1145A, 0x1145B),
+    (0x1145D, 0x1145D),
+    (0x114C6, 0x114C6),
+    (0x115C1, 0x115D7),
+    (0x11641, 0x11643),
+    (0x11660, 0x1166C),
+    (0x116B9, 0x116B9),
+    (0x1173C, 0x1173E),
+    (0x1183B, 0x1183B),
+    (0x11944, 0x11946),
+    (0x119E2, 0x119E2),
+    (0x11A3F, 0x11A46),
+    (0x11A9A, 0x11A9C),
+    (0x11A9E, 0x11AA2),
+    (0x11B00, 0x11B09),
+    (0x11BE1, 0x11BE1),
+    (0x11C41, 0x11C45),
+    (0x11C70, 0x11C71),
+    (0x11EF7, 0x11EF8),
+    (0x11F43, 0x11F4F),
+    (0x11FFF, 0x11FFF),
+    (0x12470, 0x12474),
+    (0x12FF1, 0x12FF2),
+    (0x16A6E, 0x16A6F),
+    (0x16AF5, 0x16AF5),
+    (0x16B37, 0x16B3B),
+    (0x16B44, 0x16B44),
+    (0x16D6D, 0x16D6F),
+    (0x16E97, 0x16E9A),
+    (0x16FE2, 0x16FE2),
+    (0x1BC9F, 0x1BC9F),
+    (0x1DA87, 0x1DA8B),
+    (0x1E5FF, 0x1E5FF),
+    (0x1E95E, 0x1E95F),
+  ];
+
   /// Unicode whitespace.
   // See https://spec.commonmark.org/0.30/#unicode-whitespace-character.
   // Unicode Zs: https://www.compart.com/en/unicode/category.
@@ -289,20 +362,24 @@ class DelimiterRun implements Delimiter {
       precededByWhitespace = true;
       precededByPunctuation = false;
     } else {
-      final preceding = parser.source.substring(runStart - 1, runStart);
-      precededByWhitespace = unicodeWhitespace.contains(preceding);
-      precededByPunctuation = !precededByWhitespace &&
-          unicodePunctuationPattern.hasMatch(preceding);
+      final preceding = _codePointBefore(parser.source, runStart);
+      precededByWhitespace = unicodeWhitespace.contains(
+        String.fromCharCode(preceding),
+      );
+      precededByPunctuation =
+          !precededByWhitespace && _isUnicodePunctuation(preceding);
     }
 
     if (runEnd == parser.source.length) {
       followedByWhitespace = true;
       followedByPunctuation = false;
     } else {
-      final following = parser.source.substring(runEnd, runEnd + 1);
-      followedByWhitespace = unicodeWhitespace.contains(following);
-      followedByPunctuation = !followedByWhitespace &&
-          unicodePunctuationPattern.hasMatch(following);
+      final following = _codePointAt(parser.source, runEnd);
+      followedByWhitespace = unicodeWhitespace.contains(
+        String.fromCharCode(following),
+      );
+      followedByPunctuation =
+          !followedByWhitespace && _isUnicodePunctuation(following);
     }
 
     // If it is a left-flanking delimiter run, see
@@ -335,6 +412,37 @@ class DelimiterRun implements Delimiter {
       isFollowedByPunctuation: followedByPunctuation,
       allowIntraWord: allowIntraWord,
     );
+  }
+
+  static int _codePointBefore(String text, int offset) {
+    final trailing = text.codeUnitAt(offset - 1);
+    if (trailing >= 0xDC00 && trailing <= 0xDFFF && offset > 1) {
+      final leading = text.codeUnitAt(offset - 2);
+      if (leading >= 0xD800 && leading <= 0xDBFF) {
+        return 0x10000 + ((leading - 0xD800) << 10) + (trailing - 0xDC00);
+      }
+    }
+    return trailing;
+  }
+
+  static int _codePointAt(String text, int offset) {
+    final leading = text.codeUnitAt(offset);
+    if (leading >= 0xD800 && leading <= 0xDBFF && offset + 1 < text.length) {
+      final trailing = text.codeUnitAt(offset + 1);
+      if (trailing >= 0xDC00 && trailing <= 0xDFFF) {
+        return 0x10000 + ((leading - 0xD800) << 10) + (trailing - 0xDC00);
+      }
+    }
+    return leading;
+  }
+
+  static bool _isUnicodePunctuation(int codePoint) {
+    if (codePoint > 0xFFFF) {
+      return _supplementaryPunctuationRanges.any(
+        (range) => codePoint >= range.$1 && codePoint <= range.$2,
+      );
+    }
+    return unicodePunctuationPattern.hasMatch(String.fromCharCode(codePoint));
   }
 
   @override
