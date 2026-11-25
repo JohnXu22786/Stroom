@@ -481,6 +481,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     // 重新套用（模型本身的选择保留，仅不再回退到重试预设）
     _retryModelId = null;
     _retryInstruction = null;
+    for (final param in _modelConfig?.customParams ?? const <CustomParam>[]) {
+      _customParamControllers[param.paramName]?.text = param.defaultValue;
+    }
     _instructionController.clear();
     _textController.clear();
     _titleController.clear();
