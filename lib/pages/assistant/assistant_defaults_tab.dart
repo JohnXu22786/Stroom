@@ -186,17 +186,19 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           placeholderNamesByConfigId: namesByConfigId,
         );
         if (name == null) continue;
-        configuredMcp.add(ToolDefinition(
-          name: name,
-          description: config.models.isNotEmpty
-              ? (config.models[0].typeConfig['description'] as String? ?? '')
-              : '',
-          parameters: const {
-            'type': 'object',
-            'properties': <String, dynamic>{},
-            'required': <String>[],
-          },
-        ));
+        configuredMcp.add(
+          ToolDefinition(
+            name: name,
+            description: config.models.isNotEmpty
+                ? (config.models[0].typeConfig['description'] as String? ?? '')
+                : '',
+            parameters: const {
+              'type': 'object',
+              'properties': <String, dynamic>{},
+              'required': <String>[],
+            },
+          ),
+        );
       }
     }
     for (final t in filterMcpSearchToolDefinitions([
@@ -548,12 +550,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                             n >= ChatService.kToolOutputMaxCharsMin &&
                             n <= ChatService.kToolOutputMaxCharsMax;
                         setState(() {
-                          // 长度 < 3 的输入（如 "1"、"12"）可能是合法值的
-                          // 中间态（合法值至少 3 位，如 "120"），不报错；
-                          // 完整输入越界时就地提示有效范围。
-                          _lengthError = (v.isNotEmpty &&
-                                  !inRange &&
-                                  v.length >= 3)
+                          // 短输入（如 "1"、"12"）仍可继续编辑，但也要
+                          // 明确提示其尚未应用，避免显示值与生效值不一致。
+                          _lengthError = (v.isNotEmpty && !inRange)
                               ? AppLocalizations.of(
                                   context,
                                 )!
