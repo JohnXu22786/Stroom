@@ -57,6 +57,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   Completer<void>? _removalBarrier;
   List<SynthesisTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
+  List<dynamic>? _invalidPersistedTaskRows;
 
   TaskListNotifier(this.ref) : super([]);
 
@@ -708,6 +709,34 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final write = previous.then((_) async {
       try {
         final file = await _tasksFile();
+        final invalidRows = _invalidPersistedTaskRows;
+        if (invalidRows != null && invalidRows.isNotEmpty) {
+          final corruptFile = _corruptTasksFile(file);
+          final recoveredRows = await corruptFile.exists()
+              ? List<dynamic>.of(
+                  jsonDecode(await corruptFile.readAsString()) as List,
+                )
+              : <dynamic>[];
+          final remainingRows = <String, int>{};
+          for (final row in recoveredRows) {
+            final key = jsonEncode(row);
+            remainingRows.update(key, (count) => count + 1, ifAbsent: () => 1);
+          }
+          final mergedRows = List<dynamic>.of(recoveredRows);
+          for (final row in invalidRows) {
+            final key = jsonEncode(row);
+            final count = remainingRows[key] ?? 0;
+            if (count > 0) {
+              remainingRows[key] = count - 1;
+            } else {
+              mergedRows.add(row);
+            }
+          }
+          await AtomicFile.writeString(
+            corruptFile,
+            jsonEncode(mergedRows),
+          );
+        }
         final data = snapshot.map((t) => t.toMap()).toList();
         // 原子写入：直接 writeAsString 中途崩溃会留下半截 JSON，
         // 下次启动整个任务列表解析失败。
@@ -725,14 +754,29 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   Future<List<SynthesisTask>> _loadPersistedTasks() async {
     try {
       final file = await _tasksFile();
-      if (!await file.exists()) return [];
+      if (!await file.exists()) {
+        _invalidPersistedTaskRows = [];
+        return [];
+      }
       final content = await file.readAsString();
-      if (content.isEmpty) return [];
+      if (content.isEmpty) {
+        _invalidPersistedTaskRows = [];
+        return [];
+      }
       final list = jsonDecode(content) as List;
-      return list
-          .map(
-              (m) => SynthesisTask.fromMap(Map<String, dynamic>.from(m as Map)))
-          .toList();
+      final tasks = <SynthesisTask>[];
+      final invalidRows = <dynamic>[];
+      for (final row in list) {
+        try {
+          tasks.add(
+              SynthesisTask.fromMap(Map<String, dynamic>.from(row as Map)));
+        } catch (e) {
+          invalidRows.add(row);
+          debugPrint('[TaskListNotifier] Skipped malformed persisted task: $e');
+        }
+      }
+      _invalidPersistedTaskRows = invalidRows;
+      return tasks;
     } catch (e) {
       debugPrint('[TaskListNotifier] Failed to load persisted tasks: $e');
       return [];
@@ -749,6 +793,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     } catch (_) {}
     return File(p.join(synthDir.path, 'tasks.json'));
   }
+
+  File _corruptTasksFile(File tasksFile) =>
+      File(p.join(tasksFile.parent.path, 'tasks.corrupt.json'));
 
   /// 从持久化恢复所有任务（应用启动时调用）
   Future<void> restoreFromPersistence() async {
