@@ -18,6 +18,7 @@ class ImageSyntax extends LinkSyntax {
     String destination,
     String? title, {
     required List<Node> Function() getChildren,
+    bool encodeHtml = true,
   }) {
     final element = Element.empty('img');
     final children = getChildren();
@@ -29,9 +30,11 @@ class ImageSyntax extends LinkSyntax {
       // An image description may contain links. Fetch text from the alt
       // attribute if this nested link is an image.
       if (node is Element && node.tag == 'img') {
-        return node.attributes['alt'];
+        return node.attributes['alt'] ?? '';
       }
-      return node.textContent;
+      return encodeHtml
+          ? decodeHtmlCharacters(node.textContent)
+          : node.textContent;
     }).join();
     if (title != null && title.isNotEmpty) {
       element.attributes['title'] = normalizeLinkTitle(title);

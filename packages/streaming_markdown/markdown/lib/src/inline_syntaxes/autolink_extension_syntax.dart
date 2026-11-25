@@ -89,10 +89,10 @@ class AutolinkExtensionSyntax extends InlineSyntax {
       consumeLength = _getConsumeLength(match.match);
     }
 
-    var text = match.match.substring(0, consumeLength);
-    text = parser.encodeHtml ? escapeHtml(text) : text;
+    final rawText = match.match.substring(0, consumeLength);
+    final text = parser.encodeHtml ? escapeHtml(rawText) : rawText;
 
-    var destination = text;
+    var destination = rawText;
     if (isEmailLink) {
       destination = 'mailto:$destination';
     } else if (destination[0] == 'w') {

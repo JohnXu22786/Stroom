@@ -115,6 +115,7 @@ class LinkSyntax extends DelimiterSyntax {
     String label,
     Map<String, LinkReference> linkReferences, {
     required List<Node> Function() getChildren,
+    required bool encodeHtml,
   }) {
     final linkReference = linkReferences[normalizeLinkLabel(label)];
     if (linkReference != null) {
@@ -122,6 +123,7 @@ class LinkSyntax extends DelimiterSyntax {
         linkReference.destination,
         linkReference.title,
         getChildren: getChildren,
+        encodeHtml: encodeHtml,
       );
     } else {
       // This link has no reference definition. But we allow users of the
@@ -150,6 +152,7 @@ class LinkSyntax extends DelimiterSyntax {
     String destination,
     String? title, {
     required List<Node> Function() getChildren,
+    bool encodeHtml = true,
   }) {
     final children = getChildren();
     final element = Element('a', children);
@@ -178,6 +181,7 @@ class LinkSyntax extends DelimiterSyntax {
       label,
       parser.document.linkReferences,
       getChildren: getChildren,
+      encodeHtml: parser.encodeHtml,
     );
     if (link != null) {
       return [link];
@@ -197,7 +201,12 @@ class LinkSyntax extends DelimiterSyntax {
     InlineLink link, {
     required List<Node> Function() getChildren,
   }) {
-    return createNode(link.destination, link.title, getChildren: getChildren);
+    return createNode(
+      link.destination,
+      link.title,
+      getChildren: getChildren,
+      encodeHtml: parser.encodeHtml,
+    );
   }
 
   /// Parse a reference link label at the current position.

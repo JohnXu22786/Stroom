@@ -74,15 +74,13 @@ String normalizeLinkDestination(String destination) {
   );
 }
 
-/// Normalizes a link title, including the process of HTML characters decoding
-/// and HTML characters escaping.
+/// Normalizes a link title by decoding HTML character references.
 // See the description of these examples:
 // https://spec.commonmark.org/0.30/#example-505
 // https://spec.commonmark.org/0.30/#example-506
 // https://spec.commonmark.org/0.30/#example-507
 // https://spec.commonmark.org/0.30/#example-508
-String normalizeLinkTitle(String title) =>
-    escapeHtmlAttribute(decodeHtmlCharacters(title));
+String normalizeLinkTitle(String title) => decodeHtmlCharacters(title);
 
 ///  Decodes HTML entity and numeric character references, for example decode
 /// `&#35` to `#`.
