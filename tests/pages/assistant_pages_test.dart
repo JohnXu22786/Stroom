@@ -68,7 +68,111 @@ BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   return localizedBuiltInPrompts(AppLocalizations.of(context)!).first;
 }
 
+Widget _assistantDefaultsTabForLengthTest({
+  int maxToolOutputChars = 5000,
+  ValueChanged<int>? onMaxToolOutputCharsChanged,
+}) =>
+    ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: AssistantDefaultsTab(
+            defaultModelName: null,
+            defaultModelId: null,
+            defaultProviderName: null,
+            defaultToolNames: null,
+            maxToolOutputChars: maxToolOutputChars,
+            enableMaxToolOutputChars: true,
+            onDefaultModelChanged: (_) {},
+            onDefaultToolsChanged: (_) {},
+            onEnableMaxToolOutputCharsChanged: (_) {},
+            onMaxToolOutputCharsChanged:
+                onMaxToolOutputCharsChanged ?? (_) {},
+          ),
+        ),
+      ),
+    );
+
 void main() {
+  testWidgets(
+    'short out-of-range truncation input remains visibly unapplied',
+    (tester) async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      SharedPreferences.setMockInitialValues({});
+      final savedValues = <int>[];
+      await tester.pumpWidget(
+        _assistantDefaultsTabForLengthTest(
+          onMaxToolOutputCharsChanged: savedValues.add,
+        ),
+      );
+      await tester.pump();
+
+      final field = find.byType(TextField);
+      await tester.enterText(field, '12');
+      await tester.pump();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(AssistantDefaultsTab)),
+      )!;
+      expect(
+        find.text(l10n.assistantCharacterRange('100', '100000')),
+        findsOneWidget,
+      );
+      expect(savedValues, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'correcting short invalid truncation input applies the valid value',
+    (tester) async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      SharedPreferences.setMockInitialValues({});
+      final savedValues = <int>[];
+      await tester.pumpWidget(
+        _assistantDefaultsTabForLengthTest(
+          onMaxToolOutputCharsChanged: savedValues.add,
+        ),
+      );
+      await tester.pump();
+
+      final field = find.byType(TextField);
+      await tester.enterText(field, '12');
+      await tester.pump();
+      await tester.enterText(field, '1200');
+      await tester.pump();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(AssistantDefaultsTab)),
+      )!;
+      expect(
+        find.text(l10n.assistantCharacterRange('100', '100000')),
+        findsNothing,
+      );
+      expect(savedValues, [1200]);
+    },
+  );
+
+  testWidgets(
+    'valid truncation input is passed through as the saved value',
+    (tester) async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      SharedPreferences.setMockInitialValues({});
+      var savedValue = 5000;
+      await tester.pumpWidget(
+        _assistantDefaultsTabForLengthTest(
+          onMaxToolOutputCharsChanged: (value) => savedValue = value,
+        ),
+      );
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), '1500');
+      await tester.pump();
+
+      expect(savedValue, 1500);
+    },
+  );
+
   testWidgets('assistant editor labels keep native field editing', (
     tester,
   ) async {
