@@ -24598,4 +24598,52 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   @override
   String get providerResponsesEndpointHelp =>
       'Use a URL de Responses configurada para este provedor, como /v1/responses. O Stroom a envia sem alterações.';
+
+  @override
+  String get assistantSchemaNonEmptyString => 'Non-empty string';
+
+  @override
+  String get assistantSchemaIso8601OptionalString =>
+      'ISO 8601 string, optional';
+
+  @override
+  String get assistantSchemaOptionalObject => 'Optional object';
+
+  @override
+  String get assistantSchemaObjectList => 'Object list';
+
+  @override
+  String get assistantSchemaSameOriginRelativePath =>
+      'Same-origin relative path';
+
+  @override
+  String get assistantSchemaSha256HexString =>
+      '64-character hexadecimal string';
+
+  @override
+  String get assistantSchemaOptionalStringList => 'Optional string list';
+
+  @override
+  String get assistantSchemaPositiveInteger => 'Positive integer';
+
+  @override
+  String get assistantSchemaInteger => 'Integer';
+
+  @override
+  String get assistantSchemaModelConfiguredOnDevice =>
+      'Model configured on this device';
+
+  @override
+  String get assistantSchemaOptionalStringListNoTools =>
+      'Optional string list (no tools currently available)';
+
+  @override
+  String get assistantSchemaOptionalString => 'Optional string';
+
+  @override
+  String get assistantSchemaString => 'String';
+
+  @override
+  String get assistantSchemaCharacterRangeBool =>
+      '100–100000 characters / bool';
 }

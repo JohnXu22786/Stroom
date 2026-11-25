@@ -22977,4 +22977,46 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get providerResponsesEndpointHelp =>
       '请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。';
+
+  @override
+  String get assistantSchemaNonEmptyString => '非空字符串';
+
+  @override
+  String get assistantSchemaIso8601OptionalString => 'ISO 8601 字符串，可省略';
+
+  @override
+  String get assistantSchemaOptionalObject => '对象，可省略';
+
+  @override
+  String get assistantSchemaObjectList => '对象列表';
+
+  @override
+  String get assistantSchemaSameOriginRelativePath => '同源相对路径';
+
+  @override
+  String get assistantSchemaSha256HexString => '64 位十六进制字符串';
+
+  @override
+  String get assistantSchemaOptionalStringList => '字符串列表，可省略';
+
+  @override
+  String get assistantSchemaPositiveInteger => '正整数';
+
+  @override
+  String get assistantSchemaInteger => '整数';
+
+  @override
+  String get assistantSchemaModelConfiguredOnDevice => '当前设备已配置的模型';
+
+  @override
+  String get assistantSchemaOptionalStringListNoTools => '字符串列表（当前未发现可用工具）';
+
+  @override
+  String get assistantSchemaOptionalString => '字符串，可省略';
+
+  @override
+  String get assistantSchemaString => '字符串';
+
+  @override
+  String get assistantSchemaCharacterRangeBool => '100–100000 字符 / bool';
 }

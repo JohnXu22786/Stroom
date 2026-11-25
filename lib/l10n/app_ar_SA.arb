@@ -7191,6 +7191,20 @@
   "ocrSamplingSliderRepairRequired": "اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.",
   "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو."
+  "providerResponsesEndpointHelp": "استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو.",
+  "assistantSchemaNonEmptyString": "Non-empty string",
+  "assistantSchemaIso8601OptionalString": "ISO 8601 string, optional",
+  "assistantSchemaOptionalObject": "Optional object",
+  "assistantSchemaObjectList": "Object list",
+  "assistantSchemaSameOriginRelativePath": "Same-origin relative path",
+  "assistantSchemaSha256HexString": "64-character hexadecimal string",
+  "assistantSchemaOptionalStringList": "Optional string list",
+  "assistantSchemaPositiveInteger": "Positive integer",
+  "assistantSchemaInteger": "Integer",
+  "assistantSchemaModelConfiguredOnDevice": "Model configured on this device",
+  "assistantSchemaOptionalStringListNoTools": "Optional string list (no tools currently available)",
+  "assistantSchemaOptionalString": "Optional string",
+  "assistantSchemaString": "String",
+  "assistantSchemaCharacterRangeBool": "100–100000 characters / bool"
 
 }

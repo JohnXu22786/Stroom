@@ -23613,4 +23613,52 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   @override
   String get providerResponsesEndpointHelp =>
       '이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다.';
+
+  @override
+  String get assistantSchemaNonEmptyString => 'Non-empty string';
+
+  @override
+  String get assistantSchemaIso8601OptionalString =>
+      'ISO 8601 string, optional';
+
+  @override
+  String get assistantSchemaOptionalObject => 'Optional object';
+
+  @override
+  String get assistantSchemaObjectList => 'Object list';
+
+  @override
+  String get assistantSchemaSameOriginRelativePath =>
+      'Same-origin relative path';
+
+  @override
+  String get assistantSchemaSha256HexString =>
+      '64-character hexadecimal string';
+
+  @override
+  String get assistantSchemaOptionalStringList => 'Optional string list';
+
+  @override
+  String get assistantSchemaPositiveInteger => 'Positive integer';
+
+  @override
+  String get assistantSchemaInteger => 'Integer';
+
+  @override
+  String get assistantSchemaModelConfiguredOnDevice =>
+      'Model configured on this device';
+
+  @override
+  String get assistantSchemaOptionalStringListNoTools =>
+      'Optional string list (no tools currently available)';
+
+  @override
+  String get assistantSchemaOptionalString => 'Optional string';
+
+  @override
+  String get assistantSchemaString => 'String';
+
+  @override
+  String get assistantSchemaCharacterRangeBool =>
+      '100–100000 characters / bool';
 }
