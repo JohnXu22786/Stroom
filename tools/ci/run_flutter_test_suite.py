@@ -140,6 +140,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/tts_audio_saver_test.dart",
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",
+        "utils/sort_config_test.dart",
         "pages/backup_restore_page_test.dart",
         "pages/backup_restore_info_dialog_test.dart",
         "pages/backup_restore_constrained_text_test.dart",

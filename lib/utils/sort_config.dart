@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'file_record.dart';
@@ -100,13 +102,25 @@ class SortConfig {
 /// 持久化的排序配置提供器
 class SortConfigNotifier extends StateNotifier<SortConfig> {
   final String _storageKey;
+  final Future<String?> Function(String key) _readStoredValue;
+  int _mutationVersion = 0;
 
-  SortConfigNotifier(this._storageKey) : super(const SortConfig());
+  SortConfigNotifier(
+    this._storageKey, {
+    @visibleForTesting Future<String?> Function(String key)? readStoredValue,
+  })  : _readStoredValue = readStoredValue ?? _readFromPreferences,
+        super(const SortConfig());
+
+  static Future<String?> _readFromPreferences(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(key);
+  }
 
   Future<void> load() async {
+    final loadVersion = _mutationVersion;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
+      final jsonStr = await _readStoredValue(_storageKey);
+      if (_mutationVersion != loadVersion) return;
       if (jsonStr != null && jsonStr.isNotEmpty) {
         final map = Map<String, dynamic>.from(jsonDecode(jsonStr) as Map);
         state = SortConfig.fromJson(map);
@@ -115,6 +129,7 @@ class SortConfigNotifier extends StateNotifier<SortConfig> {
   }
 
   Future<void> save(SortConfig config) async {
+    _mutationVersion++;
     state = config;
     try {
       final prefs = await SharedPreferences.getInstance();
