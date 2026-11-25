@@ -618,6 +618,36 @@ void main() {
     });
   });
 
+  group('HTML attribute escaping', () {
+    test('escapes attribute values before serialization', () {
+      final element = m.Element('span', [])
+        ..attributes['title'] = 'safe "quoted" & <tag>';
+
+      expect(
+        m.renderToHtml([element]),
+        '<span title="safe &quot;quoted&quot; &amp; &lt;tag&gt;"></span>',
+      );
+    });
+
+    test('escapes generated IDs before serialization', () {
+      final element = m.Element('span', [])
+        ..generatedId = 'safe "quoted" & <tag>';
+
+      expect(
+        m.renderToHtml([element]),
+        '<span id="safe &quot;quoted&quot; &amp; &lt;tag&gt;"></span>',
+      );
+    });
+
+    test('preserves parser-escaped attribute values', () {
+      expect(
+        m.markdownToHtml('[link](https://example.test "A & B")'),
+        '<p><a href="https:&#47;&#47;example.test" title="A &amp; B">'
+        'link</a></p>\n',
+      );
+    });
+  });
+
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
