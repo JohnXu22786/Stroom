@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stroom/anki/database/anki_database.dart';
 import 'package:stroom/anki/models/card.dart';
 import 'package:stroom/anki/models/note.dart';
+import 'package:stroom/anki/models/revlog.dart';
 import 'package:stroom/anki/scheduler/scheduler.dart';
 
 void main() {
@@ -109,6 +110,95 @@ void main() {
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
     },
   );
+
+  test('learning answer that remains in learning is logged as learning',
+      () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.learn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect((await collection.cards.get(card.id))!.queue, CardQueue.learn);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.learning,
+    );
+  });
+
+  test('learning answer that graduates is logged as learning', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.learn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 0x100;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect((await collection.cards.get(card.id))!.ctype, CardType.review);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.learning,
+    );
+  });
+
+  test('Again on a review card is logged as review', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..interval = 10
+      ..reps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 1);
+
+    expect((await collection.cards.get(card.id))!.ctype, CardType.relearn);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.review,
+    );
+  });
+
+  test('relearning answer is logged as relearning', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.relearn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.relearning,
+    );
+  });
 
   test('revlog insert failure rolls back the card answer', () async {
     final note = Note.createNew(
