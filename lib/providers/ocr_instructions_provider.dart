@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'provider_config.dart';
 
 // ============================================================================
@@ -83,13 +84,11 @@ List<OcrInstruction> migrateLegacyOcrInstructions(List<ProviderEntry> entries) {
 ///
 /// 指令在 OCR 页面统一设置，对所有 OCR 模型生效。
 final ocrInstructionsProvider =
-    StateNotifierProvider<OcrInstructionsNotifier, List<OcrInstruction>>(
-  (ref) {
-    final notifier = OcrInstructionsNotifier(ref);
-    notifier.load();
-    return notifier;
-  },
-);
+    StateNotifierProvider<OcrInstructionsNotifier, List<OcrInstruction>>((ref) {
+      final notifier = OcrInstructionsNotifier(ref);
+      notifier.load();
+      return notifier;
+    });
 
 class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   OcrInstructionsNotifier(this._ref) : super([]);
@@ -106,6 +105,10 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   /// Tracks edits made while the initial preferences/provider load is pending.
   int _userMutationVersion = 0;
 
+  /// Malformed stored data is left in place during load and backed up before
+  /// the first explicit user edit replaces it.
+  String? _corruptStoredJson;
+
   /// Loads persisted instructions once.
   Future<void> load() => _loadFuture ??= _doLoad();
 
@@ -119,12 +122,19 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
       final json = prefs.getString(_storageKey);
-      if (json != null && json.trim().isNotEmpty) {
-        final list = (jsonDecode(json) as List)
-            .whereType<Map>()
-            .map((e) => OcrInstruction.fromMap(Map<String, dynamic>.from(e)))
-            .where((i) => i.content.isNotEmpty)
-            .toList();
+      if (json != null) {
+        if (json.isEmpty) {
+          if (_userMutationVersion == loadMutationVersion) state = [];
+          return;
+        }
+        List<OcrInstruction> list;
+        try {
+          list = _decodeStoredInstructions(json);
+        } catch (e) {
+          _corruptStoredJson = json;
+          debugPrint('Failed to load OCR instructions: $e');
+          return;
+        }
         final preserveUserMutations =
             _userMutationVersion != loadMutationVersion;
         state = preserveUserMutations
@@ -160,10 +170,70 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   Future<void> _persist() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final storedJson = prefs.getString(_storageKey);
+      final corruptJson =
+          _corruptStoredJson ??
+          (storedJson != null &&
+                  storedJson.isNotEmpty &&
+                  !_isValidStoredJson(storedJson)
+              ? storedJson
+              : null);
+      if (corruptJson != null) {
+        _corruptStoredJson = corruptJson;
+        if (!await _backupCorruptStoredJson(prefs, corruptJson)) return;
+        _corruptStoredJson = null;
+      }
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString(_storageKey, json);
     } catch (e) {
       debugPrint('Failed to persist OCR instructions: $e');
+    }
+  }
+
+  static List<OcrInstruction> _decodeStoredInstructions(String json) {
+    final decoded = jsonDecode(json);
+    if (decoded is! List) {
+      throw const FormatException('OCR instructions must be a JSON list');
+    }
+    if (decoded.any((entry) => entry is! Map)) {
+      throw const FormatException('OCR instructions must contain JSON objects');
+    }
+    return decoded
+        .whereType<Map>()
+        .map((e) => OcrInstruction.fromMap(Map<String, dynamic>.from(e)))
+        .where((i) => i.content.isNotEmpty)
+        .toList();
+  }
+
+  static bool _isValidStoredJson(String json) {
+    try {
+      _decodeStoredInstructions(json);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _backupCorruptStoredJson(
+    SharedPreferences prefs,
+    String corruptJson,
+  ) async {
+    try {
+      final hasBackup = prefs.getKeys().any(
+        (key) =>
+            key.startsWith('ocr_instructions_corrupt_') &&
+            prefs.getString(key) == corruptJson,
+      );
+      if (hasBackup) return true;
+      final backupKey =
+          'ocr_instructions_corrupt_${DateTime.now().microsecondsSinceEpoch}';
+      final saved = await prefs.setString(backupKey, corruptJson);
+      if (!saved) return false;
+      debugPrint('Backed up corrupt OCR instructions to $backupKey');
+      return true;
+    } catch (e) {
+      debugPrint('Failed to back up corrupt OCR instructions: $e');
+      return false;
     }
   }
 
