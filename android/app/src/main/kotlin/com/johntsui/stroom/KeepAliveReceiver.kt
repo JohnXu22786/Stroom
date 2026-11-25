@@ -104,6 +104,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         // MainActivity 的 rearmKeepAlive 需要读取失败计数。
         const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
+        private const val KEY_KEEP_ALIVE_START_PENDING = "keep_alive_start_pending"
 
         /**
          * Schedule the next keep-alive alarm (one-shot, self-rescheduling).
@@ -343,6 +344,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
             // Persist cancellation before removing alarms so already-queued
             // deliveries cannot claim the old generation and rearm the watchdog.
             markActive(context, false)
+            context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_KEEP_ALIVE_START_PENDING, false)
+                .apply()
             cancelScheduledAlarms(context)
         }
 
@@ -391,6 +396,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putInt(KEY_KEEP_ALIVE_FAILURES, 0)
+                .putBoolean(KEY_KEEP_ALIVE_START_PENDING, false)
                 .apply()
         }
 
@@ -565,8 +571,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     return
                 }
 
-                var startSucceeded = true
-                if (!isServiceRunning(context)) {
+                val serviceRunning = isServiceRunning(context)
+                val startWasPending = prefs.getBoolean(KEY_KEEP_ALIVE_START_PENDING, false)
+                var startRequestFailed = false
+                if (!serviceRunning) {
                     try {
                         // 进程被系统杀掉后，这里会冷启动进程并重建前台服务；
                         // 插件会重新初始化 Flutter engine 并恢复后台任务。
@@ -583,44 +591,34 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         // 或 Android 15+ dataSync 6 小时/24 小时上限耗尽：
                         // 属于瞬时/上限失败 —— 用户授予电池优化豁免、冷启动
                         // 恢复或下一个周期会重新尝试。记录失败次数。
-                        startSucceeded = false
+                        startRequestFailed = true
                         Log.e(TAG, "Failed to start foreground service via keep-alive", e)
                     }
                 }
 
-                if (startSucceeded) {
-                    // 成功（服务已在运行或已启动）：重置连续失败计数。
-                    prefs.edit().putInt(KEY_KEEP_ALIVE_FAILURES, 0).apply()
-                    scheduleReceiverAlarm(
-                        context,
-                        KEEP_ALIVE_INTERVAL_MS,
-                        generationToReuse = claimedGeneration,
+                val startState = keepAliveStartStateAfterAlarm(
+                    serviceRunning = serviceRunning,
+                    startWasPending = startWasPending,
+                    startRequestFailed = startRequestFailed,
+                    failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0),
+                    maxFailures = MAX_CONSECUTIVE_FAILURES,
+                )
+                prefs.edit()
+                    .putInt(KEY_KEEP_ALIVE_FAILURES, startState.failures)
+                    .putBoolean(KEY_KEEP_ALIVE_START_PENDING, startState.startPending)
+                    .apply()
+                if (startState.failures >= MAX_CONSECUTIVE_FAILURES && !serviceRunning) {
+                    Log.w(
+                        TAG,
+                        "Keep-alive start failed ${startState.failures} times consecutively — " +
+                            "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
                     )
-                } else {
-                    // 连续失败达到阈值后进入退避周期，避免看门狗持续
-                    // 唤醒设备做无效尝试。计数封顶，避免无限增长。
-                    val failures = (prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0) + 1)
-                        .coerceAtMost(MAX_CONSECUTIVE_FAILURES + 1)
-                    prefs.edit().putInt(KEY_KEEP_ALIVE_FAILURES, failures).apply()
-                    if (failures >= MAX_CONSECUTIVE_FAILURES) {
-                        Log.w(
-                            TAG,
-                            "Keep-alive start failed $failures times consecutively — " +
-                                "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
-                        )
-                        scheduleReceiverAlarm(
-                            context,
-                            FAILURE_BACKOFF_INTERVAL_MS,
-                            generationToReuse = claimedGeneration,
-                        )
-                    } else {
-                        scheduleReceiverAlarm(
-                            context,
-                            KEEP_ALIVE_INTERVAL_MS,
-                            generationToReuse = claimedGeneration,
-                        )
-                    }
                 }
+                scheduleReceiverAlarm(
+                    context,
+                    startState.nextIntervalMs,
+                    generationToReuse = claimedGeneration,
+                )
             }
         }
     }
