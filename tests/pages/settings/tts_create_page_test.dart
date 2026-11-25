@@ -549,6 +549,68 @@ void main() {
   });
 
   group('TTSCreatePage - model selector (OCR/ASR style)', () {
+    testWidgets(
+      'loading state with a TTS entry does not refresh models during build',
+      (tester) async {
+        final notifier = ProviderEntriesNotifier();
+        notifier.state = ProviderEntriesState(
+          entries: [_createTtsEntry()],
+          isLoaded: false,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+              providerEntriesProvider.overrideWith((ref) => notifier),
+            ],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: TTSCreatePage(retryTask: _retryTask()),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+
+        notifier.state = ProviderEntriesState(entries: [_createTtsEntry()]);
+        await tester.pumpAndSettle();
+        expect(find.text('TTS-2 | OpenAI'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'no-entry loading state preserves retry model until providers load',
+      (tester) async {
+        final notifier = ProviderEntriesNotifier();
+        notifier.state = const ProviderEntriesState(
+          entries: [],
+          isLoaded: false,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+              providerEntriesProvider.overrideWith((ref) => notifier),
+            ],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: TTSCreatePage(retryTask: _retryTask()),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+
+        notifier.state = ProviderEntriesState(entries: [_createTtsEntry()]);
+        await tester.pumpAndSettle();
+        expect(find.text('TTS-2 | OpenAI'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('shows pill model selector with "ModelName | ProviderName"', (
       tester,
     ) async {
