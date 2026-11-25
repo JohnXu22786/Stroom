@@ -568,6 +568,24 @@ void main() {
   });
 
   group('GitHub footnote definitions', () {
+    test('appends backlinks after a final self-closing child', () {
+      final nodes = m.Document(extensionSet: m.ExtensionSet.gitHubFlavored)
+          .parse('Reference[^note]\n\n[^note]: note text\n\n    ---');
+
+      final footnote = _findElement(nodes, 'li');
+      expect(footnote, isNotNull);
+      final children = footnote!.children!;
+      expect(children, hasLength(4));
+      final horizontalRule = children[1] as m.Element;
+      expect(horizontalRule.tag, 'hr');
+      expect(horizontalRule.children, isNull);
+      expect((children[2] as m.Text).text, ' ');
+      final backlink = children.last as m.Element;
+      expect(backlink.tag, 'a');
+      expect(backlink.attributes['class'], 'footnote-backref');
+      expect(backlink.attributes['href'], '#fnref-note');
+    });
+
     test('two blank lines end a definition before an indented code block', () {
       final nodes =
           m.Document(extensionSet: m.ExtensionSet.gitHubFlavored).parse(
