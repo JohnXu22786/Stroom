@@ -48,20 +48,20 @@ Widget createTestApp({
       builder: mediaQuerySize == null
           ? null
           : (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
-                child: child!,
-              ),
+              data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
+              child: child!,
+            ),
       home: AssistantSelectionPage(),
     ),
   );
 }
 
 Widget _localizedAssistantSelectionApp() => MaterialApp(
-      locale: const Locale('zh', 'CN'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const AssistantSelectionPage(),
-    );
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: const AssistantSelectionPage(),
+);
 
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   final context = tester.element(find.byType(AssistantSelectionPage));
@@ -71,57 +71,54 @@ BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
 Widget _assistantDefaultsTabForLengthTest({
   int maxToolOutputChars = 5000,
   ValueChanged<int>? onMaxToolOutputCharsChanged,
-}) =>
-    ProviderScope(
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: AssistantDefaultsTab(
-            defaultModelName: null,
-            defaultModelId: null,
-            defaultProviderName: null,
-            defaultToolNames: null,
-            maxToolOutputChars: maxToolOutputChars,
-            enableMaxToolOutputChars: true,
-            onDefaultModelChanged: (_) {},
-            onDefaultToolsChanged: (_) {},
-            onEnableMaxToolOutputCharsChanged: (_) {},
-            onMaxToolOutputCharsChanged:
-                onMaxToolOutputCharsChanged ?? (_) {},
-          ),
-        ),
+}) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(
+      body: AssistantDefaultsTab(
+        defaultModelName: null,
+        defaultModelId: null,
+        defaultProviderName: null,
+        defaultToolNames: null,
+        maxToolOutputChars: maxToolOutputChars,
+        enableMaxToolOutputChars: true,
+        onDefaultModelChanged: (_) {},
+        onDefaultToolsChanged: (_) {},
+        onEnableMaxToolOutputCharsChanged: (_) {},
+        onMaxToolOutputCharsChanged: onMaxToolOutputCharsChanged ?? (_) {},
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
-  testWidgets(
-    'short out-of-range truncation input remains visibly unapplied',
-    (tester) async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      SharedPreferences.setMockInitialValues({});
-      final savedValues = <int>[];
-      await tester.pumpWidget(
-        _assistantDefaultsTabForLengthTest(
-          onMaxToolOutputCharsChanged: savedValues.add,
-        ),
-      );
-      await tester.pump();
+  testWidgets('short out-of-range truncation input remains visibly unapplied', (
+    tester,
+  ) async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    final savedValues = <int>[];
+    await tester.pumpWidget(
+      _assistantDefaultsTabForLengthTest(
+        onMaxToolOutputCharsChanged: savedValues.add,
+      ),
+    );
+    await tester.pump();
 
-      final field = find.byType(TextField);
-      await tester.enterText(field, '12');
-      await tester.pump();
+    final field = find.byType(TextField);
+    await tester.enterText(field, '12');
+    await tester.pump();
 
-      final l10n = AppLocalizations.of(
-        tester.element(find.byType(AssistantDefaultsTab)),
-      )!;
-      expect(
-        find.text(l10n.assistantCharacterRange('100', '100000')),
-        findsOneWidget,
-      );
-      expect(savedValues, isEmpty);
-    },
-  );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(AssistantDefaultsTab)),
+    )!;
+    expect(
+      find.text(l10n.assistantCharacterRange('100', '100000')),
+      findsOneWidget,
+    );
+    expect(savedValues, isEmpty);
+  });
 
   testWidgets(
     'correcting short invalid truncation input applies the valid value',
@@ -153,25 +150,24 @@ void main() {
     },
   );
 
-  testWidgets(
-    'valid truncation input is passed through as the saved value',
-    (tester) async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      SharedPreferences.setMockInitialValues({});
-      var savedValue = 5000;
-      await tester.pumpWidget(
-        _assistantDefaultsTabForLengthTest(
-          onMaxToolOutputCharsChanged: (value) => savedValue = value,
-        ),
-      );
-      await tester.pump();
+  testWidgets('valid truncation input is passed through as the saved value', (
+    tester,
+  ) async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    var savedValue = 5000;
+    await tester.pumpWidget(
+      _assistantDefaultsTabForLengthTest(
+        onMaxToolOutputCharsChanged: (value) => savedValue = value,
+      ),
+    );
+    await tester.pump();
 
-      await tester.enterText(find.byType(TextField), '1500');
-      await tester.pump();
+    await tester.enterText(find.byType(TextField), '1500');
+    await tester.pump();
 
-      expect(savedValue, 1500);
-    },
-  );
+    expect(savedValue, 1500);
+  });
 
   testWidgets('assistant editor labels keep native field editing', (
     tester,
@@ -312,8 +308,8 @@ void main() {
         await tester.pumpAndSettle();
 
         final dialogContext = tester.element(find.byType(AlertDialog));
-        final expectedSeed =
-            AppLocalizations.of(dialogContext)!.assistantDefaultPrompt;
+        final expectedSeed = AppLocalizations.of(dialogContext)!
+            .assistantDefaultPrompt;
         expect(
           find.byWidgetPredicate(
             (widget) =>
@@ -622,8 +618,7 @@ void main() {
       },
     );
 
-    testWidgets(
-        'edit dialog on a very short window falls back to a scrollable '
+    testWidgets('edit dialog on a very short window falls back to a scrollable '
         'layout without overflow', (tester) async {
       // Short window: the fixed rows + expanded prompt would overflow, so
       // the editor must switch to its scrollable fallback layout.
@@ -658,8 +653,7 @@ void main() {
       expect(find.text('保存'), findsOneWidget);
     });
 
-    testWidgets(
-        'large text scale on a medium window also uses the fallback '
+    testWidgets('large text scale on a medium window also uses the fallback '
         'layout (scaled threshold)', (tester) async {
       // 560dp window is above the unscaled fill threshold (540), but with
       // system font scaling 2.0 the fixed rows would overflow the fill
@@ -841,16 +835,18 @@ void main() {
         final container = ProviderScope.containerOf(
           tester.element(find.byType(AssistantSelectionPage)),
         );
-        final order =
-            container.read(assistantProvider).map((a) => a.name).toList();
+        final order = container
+            .read(assistantProvider)
+            .map((a) => a.name)
+            .toList();
         expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
 
         // 顺序持久化：prefs 里保存的是重排后的顺序
         final prefs = await SharedPreferences.getInstance();
         final json = prefs.getString('assistants');
         expect(json, isNotNull);
-        final decoded =
-            (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
+        final decoded = (jsonDecode(json!) as List)
+            .cast<Map<String, dynamic>>();
         expect((decoded.first['name'] as String), '助手乙');
       },
     );
@@ -978,45 +974,43 @@ void main() {
       expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
     });
 
-    testWidgets(
-      'import instructions wrap naturally instead of being clipped',
-      (tester) async {
-        tester.view.physicalSize = const Size(320, 640);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('import instructions wrap naturally instead of being clipped', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(
-          createTestApp(
-            assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
-          ),
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.byIcon(Icons.storefront));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('导入助手'));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('导入助手'));
+      await tester.pumpAndSettle();
 
-        final hint = AppLocalizations.of(
-          tester.element(find.byType(AssistantSelectionPage)),
-        )!
-            .assistantImportHint;
-        final hintText = tester.widget<Text>(
-          find.byWidgetPredicate(
-            (widget) => widget is Text && widget.data == hint,
-          ),
-        );
-        expect(hintText.maxLines, isNull);
-        expect(hintText.overflow, isNull);
-        expect(find.byType(SingleChildScrollView), findsWidgets);
-        final importAction = find.text('连接目录或导入文件');
-        expect(importAction, findsOneWidget);
-        await tester.ensureVisible(importAction);
-        await tester.pumpAndSettle();
-        expect(tester.getTopLeft(importAction).dy, greaterThanOrEqualTo(0));
-        expect(tester.takeException(), isNull);
-      },
-    );
+      final hint = AppLocalizations.of(
+        tester.element(find.byType(AssistantSelectionPage)),
+      )!.assistantImportHint;
+      final hintText = tester.widget<Text>(
+        find.byWidgetPredicate(
+          (widget) => widget is Text && widget.data == hint,
+        ),
+      );
+      expect(hintText.maxLines, isNull);
+      expect(hintText.overflow, isNull);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+      final importAction = find.text('连接目录或导入文件');
+      expect(importAction, findsOneWidget);
+      await tester.ensureVisible(importAction);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(importAction).dy, greaterThanOrEqualTo(0));
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('market cards have no text editing fields', (tester) async {
       await tester.pumpWidget(
@@ -1329,7 +1323,8 @@ void main() {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         tester.view.platformDispatcher.textScaleFactorTestValue = 1.8;
         addTearDown(
-            tester.view.platformDispatcher.clearTextScaleFactorTestValue);
+          tester.view.platformDispatcher.clearTextScaleFactorTestValue,
+        );
         const parameterName = 'very_long_parameter_name_for_layout';
         await tester.pumpWidget(
           createTestApp(
@@ -1369,10 +1364,7 @@ void main() {
         await tester.pumpAndSettle();
         final heading = find.text('Benutzerdefinierte Parameter');
         final headingRow = find
-            .ancestor(
-              of: heading,
-              matching: find.byType(Row),
-            )
+            .ancestor(of: heading, matching: find.byType(Row))
             .first;
         expect(
           tester.getSize(heading).width,
@@ -1472,9 +1464,7 @@ void main() {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  disableAnimations: false,
-                ),
+                data: MediaQuery.of(context).copyWith(disableAnimations: false),
                 child: child!,
               ),
               home: Scaffold(
@@ -1554,9 +1544,8 @@ void main() {
         final helperPainter = TextPainter(
           text: TextSpan(
             text: l10n.assistantCharactersNotTokens,
-            style: DefaultTextStyle.of(helperContext).style.merge(
-                  helperWidget.style,
-                ),
+            style: DefaultTextStyle.of(helperContext).style
+                .merge(helperWidget.style),
           ),
           textDirection: Directionality.of(helperContext),
           textScaler: MediaQuery.textScalerOf(helperContext),
@@ -1620,8 +1609,7 @@ void main() {
 
           final title = AppLocalizations.of(
             tester.element(find.byType(AssistantDefaultsTab)),
-          )!
-              .assistantNewConversationPreview;
+          )!.assistantNewConversationPreview;
           final heading = find.byWidgetPredicate(
             (widget) => widget is ConstrainedText && widget.data == title,
           );
@@ -1642,9 +1630,8 @@ void main() {
             find.byIcon(Icons.visibility_outlined),
           );
           final headingContext = tester.element(heading);
-          final headingStyle = DefaultTextStyle.of(
-            headingContext,
-          ).style.merge(tester.widget<ConstrainedText>(heading).style);
+          final headingStyle = DefaultTextStyle.of(headingContext).style
+              .merge(tester.widget<ConstrainedText>(heading).style);
           final headingMeasure = TextPainter(
             text: TextSpan(text: title, style: headingStyle),
             textDirection: Directionality.of(headingContext),
@@ -1922,8 +1909,7 @@ void main() {
       expect(settings.maxToolOutputChars, 5000, reason: '非法输入不落库：保存的必是生效值');
     });
 
-    testWidgets(
-        '从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
+    testWidgets('从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
         'tab 显示全关但新话题全开的误导）', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -2008,8 +1994,7 @@ void main() {
       expect(find.textContaining('已启用 0 /'), findsOneWidget);
     });
 
-    testWidgets(
-        '默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
+    testWidgets('默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
         '保存后自动清除失效记录', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -2057,8 +2042,7 @@ void main() {
       expect(assistant.defaultModelName, isNull);
     });
 
-    testWidgets(
-        '同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
+    testWidgets('同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
         '重复 value 崩溃', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -2250,8 +2234,7 @@ void main() {
       expect(assistant.defaultToolNames, isNot(contains('todowrite')));
     });
 
-    testWidgets(
-        '默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
+    testWidgets('默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
         '排序，而不是按供应商配置的添加顺序', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -2303,11 +2286,13 @@ void main() {
 
       // 已保存顺序中的模型按保存顺序排在前，未保存的模型按原顺序追加在末尾：
       // 期望 claude → gpt-4o → gemini（而非配置添加顺序 gpt-4o → claude → gemini）。
-      final claudeY =
-          tester.getCenter(find.text('claude-3.5-sonnet | OpenAI')).dy;
+      final claudeY = tester
+          .getCenter(find.text('claude-3.5-sonnet | OpenAI'))
+          .dy;
       final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
-      final geminiY =
-          tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
+      final geminiY = tester
+          .getCenter(find.text('gemini-2.0-flash | OpenAI'))
+          .dy;
       expect(
         claudeY,
         lessThan(gptY),
@@ -2316,8 +2301,7 @@ void main() {
       expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
-    testWidgets(
-        'saving the dialog without touching 默认设置 keeps defaults '
+    testWidgets('saving the dialog without touching 默认设置 keeps defaults '
         'unconfigured', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -2354,7 +2338,8 @@ void main() {
       expect(
         assistant.defaultToolNames,
         isNull,
-        reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
+        reason:
+            '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
             '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭',
       );
     });
