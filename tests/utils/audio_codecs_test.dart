@@ -614,13 +614,24 @@ void main() {
       expect(out[0], 0x66);
     });
 
-    test('opus/mp3 produce encoded output', () {
+    test('MP3 encoder function is explicitly unsupported', () {
       final pcm = Int16List.fromList([100, 200]);
-      final opusOut = compressPcm(pcm, AudioCodec.opus);
-      final mp3Out = compressPcm(pcm, AudioCodec.mp3);
-      // Both should produce encoded output (larger than raw PCM due to headers)
-      expect(opusOut.length, greaterThan(4));
-      expect(mp3Out.length, greaterThan(4));
+      expect(() => encodeMp3(pcm), throwsUnsupportedError);
+    });
+
+    test('compressPcm rejects the unsupported MP3 codec', () {
+      final pcm = Int16List.fromList([100, 200]);
+      expect(() => compressPcm(pcm, AudioCodec.mp3), throwsUnsupportedError);
+    });
+
+    test('Opus encoder function is explicitly unsupported', () {
+      final pcm = Int16List.fromList([100, 200]);
+      expect(() => encodeOpus(pcm), throwsUnsupportedError);
+    });
+
+    test('compressPcm rejects the unsupported Opus codec', () {
+      final pcm = Int16List.fromList([100, 200]);
+      expect(() => compressPcm(pcm, AudioCodec.opus), throwsUnsupportedError);
     });
   });
 
