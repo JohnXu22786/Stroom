@@ -85,10 +85,10 @@ List<OcrInstruction> migrateLegacyOcrInstructions(List<ProviderEntry> entries) {
 /// 指令在 OCR 页面统一设置，对所有 OCR 模型生效。
 final ocrInstructionsProvider =
     StateNotifierProvider<OcrInstructionsNotifier, List<OcrInstruction>>((ref) {
-      final notifier = OcrInstructionsNotifier(ref);
-      notifier.load();
-      return notifier;
-    });
+  final notifier = OcrInstructionsNotifier(ref);
+  notifier.load();
+  return notifier;
+});
 
 class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   OcrInstructionsNotifier(this._ref) : super([]);
@@ -171,8 +171,7 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final storedJson = prefs.getString(_storageKey);
-      final corruptJson =
-          _corruptStoredJson ??
+      final corruptJson = _corruptStoredJson ??
           (storedJson != null &&
                   storedJson.isNotEmpty &&
                   !_isValidStoredJson(storedJson)
@@ -220,10 +219,10 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   ) async {
     try {
       final hasBackup = prefs.getKeys().any(
-        (key) =>
-            key.startsWith('ocr_instructions_corrupt_') &&
-            prefs.getString(key) == corruptJson,
-      );
+            (key) =>
+                key.startsWith('ocr_instructions_corrupt_') &&
+                prefs.getString(key) == corruptJson,
+          );
       if (hasBackup) return true;
       final backupKey =
           'ocr_instructions_corrupt_${DateTime.now().microsecondsSinceEpoch}';

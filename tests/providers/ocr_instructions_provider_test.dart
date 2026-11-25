@@ -283,8 +283,8 @@ void main() {
       expect(prefs.getString('ocr_instructions'), corruptJson);
       expect(
         prefs.getKeys().where(
-          (key) => key.startsWith('ocr_instructions_corrupt_'),
-        ),
+              (key) => key.startsWith('ocr_instructions_corrupt_'),
+            ),
         isEmpty,
       );
     });
@@ -306,8 +306,8 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         final backupKeys = prefs.getKeys().where(
-          (key) => key.startsWith('ocr_instructions_corrupt_'),
-        );
+              (key) => key.startsWith('ocr_instructions_corrupt_'),
+            );
         expect(backupKeys, hasLength(1));
         expect(prefs.getString(backupKeys.single), corruptJson);
         expect(
