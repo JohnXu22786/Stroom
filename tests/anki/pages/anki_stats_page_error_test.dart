@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/anki/database/anki_database.dart';
 import 'package:stroom/anki/database/card_dao.dart';
+import 'package:stroom/anki/database/col_dao.dart';
 import 'package:stroom/anki/database/revlog_dao.dart';
 import 'package:stroom/anki/pages/anki_stats_page.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
@@ -56,6 +57,9 @@ class _QueryFailingAnkiDatabase extends AnkiDatabase {
 
   @override
   RevlogDao get revlog => _revlog;
+
+  @override
+  late final ColDao col = _StubColDao();
 }
 
 class _QueryFailingCardDao implements CardDao {
@@ -70,7 +74,7 @@ class _QueryFailingCardDao implements CardDao {
   Future<int> countByQueueAll(int queueValue) async => 0;
 
   @override
-  Future<int> countDueReviewAll(int nowSec) => Future.error(error);
+  Future<int> countDueReviewAll(int dayOrdinal) => Future.error(error);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -87,6 +91,17 @@ class _PendingRevlogDao implements RevlogDao {
 class _StubRevlogDao implements RevlogDao {
   @override
   Future<int> count() async => 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StubColDao implements ColDao {
+  @override
+  Future<void> load() async {}
+
+  @override
+  int dayOrdinalAt(int nowSec) => 0;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

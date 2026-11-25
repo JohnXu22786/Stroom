@@ -139,7 +139,7 @@ class Card {
   int usn; // update sequence number (-1 = local change)
   CardType ctype; // 0=new, 1=learn, 2=review, 3=relearn (was: type)
   CardQueue queue;
-  int due; // new→position, learn/review→epoch seconds, dayLearn→day ordinal
+  int due; // new→position, learn→epoch seconds, review/dayLearn→day ordinal
   int interval; // interval in days (was: ivl)
   int ease_factor; // ease factor in permille, 2500 = 250% (was: factor)
   int reps; // correct reviews
@@ -262,7 +262,7 @@ class Card {
   bool isDue(int nowSec, {int? dayOrdinal}) {
     if (isSuspended) return false;
     if (isNew) return true;
-    if (queue == CardQueue.dayLearn) {
+    if (queue == CardQueue.review || queue == CardQueue.dayLearn) {
       return dayOrdinal != null && due <= dayOrdinal;
     }
     return due <= nowSec;
@@ -290,6 +290,7 @@ class Card {
   /// Answer during learning. [answerIdx]: 0=again, 1=hard, 2=good, 3=easy.
   void answerLearning(
     int nowMs, {
+    required int dayOrdinal,
     required List<int> steps,
     int answerIdx = 2,
     int graduatingIvl = 1,
@@ -315,7 +316,7 @@ class Card {
       queue = CardQueue.review;
       ctype = CardType.review;
       interval = (graduatingIvl * 1.3).round();
-      due = nowSec + (interval * 86400);
+      due = dayOrdinal + interval;
       reps = 1;
       remaining_steps = 0;
       return;
@@ -327,7 +328,7 @@ class Card {
       queue = CardQueue.review;
       ctype = CardType.review;
       interval = graduatingIvl;
-      due = nowSec + (interval * 86400);
+      due = dayOrdinal + interval;
       reps = 1;
       remaining_steps = 0;
     } else {
@@ -339,6 +340,7 @@ class Card {
   /// Answer during review. [rating]: 1=again, 2=hard, 3=good, 4=easy.
   void answerReview(
     int nowMs, {
+    required int dayOrdinal,
     int rating = 3,
     double hardMult = 1.2,
     int relearnSteps = 2,
@@ -375,7 +377,7 @@ class Card {
       queue = CardQueue.review;
       ctype = CardType.review;
     }
-    due = nowSec + (interval * 86400);
+    due = dayOrdinal + interval;
   }
 
   int _nextIvl(int cur, int fac) {

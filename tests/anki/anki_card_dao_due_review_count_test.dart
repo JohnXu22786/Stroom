@@ -31,15 +31,16 @@ void main() {
   test(
     'counts only due review cards, including cards due at the boundary',
     () async {
-      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      const today = 6000;
+      const nowSec = 1800000000;
       final cards = [
-        Card(note_id: 1, deck_id: 1, queue: CardQueue.review, due: nowSec - 60),
-        Card(note_id: 2, deck_id: 1, queue: CardQueue.review, due: nowSec),
+        Card(note_id: 1, deck_id: 1, queue: CardQueue.review, due: today - 1),
+        Card(note_id: 2, deck_id: 1, queue: CardQueue.review, due: today),
         Card(
           note_id: 3,
           deck_id: 1,
           queue: CardQueue.review,
-          due: nowSec + 3600,
+          due: today + 1,
         ),
         Card(note_id: 4, deck_id: 1, queue: CardQueue.learn, due: nowSec - 60),
       ];
@@ -47,7 +48,7 @@ void main() {
         await database.cards.insert(card);
       }
 
-      expect(await database.cards.countDueReviewAll(nowSec), 2);
+      expect(await database.cards.countDueReviewAll(today), 2);
     },
   );
 }

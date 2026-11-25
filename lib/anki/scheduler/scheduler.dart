@@ -31,7 +31,7 @@ class AnkiScheduler {
     // 2. Review cards
     final review = await cards.listByQueue(did, 2);
     for (final c in review) {
-      if (c.isDue(now)) return c;
+      if (c.isDue(now, dayOrdinal: today)) return c;
     }
 
     // 3. New cards
@@ -49,9 +49,11 @@ class AnkiScheduler {
     int rating, {
     int reviewDuration = 0,
   }) async {
+    await col.load();
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
     final nowSec = nowMs ~/ 1000;
+    final today = col.dayOrdinalAt(nowSec);
     final card = await cards.get(cid);
     if (card == null) return;
 
@@ -66,12 +68,14 @@ class AnkiScheduler {
       case 0: // new
         _sm2.scheduleLearning(card, nowMs);
         card.answerLearning(nowMs,
+            dayOrdinal: today,
             steps: _sm2.learningSteps,
             answerIdx: (rating - 1).clamp(0, 3),
             graduatingIvl: _sm2.graduatingInterval);
         break;
       case 1: // learning
         card.answerLearning(nowMs,
+            dayOrdinal: today,
             steps: _sm2.learningSteps,
             answerIdx: (rating - 1).clamp(0, 3),
             graduatingIvl: _sm2.graduatingInterval);
@@ -79,6 +83,7 @@ class AnkiScheduler {
       case 2: // review
       case 3: // day learning
         card.answerReview(nowMs,
+            dayOrdinal: today,
             rating: rating,
             hardMult: _sm2.hardMultiplier,
             relearnSteps: _sm2.learningSteps.length,

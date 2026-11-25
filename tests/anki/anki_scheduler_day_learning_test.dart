@@ -79,6 +79,35 @@ void main() {
     },
   );
 
+  test('review selection treats imported due values as collection day ordinals',
+      () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final today = collection.col.dayOrdinalAt(nowSec);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..due = today + 1;
+    await collection.cards.insert(card);
+    final scheduler = AnkiScheduler();
+
+    expect(await scheduler.getNextCard(collection.col, collection.cards, 1),
+        isNull);
+    expect(await scheduler.countDue(collection.col, collection.cards, 1), 0);
+
+    card.due = today;
+    await collection.cards.update(card);
+    expect(
+      (await scheduler.getNextCard(collection.col, collection.cards, 1))?.id,
+      card.id,
+    );
+    expect(await scheduler.countDue(collection.col, collection.cards, 1), 1);
+  });
+
   test(
     'answering a day-learning card applies review scheduling and persists',
     () async {
@@ -94,6 +123,9 @@ void main() {
         ..interval = 10
         ..reps = 2;
       await collection.cards.insert(card);
+      final today = collection.col.dayOrdinalAt(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      );
 
       await AnkiScheduler().answerCard(
         collection.col,
@@ -107,6 +139,7 @@ void main() {
       expect(answered.ctype, CardType.review);
       expect(answered.reps, 3);
       expect(answered.interval, 25);
+      expect(answered.due, today + 25);
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
     },
   );
