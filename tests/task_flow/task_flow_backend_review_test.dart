@@ -234,6 +234,12 @@ class _Tasks extends TaskListNotifier {
   }
 }
 
+class _InspectableTasks extends TaskListNotifier {
+  _InspectableTasks(super.ref);
+  List<SynthesisTask> get tasksForTest => state;
+  set tasksForTest(List<SynthesisTask> value) => state = value;
+}
+
 class _BlockingClearTasks extends _Tasks {
   _BlockingClearTasks(super.ref);
 
@@ -368,7 +374,7 @@ void main() {
       FlowBlockRunner? runner,
       _ManualDownloads Function(Ref)? downloads,
       TaskFlowScheduler? scheduler,
-      _Tasks Function(Ref)? tasks,
+      TaskListNotifier Function(Ref)? tasks,
       _Assistants? assistants,
       _Manager? manager}) {
     final container = ProviderContainer(overrides: [
@@ -2050,10 +2056,20 @@ void main() {
   test(
       'synthesis notifier resumes with supplied configs without changing task inputs',
       () async {
-    final container = make();
-    final tasks = container.read(taskListProvider.notifier);
+    late _InspectableTasks tasks;
+    final container = make(tasks: (ref) => tasks = _InspectableTasks(ref));
+    container.read(taskListProvider);
+    final synthesisStarted = Completer<void>();
+    final finishSynthesis = Completer<Uint8List>();
+    // This test lives under `tests/`, outside the analyzer's recognized test
+    // directory, so the test-only hook needs a local visibility ignore.
+    // ignore: invalid_use_of_visible_for_testing_member
+    tasks.debugSynthesize = (_, _, _) {
+      synthesisStarted.complete();
+      return finishSynthesis.future;
+    };
     final original = _providers('tts', 'voice');
-    tasks.state = [
+    tasks.tasksForTest = [
       SynthesisTask(
           id: 'child',
           title: 'T',
@@ -2064,18 +2080,30 @@ void main() {
           customParams: {'voice': 'launch-voice', 'speed': '1.2'},
           folder: 'launch-folder')
     ];
-    final current =
-        _providers('tts', 'voice', key: 'new-key', host: 'https://new.invalid');
+    final current = _providers('tts', 'voice',
+        key: 'new-key', host: 'https://new.invalid', speedMax: 9);
     tasks.resumeTask('child',
         providerConfig: current.entries.single.configs.single,
         modelConfig: current.entries.single.configs.single.models.single);
-    expect(tasks.state.single.providerConfig.key, 'new-key');
-    expect(tasks.state.single.providerConfig.host, 'https://new.invalid');
-    expect(tasks.state.single.text, 'input');
-    expect(tasks.state.single.customParams,
+    await synthesisStarted.future;
+    expect(tasks.tasksForTest.single.providerConfig.key, 'new-key');
+    expect(
+        tasks.tasksForTest.single.providerConfig.host, 'https://new.invalid');
+    expect(tasks.tasksForTest.single.modelConfig.speedMax, 9);
+    expect(tasks.tasksForTest.single.status, TaskStatus.running);
+    expect(tasks.tasksForTest.single.text, 'input');
+    expect(tasks.tasksForTest.single.customParams,
         {'voice': 'launch-voice', 'speed': '1.2'});
-    expect(tasks.state.single.folder, 'launch-folder');
+    expect(tasks.tasksForTest.single.folder, 'launch-folder');
     tasks.removeTask('child');
+    finishSynthesis.complete(Uint8List(0));
+    final persistedTasks = File('${directory.path}/synthesis/tasks.json');
+    await _waitFor(
+      () =>
+          persistedTasks.existsSync() &&
+          persistedTasks.readAsStringSync() == '[]',
+      'resumed synthesis task removal persistence',
+    );
   });
 
   test('clearing temporary child paths releases execution routing metadata',
