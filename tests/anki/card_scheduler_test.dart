@@ -53,13 +53,13 @@ void main() {
       expect(c.isDue(0), isTrue);
     });
 
-    test('review card due when due <= nowSec', () {
+    test('review card due when due <= collection day ordinal', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.queue = CardQueue.review;
       c.due = 100;
-      expect(c.isDue(100), isTrue);
-      expect(c.isDue(101), isTrue);
-      expect(c.isDue(99), isFalse);
+      expect(c.isDue(1800000000, dayOrdinal: 100), isTrue);
+      expect(c.isDue(1800000000, dayOrdinal: 101), isTrue);
+      expect(c.isDue(1800000000, dayOrdinal: 99), isFalse);
     });
 
     test('day-learning due is compared with a day ordinal', () {
@@ -73,18 +73,18 @@ void main() {
     });
 
     test(
-      'learning seconds and review seconds remain independent of day ordinal',
+      'learning uses seconds while review uses the collection day ordinal',
       () {
         final learning = Card.createNew(note_id: 1, deck_id: 1)
           ..queue = CardQueue.learn
           ..due = 20000;
         final review = Card.createNew(note_id: 1, deck_id: 1)
           ..queue = CardQueue.review
-          ..due = 2000000000;
+          ..due = 20000;
 
         expect(learning.isDue(2000000000), isTrue);
-        expect(review.isDue(1999999999), isFalse);
-        expect(review.isDue(2000000000), isTrue);
+        expect(review.isDue(2000000000, dayOrdinal: 19999), isFalse);
+        expect(review.isDue(2000000000, dayOrdinal: 20000), isTrue);
       },
     );
 
@@ -100,7 +100,7 @@ void main() {
     test('answerLearning Again resets to first step', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
-      c.answerLearning(0, steps: [1, 10], answerIdx: 0); // Again
+      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 0); // Again
       expect(c.remaining_steps, equals(2)); // back to full steps
       expect(c.due, equals(1 * 60));
     });
@@ -108,14 +108,15 @@ void main() {
     test('answerLearning Good graduates after last step', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
-      c.answerLearning(0, steps: [1, 10], answerIdx: 2); // Good → step 2
+      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → step 2
       expect(
           c.queue, equals(CardQueue.learn)); // still learning (one step left)
 
-      c.answerLearning(0, steps: [1, 10], answerIdx: 2); // Good → graduate
+      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 2); // Good → graduate
       expect(c.queue, equals(CardQueue.review));
       expect(c.ctype, equals(CardType.review));
       expect(c.interval, equals(1)); // graduating interval
+      expect(c.due, equals(11)); // review due is a day ordinal
       expect(c.reps, equals(1));
       expect(c.remaining_steps, equals(0));
     });
@@ -125,7 +126,7 @@ void main() {
       final t = DateTime.now().millisecondsSinceEpoch;
       c.startLearning(t, steps: [1, 10]);
       final dueBefore = c.due;
-      c.answerLearning(t, steps: [1, 10], answerIdx: 1); // Hard
+      c.answerLearning(t, dayOrdinal: 10, steps: [1, 10], answerIdx: 1); // Hard
       // Due is in epoch seconds, step=0 => t~/1000 + 1*60
       expect(c.due, equals(t ~/ 1000 + 1 * 60));
       // Same as startLearning's due (same step)
@@ -135,7 +136,7 @@ void main() {
     test('answerLearning Easy graduates immediately with bonus', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
-      c.answerLearning(0, steps: [1, 10], answerIdx: 3); // Easy
+      c.answerLearning(0, dayOrdinal: 10, steps: [1, 10], answerIdx: 3); // Easy
       expect(c.queue, equals(CardQueue.review));
       // Anki easyBonus: graduatingIvl * 1.3 = 1 * 1.3 = 1 (rounded)
       expect(c.interval, equals(1));
@@ -146,7 +147,7 @@ void main() {
       c.queue = CardQueue.review;
       c.interval = 30;
       c.ease_factor = 2500;
-      c.answerReview(0, rating: 1); // Again
+      c.answerReview(0, dayOrdinal: 10, rating: 1); // Again
       expect(c.lapses, equals(1));
       expect(c.queue, equals(CardQueue.learn));
       expect(c.ctype, equals(CardType.relearn));
@@ -159,9 +160,10 @@ void main() {
       c.interval = 10;
       c.ease_factor = 2500;
       c.reps = 3;
-      c.answerReview(0, rating: 3); // Good
+      c.answerReview(0, dayOrdinal: 10, rating: 3); // Good
       expect(c.reps, equals(4));
       expect(c.interval, equals(25)); // 10 * 2500/1000 = 25
+      expect(c.due, equals(35)); // due remains a day ordinal
     });
 
     test('answerReview Hard uses multiplier', () {
@@ -169,7 +171,7 @@ void main() {
       c.queue = CardQueue.review;
       c.interval = 10;
       c.ease_factor = 2500;
-      c.answerReview(0, rating: 2, hardMult: 1.2); // Hard
+      c.answerReview(0, dayOrdinal: 10, rating: 2, hardMult: 1.2); // Hard
       expect(c.interval, equals(12)); // 10 * 1.2
       expect(c.ease_factor, equals(2350)); // -150
     });
@@ -179,7 +181,7 @@ void main() {
       c.queue = CardQueue.review;
       c.interval = 10;
       c.ease_factor = 2500;
-      c.answerReview(0, rating: 4); // Easy
+      c.answerReview(0, dayOrdinal: 10, rating: 4); // Easy
       // factor: 2500 + 150 = 2650
       // _nextIvl(10, 2650) = (10*2650/1000).round() = 27
       // Easy bonus: 27 * 1.3 = 35.1 -> 35
@@ -191,7 +193,7 @@ void main() {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.queue = CardQueue.review;
       c.ease_factor = 1300;
-      c.answerReview(0, rating: 1);
+      c.answerReview(0, dayOrdinal: 10, rating: 1);
       expect(c.ease_factor, equals(1300)); // clamped
     });
   });

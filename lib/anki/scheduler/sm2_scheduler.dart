@@ -107,8 +107,14 @@ class SM2Scheduler {
 
   /// Schedules a review card after answering.
   /// Passes scheduler configuration to the card's answerReview method.
-  void scheduleReview(Card card, int nowMs, {required int rating}) {
+  void scheduleReview(
+    Card card,
+    int nowMs, {
+    required int dayOrdinal,
+    required int rating,
+  }) {
     card.answerReview(nowMs,
+        dayOrdinal: dayOrdinal,
         rating: rating,
         hardMult: hardMultiplier,
         relearnSteps: learningSteps.length,

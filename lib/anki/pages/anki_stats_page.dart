@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/anki_provider.dart';
 import '../database/anki_database.dart';
-import '../database/col_dao.dart';
-import '../database/card_dao.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Statistics page — queries SQLite directly for aggregate numbers.
@@ -49,21 +47,8 @@ class AnkiStatsPage extends ConsumerWidget {
 
   Widget _buildStats(BuildContext context, AnkiDatabase db) {
     final l10n = AppLocalizations.of(context)!;
-    final now = DateTime.now();
-    final todayStart =
-        DateTime(now.year, now.month, now.day).millisecondsSinceEpoch ~/ 1000;
-
-    // Run all queries in parallel
     return FutureBuilder(
-      future: Future.wait([
-        db.cards.totalCountAll(),
-        db.cards.countByQueueAll(0), // new
-        db.cards.countByQueueAll(1), // learning
-        db.cards.countByQueueAll(3), // day learning
-        db.cards.countByQueueAll(2), // all review cards
-        db.cards.countDueReviewAll(now.millisecondsSinceEpoch ~/ 1000),
-        db.revlog.count(),
-      ], eagerError: true),
+      future: _loadStats(db),
       builder: (ctx, snap) {
         if (snap.hasError) {
           return LayoutBuilder(
@@ -142,6 +127,21 @@ class AnkiStatsPage extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<List<int>> _loadStats(AnkiDatabase db) async {
+    await db.col.load();
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final today = db.col.dayOrdinalAt(nowSec);
+    return Future.wait([
+      db.cards.totalCountAll(),
+      db.cards.countByQueueAll(0), // new
+      db.cards.countByQueueAll(1), // learning
+      db.cards.countByQueueAll(3), // day learning
+      db.cards.countByQueueAll(2), // all review cards
+      db.cards.countDueReviewAll(today),
+      db.revlog.count(),
+    ], eagerError: true);
   }
 }
 

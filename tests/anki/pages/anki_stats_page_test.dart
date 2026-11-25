@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/anki/database/anki_database.dart';
 import 'package:stroom/anki/database/card_dao.dart';
+import 'package:stroom/anki/database/col_dao.dart';
 import 'package:stroom/anki/database/revlog_dao.dart';
 import 'package:stroom/anki/pages/anki_stats_page.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
@@ -22,6 +23,9 @@ class _StubAnkiDatabase extends AnkiDatabase {
     reviewDueTimes: reviewDueTimes,
     dayLearningCount: dayLearningCount,
   );
+
+  @override
+  late final ColDao col = _StubColDao();
 
   @override
   late final RevlogDao revlog = _StubRevlogDao();
@@ -45,8 +49,19 @@ class _StubCardDao implements CardDao {
   }
 
   @override
-  Future<int> countDueReviewAll(int nowSec) async =>
-      reviewDueTimes.where((due) => due <= nowSec).length;
+  Future<int> countDueReviewAll(int dayOrdinal) async =>
+      reviewDueTimes.where((due) => due <= dayOrdinal).length;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StubColDao implements ColDao {
+  @override
+  Future<void> load() async {}
+
+  @override
+  int dayOrdinalAt(int nowSec) => 6000;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -109,9 +124,8 @@ void main() {
   testWidgets('shows only review cards due now or earlier in due statistics', (
     tester,
   ) async {
-    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final database = _StubAnkiDatabase(
-      reviewDueTimes: [nowSec - 60, nowSec + 3600],
+      reviewDueTimes: [5999, 6001],
     );
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -152,9 +166,8 @@ void main() {
   testWidgets('includes day-learning cards in learning total and progress', (
     tester,
   ) async {
-    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final database = _StubAnkiDatabase(
-      reviewDueTimes: [nowSec - 60, nowSec + 3600],
+      reviewDueTimes: [5999, 6001],
       dayLearningCount: 3,
     );
     tester.view.physicalSize = const Size(800, 1200);

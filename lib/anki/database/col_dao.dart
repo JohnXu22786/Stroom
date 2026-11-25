@@ -488,7 +488,7 @@ class ColDao {
     );
     final revCnt = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND queue = 2 AND due <= ?',
-      [did, now],
+      [did, today],
     );
     final total = await cards.totalCount(did);
     return DeckStats(
@@ -502,8 +502,8 @@ class ColDao {
 
   /// Returns Anki's collection-relative day ordinal for [nowSec].
   ///
-  /// Card due values in queue 3 are day ordinals since the collection's
-  /// creation day, unlike queue 1/2 values which this app stores in seconds.
+  /// Card due values in queues 2 and 3 are day ordinals since the collection's
+  /// creation day, unlike queue 1 values which are stored in seconds.
   int dayOrdinalAt(int nowSec) {
     return (nowSec - creationDate) ~/ Duration(days: 1).inSeconds;
   }
