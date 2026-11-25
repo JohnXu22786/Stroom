@@ -23,7 +23,8 @@ class EmailAutolinkSyntax extends InlineSyntax {
     final url = match[1]!;
     final text = parser.encodeHtml ? escapeHtml(url) : url;
     final anchor = Element.text('a', text);
-    anchor.attributes['href'] = Uri.encodeFull('mailto:$url');
+    anchor.attributes['href'] =
+        'mailto:${Uri.encodeComponent(url).replaceFirst('%40', '@')}';
     parser.addNode(anchor);
 
     return true;
