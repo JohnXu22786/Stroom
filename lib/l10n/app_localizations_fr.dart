@@ -12342,6 +12342,54 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get providerResponsesEndpointHelp =>
       'Utilisez l’URL Responses configurée pour ce fournisseur, par exemple /v1/responses. Stroom l’envoie telle quelle.';
+
+  @override
+  String get assistantSchemaNonEmptyString => 'Non-empty string';
+
+  @override
+  String get assistantSchemaIso8601OptionalString =>
+      'ISO 8601 string, optional';
+
+  @override
+  String get assistantSchemaOptionalObject => 'Optional object';
+
+  @override
+  String get assistantSchemaObjectList => 'Object list';
+
+  @override
+  String get assistantSchemaSameOriginRelativePath =>
+      'Same-origin relative path';
+
+  @override
+  String get assistantSchemaSha256HexString =>
+      '64-character hexadecimal string';
+
+  @override
+  String get assistantSchemaOptionalStringList => 'Optional string list';
+
+  @override
+  String get assistantSchemaPositiveInteger => 'Positive integer';
+
+  @override
+  String get assistantSchemaInteger => 'Integer';
+
+  @override
+  String get assistantSchemaModelConfiguredOnDevice =>
+      'Model configured on this device';
+
+  @override
+  String get assistantSchemaOptionalStringListNoTools =>
+      'Optional string list (no tools currently available)';
+
+  @override
+  String get assistantSchemaOptionalString => 'Optional string';
+
+  @override
+  String get assistantSchemaString => 'String';
+
+  @override
+  String get assistantSchemaCharacterRangeBool =>
+      '100–100000 characters / bool';
 }
 
 /// The translations for French, as used in France (`fr_FR`).
