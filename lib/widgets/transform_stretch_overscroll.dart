@@ -168,7 +168,7 @@ class _TransformStretchOverscrollState extends State<TransformStretchOverscroll>
   /// needed (mirrors the framework's `scrollEnd`; an in-flight spring is
   /// kept, not restarted).
   void _scrollEnd(double velocity) {
-    if (velocity == 0.0 && _overscroll == 0.0) return;
+    if (_overscroll == 0.0) return;
     final scaledVelocity = (-(velocity * _kFlingVelocityFriction))
         .clamp(-_kMaxFlingVelocity, _kMaxFlingVelocity);
     if (_controller == null) {
