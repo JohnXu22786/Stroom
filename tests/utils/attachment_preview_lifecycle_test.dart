@@ -100,6 +100,69 @@ void main() {
   );
 
   test(
+    'never-completing player creation eventually deletes the preview',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('preview-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/pending.mp4');
+      await file.writeAsString('preview');
+      final initialization = Completer<void>();
+      var disposeAttempted = false;
+
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(
+        () async {
+          disposeAttempted = true;
+          await initialization.future;
+        },
+        shouldDisposePlayer: () => false,
+        initialization: initialization.future,
+        initializationWaitLimit: const Duration(milliseconds: 100),
+      );
+
+      await cleanup;
+
+      expect(disposeAttempted, isTrue);
+      expect(await file.exists(), isFalse);
+    },
+  );
+
+  test(
+    'late player initialization is disposed before deleting its preview',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('preview-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/late.mp4');
+      await file.writeAsString('preview');
+      final initialization = Completer<void>();
+      var playerCreated = false;
+      var disposeCalled = false;
+
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(
+        () async {
+          await initialization.future;
+          disposeCalled = true;
+        },
+        shouldDisposePlayer: () => playerCreated,
+        initialization: initialization.future,
+        initializationWaitLimit: const Duration(milliseconds: 100),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(disposeCalled, isFalse);
+      expect(await file.exists(), isTrue);
+
+      playerCreated = true;
+      initialization.complete();
+      await cleanup;
+
+      expect(disposeCalled, isTrue);
+      expect(await file.exists(), isFalse);
+    },
+  );
+
+  test(
     'settled player errors dispose subscriptions even without a player ID',
     () async {
       final directory = await Directory.systemTemp.createTemp('preview-test-');
