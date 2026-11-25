@@ -14,6 +14,43 @@ TextStyle? _styleForText(InlineSpan span, String text) {
 }
 
 void main() {
+  for (final alignment in <({String separator, Alignment expected})>[
+    (separator: ':---', expected: Alignment.centerLeft),
+    (separator: ':---:', expected: Alignment.center),
+    (separator: '---:', expected: Alignment.centerRight),
+  ]) {
+    testWidgets(
+      'table header and body honor ${alignment.expected} column alignment',
+      (WidgetTester tester) async {
+        final widgets = MarkdownGenerator().buildWidgets(
+          '| Header |\n| ${alignment.separator} |\n| Body |',
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: Column(children: widgets)),
+          ),
+        );
+
+        for (final text in ['Header', 'Body']) {
+          final alignments = tester
+              .widgetList<Align>(
+                find.ancestor(
+                  of: find.text(text),
+                  matching: find.byType(Align),
+                ),
+              )
+              .map((align) => align.alignment);
+          expect(
+            alignments,
+            contains(alignment.expected),
+            reason: '$text should use ${alignment.expected}',
+          );
+        }
+      },
+    );
+  }
+
   testWidgets('ignores body cells beyond the table header column count', (
     WidgetTester tester,
   ) async {
