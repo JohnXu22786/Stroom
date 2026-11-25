@@ -80,8 +80,7 @@ String normalizeLinkDestination(String destination) {
 // https://spec.commonmark.org/0.30/#example-506
 // https://spec.commonmark.org/0.30/#example-507
 // https://spec.commonmark.org/0.30/#example-508
-String normalizeLinkTitle(String title) =>
-    decodeHtmlCharacters(title);
+String normalizeLinkTitle(String title) => decodeHtmlCharacters(title);
 
 ///  Decodes HTML entity and numeric character references, for example decode
 /// `&#35` to `#`.

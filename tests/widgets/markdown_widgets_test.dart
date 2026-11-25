@@ -640,8 +640,7 @@ void main() {
     });
 
     test('preserves literal entity text in raw attribute and ID values', () {
-      final attribute = m.Element('span', [])
-        ..attributes['title'] = '&amp;';
+      final attribute = m.Element('span', [])..attributes['title'] = '&amp;';
       final generatedId = m.Element('span', [])..generatedId = '&amp;';
 
       expect(
@@ -686,6 +685,17 @@ void main() {
       expect(
         m.markdownToHtml(r'''![![`&amp;`](inner.png)](outer.png)'''),
         '<p><img src="outer.png" alt="&amp;amp;" /></p>\n',
+      );
+    });
+
+    test('preserves raw image alt entities when HTML encoding is disabled', () {
+      expect(
+        m.markdownToHtml(r'![`&amp;`](image.png)', encodeHtml: false),
+        '<p><img src="image.png" alt="&amp;amp;" /></p>\n',
+      );
+      expect(
+        m.markdownToHtml('![&amp;amp;](image.png)', encodeHtml: false),
+        '<p><img src="image.png" alt="&amp;amp;" /></p>\n',
       );
     });
   });

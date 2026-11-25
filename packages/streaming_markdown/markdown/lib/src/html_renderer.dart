@@ -200,8 +200,7 @@ class HtmlRenderer implements NodeVisitor {
     return suffixedId;
   }
 
-  String _escapeAttributeValue(String value) =>
-      escapeHtmlAttribute(value);
+  String _escapeAttributeValue(String value) => escapeHtmlAttribute(value);
 
   /// Filters some particular tags, see:
   /// https://github.github.com/gfm/#disallowed-raw-html-extension-
