@@ -92,6 +92,107 @@ void main() {
     },
   );
 
+  test('inherits an AdaptationSet SegmentList', () async {
+    const manifest = r'''
+<MPD>
+  <Period>
+    <AdaptationSet>
+      <SegmentList>
+        <Initialization sourceURL="init.mp4"/>
+        <SegmentURL media="segment-1.m4s"/>
+      </SegmentList>
+      <Representation id="v1"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+    final segments = await MPDParser.parseManifest(
+      manifest,
+      'https://example.com/video/manifest.mpd',
+    );
+
+    expect(segments, [
+      'https://example.com/video/init.mp4',
+      'https://example.com/video/segment-1.m4s',
+    ]);
+  });
+
+  test('inherits a Period SegmentList', () async {
+    const manifest = r'''
+<MPD>
+  <Period>
+    <SegmentList>
+      <SegmentURL media="segment-1.m4s"/>
+      <SegmentURL media="segment-2.m4s"/>
+    </SegmentList>
+    <AdaptationSet>
+      <Representation id="v1"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+    final segments = await MPDParser.parseManifest(
+      manifest,
+      'https://example.com/video/manifest.mpd',
+    );
+
+    expect(segments, [
+      'https://example.com/video/segment-1.m4s',
+      'https://example.com/video/segment-2.m4s',
+    ]);
+  });
+
+  test('prefers a Representation SegmentList over inherited SegmentLists',
+      () async {
+    const manifest = r'''
+<MPD>
+  <Period>
+    <SegmentList><SegmentURL media="period.m4s"/></SegmentList>
+    <AdaptationSet>
+      <SegmentList><SegmentURL media="adaptation.m4s"/></SegmentList>
+      <Representation id="v1">
+        <SegmentList><SegmentURL media="representation.m4s"/></SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+    final segments = await MPDParser.parseManifest(
+      manifest,
+      'https://example.com/video/manifest.mpd',
+    );
+
+    expect(segments, ['https://example.com/video/representation.m4s']);
+  });
+
+  test('prefers a more-specific SegmentTemplate over a Period SegmentList',
+      () async {
+    const manifest = r'''
+<MPD mediaPresentationDuration="PT2S">
+  <Period>
+    <SegmentList><SegmentURL media="period.m4s"/></SegmentList>
+    <AdaptationSet>
+      <SegmentTemplate media="adaptation-$Number$.m4s" duration="1"/>
+      <Representation id="v1"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+    final segments = await MPDParser.parseManifest(
+      manifest,
+      'https://example.com/video/manifest.mpd',
+    );
+
+    expect(segments, [
+      'https://example.com/video/adaptation-1.m4s',
+      'https://example.com/video/adaptation-2.m4s',
+    ]);
+  });
+
   test('inherits an AdaptationSet SegmentTemplate and timeline', () async {
     const manifest = r'''
 <MPD mediaPresentationDuration="PT4S">
