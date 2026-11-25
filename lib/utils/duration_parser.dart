@@ -21,7 +21,12 @@ DurationResult? parseSmartDuration(String text) {
   final components =
       text.split(RegExp(r'[^\d]+')).where((s) => s.isNotEmpty).toList();
   if (components.isEmpty || components.length > 3) return null;
-  final numbers = components.map(int.parse).toList();
+  final numbers = <int>[];
+  for (final component in components) {
+    final number = int.tryParse(component);
+    if (number == null) return null;
+    numbers.add(number);
+  }
 
   var h = 0, m = 0, s = 0;
   if (numbers.length == 1) {
