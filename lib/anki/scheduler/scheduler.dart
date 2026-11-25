@@ -55,6 +55,11 @@ class AnkiScheduler {
     final card = await cards.get(cid);
     if (card == null) return;
 
+    final reviewKind = switch (card.ctype) {
+      CardType.new_ || CardType.learn => RevlogReviewKind.learning,
+      CardType.relearn => RevlogReviewKind.relearning,
+      CardType.review => RevlogReviewKind.review,
+    };
     final lastIvl = card.interval;
 
     switch (card.queue.value) {
@@ -97,10 +102,7 @@ class AnkiScheduler {
             last_interval: lastIvl,
             ease_factor: card.ease_factor,
             taken_millis: reviewDuration,
-            review_kind:
-                card.ctype == CardType.learn || card.ctype == CardType.relearn
-                    ? RevlogReviewKind.relearning
-                    : RevlogReviewKind.review,
+            review_kind: reviewKind,
           ),
           executor: txn);
 
