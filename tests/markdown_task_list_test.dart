@@ -1,5 +1,5 @@
+import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as markdown;
-import 'package:test/test.dart';
 
 void main() {
   test('task markers at end of line render as checked and unchecked items', () {
