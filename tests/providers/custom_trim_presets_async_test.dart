@@ -1,4 +1,4 @@
-// ignore_for_file: invalid_use_of_visible_for_testing_member, use_super_parameters
+// ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member, use_super_parameters
 
 import 'dart:async';
 import 'dart:convert';
@@ -32,6 +32,94 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  test('preserves malformed stored presets during load', () async {
+    const malformedPresets = '[{"id":"broken"';
+    SharedPreferences.setMockInitialValues({presetKey: malformedPresets});
+
+    final notifier = CustomTrimPresetsNotifier();
+    await notifier.load();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(notifier.state, isEmpty);
+    expect(prefs.getString(presetKey), malformedPresets);
+    expect(
+      prefs.getKeys().where((key) => key.startsWith('$presetKey.corrupt.')),
+      isEmpty,
+    );
+  });
+
+  test(
+    'backs up malformed presets before mutation and keeps them recoverable',
+    () async {
+      const malformedPresets = '[{"id":"broken"';
+      SharedPreferences.setMockInitialValues({presetKey: malformedPresets});
+
+      final notifier = CustomTrimPresetsNotifier();
+      await notifier.load();
+      await notifier.add(
+        TrimPreset(id: 'added', name: 'Added', durationSeconds: 2.0),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('$presetKey.corrupt.'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), malformedPresets);
+
+      final restartedNotifier = CustomTrimPresetsNotifier();
+      await restartedNotifier.load();
+      expect(restartedNotifier.state.map((preset) => preset.id), [
+        'added',
+      ]);
+      expect(prefs.getString(backupKeys.single), malformedPresets);
+    },
+  );
+
+  test('preserves valid preset ordering without a corrupt backup', () async {
+    final storedPresets = [
+      {
+        'id': 'first',
+        'name': 'First',
+        'durationSeconds': 1.0,
+        'direction': 'head',
+      },
+      {
+        'id': 'second',
+        'name': 'Second',
+        'durationSeconds': 1.5,
+        'direction': 'tail',
+      },
+    ];
+    SharedPreferences.setMockInitialValues({
+      presetKey: jsonEncode(storedPresets),
+    });
+
+    final notifier = CustomTrimPresetsNotifier();
+    await notifier.load();
+    await notifier.add(
+      TrimPreset(id: 'added', name: 'Added', durationSeconds: 2.0),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(notifier.state.map((preset) => preset.id), [
+      'first',
+      'second',
+      'added',
+    ]);
+    expect(
+      prefs.getKeys().where((key) => key.startsWith('$presetKey.corrupt.')),
+      isEmpty,
+    );
+    expect(
+      (jsonDecode(prefs.getString(presetKey)!) as List).map(
+        (preset) => preset['id'],
+      ),
+      ['first', 'second', 'added'],
+    );
   });
 
   test('keeps a mutation made while loading saved presets', () async {
