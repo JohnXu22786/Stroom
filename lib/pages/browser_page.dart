@@ -395,22 +395,12 @@ String? _userscriptMetadataName(String code) {
 
 Future<String> _fetchUserscript(String sourceUrl) async {
   var uri = Uri.parse(normalizeUserscriptUrl(sourceUrl));
-  bool isTrustedUri(Uri candidate) {
-    final host = candidate.host.toLowerCase();
-    return candidate.scheme == 'https' &&
-        candidate.port == 443 &&
-        candidate.userInfo.isEmpty &&
-        (host == 'greasyfork.org' ||
-            host == 'www.greasyfork.org' ||
-            host == 'update.greasyfork.org' ||
-            host == 'raw.githubusercontent.com');
-  }
 
   UserscriptHttpResponse? response;
   for (var redirects = 0; redirects <= 5; redirects++) {
     response = await fetchUserscriptHttp(uri.toString());
     if (response.responseUrl != uri) {
-      if (!isTrustedUri(response.responseUrl)) {
+      if (!isTrustedUserscriptUri(response.responseUrl)) {
         throw const FormatException('redirectedUrl');
       }
       uri = response.responseUrl;
@@ -425,9 +415,11 @@ Future<String> _fetchUserscript(String sourceUrl) async {
     } on FormatException {
       throw const FormatException('redirectedUrl');
     }
-    if (!isTrustedUri(uri)) throw const FormatException('redirectedUrl');
+    if (!isTrustedUserscriptUri(uri)) {
+      throw const FormatException('redirectedUrl');
+    }
   }
-  if (response == null || !response.isSuccess || !isTrustedUri(uri)) {
+  if (response == null || !response.isSuccess || !isTrustedUserscriptUri(uri)) {
     throw const FormatException('redirectedUrl');
   }
   final source = response.body;
