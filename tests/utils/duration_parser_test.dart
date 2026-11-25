@@ -39,6 +39,19 @@ void main() {
       expect(result.seconds, 30);
     });
 
+    test('oversized single component returns null', () {
+      expect(parseSmartDuration('999999999999999999999999999999'), isNull);
+    });
+
+    test('oversized two-component value returns null', () {
+      expect(parseSmartDuration('1:999999999999999999999999999999'), isNull);
+    });
+
+    test('out-of-range minute and second components return null', () {
+      expect(parseSmartDuration('1:60'), isNull);
+      expect(parseSmartDuration('1:2:60'), isNull);
+    });
+
     test('four numbers are rejected instead of dropping the fourth', () {
       expect(parseSmartDuration('1:2:3:4'), isNull);
       expect(
