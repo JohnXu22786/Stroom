@@ -78,9 +78,9 @@ class NotificationService {
         '@mipmap/ic_launcher',
       );
       const iosSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
       );
 
       // 桌面端也需要初始化：窗口最小化/关闭后任务完成通知
