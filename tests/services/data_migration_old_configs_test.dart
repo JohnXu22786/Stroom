@@ -60,6 +60,22 @@ void main() {
         expect(m['type'], isNotEmpty);
       }
     });
+
+    test('persists provider cleanup when malformed entries are filtered',
+        () async {
+      final validEntry = {'id': 'kept', 'type': 'tts'};
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([null, validEntry]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.fixNullIdsInProviderEntries(prefs);
+
+      expect(
+        jsonDecode(prefs.getString('provider_entries')!),
+        [validEntry],
+      );
+    });
   });
 
   group('DataMigrationOldConfigs.migrateOldChatConfigs', () {
