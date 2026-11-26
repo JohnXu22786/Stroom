@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/gallery_viewer_page.dart';
 import 'package:stroom/pages/image_editor_page.dart';
@@ -397,6 +398,61 @@ void main() {
         );
       },
     );
+
+    test('edited JPEG output keeps a matching record and export extension',
+        () async {
+      final editedBytes = Uint8List.fromList(
+        img.encodeJpg(img.Image(width: 2, height: 2)),
+      );
+      final source = _makeRecord(
+        id: 'jpeg_edit_source',
+        hash: 'jpeg_source_hash',
+        name: 'photo',
+        format: 'jpg',
+        folder: '',
+      );
+
+      final savedRecord = await saveEditedGalleryImageRecord(
+        source,
+        editedBytes,
+        isSaveAs: true,
+      );
+      final storedBytes = await ImageManifest.readFile(
+        savedRecord.storageFileName,
+      );
+
+      expect(savedRecord.format, 'jpg');
+      expect(galleryRecordVisiblePath(savedRecord), 'photo_edited.jpg');
+      expect(storedBytes, editedBytes);
+      expect(img.decodeJpg(storedBytes!), isNotNull);
+    });
+
+    test('non-JPEG edited output is stored and exported as PNG', () async {
+      final editedBytes = Uint8List.fromList(
+        img.encodePng(img.Image(width: 2, height: 2)),
+      );
+      final source = _makeRecord(
+        id: 'webp_edit_source',
+        hash: 'webp_source_hash',
+        name: 'photo',
+        format: 'webp',
+        folder: '',
+      );
+
+      final savedRecord = await saveEditedGalleryImageRecord(
+        source,
+        editedBytes,
+        isSaveAs: true,
+      );
+      final storedBytes = await ImageManifest.readFile(
+        savedRecord.storageFileName,
+      );
+
+      expect(savedRecord.format, 'png');
+      expect(galleryRecordVisiblePath(savedRecord), 'photo_edited.png');
+      expect(storedBytes, editedBytes);
+      expect(img.decodePng(storedBytes!), isNotNull);
+    });
 
     test('folder name reservation does not deadlock folder deletion', () async {
       await ImageManifest.addFolder('parent');
