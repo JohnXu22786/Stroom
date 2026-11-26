@@ -957,6 +957,28 @@ void main() {
       return Uint8List.fromList(data.sublist(mdatTypeOffset + 4, mdatEnd));
     }
 
+    Uint8List withInvalidSecondAacChunkOffset(List<Uint8List> sourceFrames, {
+      List<(int, int)>? editListEntries,
+    }) {
+      final malformed = Uint8List.fromList(
+        buildMinimalMp4WithAacAudio(
+          asc: Uint8List.fromList([0x12, 0x10]),
+          sampleRate: 44100,
+          sourceFrames: sourceFrames,
+          sampleDescriptionIndicesPerChunk:
+              List.filled(sourceFrames.length, 1),
+          editListEntries: editListEntries,
+        ),
+      );
+      final stcoTypeOffset = _findFourCc(malformed, 'stco');
+      malformed.setRange(
+        stcoTypeOffset + 16,
+        stcoTypeOffset + 20,
+        _u32be(malformed.length - 1),
+      );
+      return malformed;
+    }
+
     test('writes 96 kHz AAC rate with an srat box', () async {
       // AAC-LC, 96 kHz, stereo.
       final asc = Uint8List.fromList([0x10, 0x10]);
@@ -1181,6 +1203,46 @@ void main() {
         );
       },
     );
+
+    test('rejects an out-of-range selected AAC sample in both APIs', () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]),
+        Uint8List.fromList([0x44, 0x55, 0x66]),
+      ];
+      final malformed = withInvalidSecondAacChunkOffset(sourceFrames);
+
+      expect(
+        () => extractAudioSync(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('ignores an out-of-range AAC sample excluded by the edit list',
+        () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]),
+        Uint8List.fromList([0x44, 0x55, 0x66]),
+        Uint8List.fromList([0x77, 0x88, 0x99]),
+      ];
+      final malformed = withInvalidSecondAacChunkOffset(
+        sourceFrames,
+        editListEntries: [(1024, 0), (1024, 2048)],
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: malformed,
+        videoFormat: 'mp4',
+      );
+
+      expect(
+        audioDataFromMp4(result),
+        Uint8List.fromList([...sourceFrames[0], ...sourceFrames[2]]),
+      );
+    });
 
     test('rejects a constant-size sample count beyond file capacity', () async {
       final malformed = Uint8List.fromList(
