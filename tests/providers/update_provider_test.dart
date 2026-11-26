@@ -15,10 +15,21 @@ import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/startup/startup_update_recovery.dart';
+
+class _RejectPendingRestartWriteStore extends InMemorySharedPreferencesStore {
+  _RejectPendingRestartWriteStore() : super.empty();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.pending_update_restart') return false;
+    return super.setValue(valueType, key, value);
+  }
+}
 
 class _ApplicationCachePathProvider extends PathProviderPlatform {
   _ApplicationCachePathProvider(this.path);
@@ -1892,6 +1903,47 @@ void main() {
           );
         await chinese.installDownloadedFile();
         expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
+    test('does not launch Android installer when restart flag write fails',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      SharedPreferencesStorePlatform.instance =
+          _RejectPendingRestartWriteStore();
+      setPendingRestartInMemory(false);
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      var installerCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        installerCalls++;
+        return 'ok';
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final notifier = UpdateNotifier(
+          dio: Dio(BaseOptions()),
+          localizations: () => appLocalizationsForLocale(const Locale('en')),
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
+
+        await notifier.installDownloadedFile();
+
+        expect(installerCalls, 0);
+        expect(isPendingRestartInMemory, isFalse);
+        expect(await hasPendingUpdateRestart(), isFalse);
+        expect(
+          notifier.state.downloadError,
+          'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.',
+        );
       } finally {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
