@@ -12,6 +12,7 @@ void main() {
     WidgetTester tester, {
     required Locale locale,
     required Size size,
+    ThemeData? theme,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -23,6 +24,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: locale,
+        theme: theme ?? ThemeData(useMaterial3: true),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: VoiceEditorPage(
@@ -91,12 +93,26 @@ void main() {
       (
     tester,
   ) async {
+    final statefulHintTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      inputDecorationTheme: InputDecorationThemeData(
+        hintStyle: WidgetStateTextStyle.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.focused)
+                ? Colors.purple
+                : Colors.green,
+          ),
+        ),
+      ),
+    );
     await pumpVoiceEditor(
       tester,
       locale: const Locale('es', 'ES'),
       // The widget test font uses fixed-width Ahem glyphs; 1000 dp gives the
       // complete Spanish hints room to fit in this fixture.
       size: const Size(1000, 640),
+      theme: statefulHintTheme,
     );
 
     final l10n = await AppLocalizations.delegate.load(const Locale('es', 'ES'));
@@ -109,7 +125,7 @@ void main() {
       final hintStyle = tester.widget<ConstrainedText>(constrainedHint).style!;
       expect(hintStyle.fontSize, theme.textTheme.bodyLarge!.fontSize);
       expect(hintStyle.fontWeight, theme.textTheme.bodyLarge!.fontWeight);
-      expect(hintStyle.color, theme.colorScheme.onSurfaceVariant);
+      expect(hintStyle.color, Colors.green);
       final naturalText = TextPainter(
         text: TextSpan(text: hint, style: hintStyle),
         textDirection: Directionality.of(tester.element(constrainedHint)),
@@ -123,6 +139,15 @@ void main() {
     }
 
     final nameField = find.byType(TextField).first;
+    await tester.tap(nameField);
+    await tester.pumpAndSettle();
+    final focusedNameHint = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == l10n.voiceName,
+    );
+    expect(
+      tester.widget<ConstrainedText>(focusedNameHint).style!.color,
+      Colors.purple,
+    );
     await tester.enterText(nameField, 'Mi voz');
     await tester.pump();
     expect(tester.widget<TextField>(nameField).controller!.text, 'Mi voz');
