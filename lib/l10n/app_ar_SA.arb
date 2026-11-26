@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "الدخول إلى كيلو كود",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "إذا رفض macOS طلبًا للوصول إلى سلسلة المفاتيح، فسيتم تخطي هذا الإدخال.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "قد يسألك نظام التشغيل macOS، عنصرًا تلو الآخر، عما إذا كان سيسمح لـ Stroom بالتحقق من مطابقة إدخالات سلسلة المفاتيح عند إنشاء بيان قابل للاستيراد.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "الرصيد المتبقي في النافذة الرئيسية",

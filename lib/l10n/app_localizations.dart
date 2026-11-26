@@ -20688,6 +20688,12 @@ abstract class AppLocalizations {
   /// **'Login to Kilo Code'**
   String get llmAccountUiLoginToKilo;
 
+  /// Zed keychain import behavior when macOS denies an item request.
+  ///
+  /// In en, this message translates to:
+  /// **'If macOS denies a keychain request, that entry is skipped.'**
+  String get llmAccountUiMacOSDenied;
+
   /// Account management UI copy.
   ///
   /// In en, this message translates to:

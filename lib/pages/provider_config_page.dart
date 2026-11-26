@@ -159,7 +159,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           } catch (_) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(AppLocalizations.of(context)?.llmOcrAccountSyncFailed ?? 'OCR 账号同步失败；请在账号管理中检查配置。')),
+                SnackBar(
+                    content: Text(
+                        AppLocalizations.of(context)?.llmOcrAccountSyncFailed ??
+                            'OCR 账号同步失败；请在账号管理中检查配置。')),
               );
             }
           }
@@ -378,7 +381,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)?.llmOcrAccountMigrationFailed ?? 'OCR 账号迁移失败；原配置仍保留。')));
+          ).showSnackBar(SnackBar(
+              content: Text(
+                  AppLocalizations.of(context)?.llmOcrAccountMigrationFailed ??
+                      'OCR 账号迁移失败；原配置仍保留。')));
         }
         return;
       }

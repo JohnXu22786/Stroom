@@ -7387,6 +7387,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "Login to Kilo Code",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "If macOS denies a keychain request, that entry is skipped.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS may ask, item by item, whether to allow Stroom to check for matching keychain entries when generating an importable manifest.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "Main window balance remaining",

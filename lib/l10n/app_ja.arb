@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "キロコードにログイン",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "macOS がキーチェーンへのアクセス要求を拒否した場合、その項目はスキップされます。",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS は、インポート可能なマニフェストを生成するときに、Stroom が一致するキーチェーン エントリをチェックできるようにするかどうかを項目ごとに尋ねる場合があります。",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "メインウィンドウ残高",

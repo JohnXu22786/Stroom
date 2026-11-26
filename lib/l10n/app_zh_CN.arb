@@ -7405,6 +7405,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "登录 Kilo Code",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "如果 macOS 拒绝某个钥匙串请求，该条目将被跳过。",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS 可能在生成可导入清单时，逐项询问是否允许 Stroom 检查匹配的钥匙串条目。",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "主窗口额度剩余",

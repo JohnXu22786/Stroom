@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "Connectez-vous à Kilo Code",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "Si macOS refuse une demande d’accès au trousseau, cette entrée sera ignorée.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS peut demander, élément par élément, s'il doit autoriser Stroom à vérifier les entrées de trousseau correspondantes lors de la génération d'un manifeste importable.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "Solde restant de la fenêtre principale",

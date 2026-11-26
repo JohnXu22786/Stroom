@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "Iniciar sesión en Kilo Code",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "Si macOS deniega una solicitud del llavero, se omitirá esa entrada.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS puede preguntar, elemento por elemento, si se permite que Stroom verifique si hay entradas de llavero coincidentes al generar un manifiesto importable.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "Saldo restante de la ventana principal",

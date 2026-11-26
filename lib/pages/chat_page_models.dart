@@ -167,11 +167,11 @@ extension _ChatPageModelsExt on _ChatPageState {
             selectedModelIdentity) {
       return;
     }
-    final currentAccountId = _nextRequestAccountConversationId ==
-                conversationId &&
-            _nextRequestAccountModelIdentity == selectedModelIdentity
-        ? _nextRequestAccountId
-        : null;
+    final currentAccountId =
+        _nextRequestAccountConversationId == conversationId &&
+                _nextRequestAccountModelIdentity == selectedModelIdentity
+            ? _nextRequestAccountId
+            : null;
     final selectedAccountId = await showDialog<String>(
       context: context,
       builder: (_) => ChatAccountOverrideDialog(

@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/pages/llm_account_management_page.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
@@ -25,8 +26,28 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
-  testWidgets('desktop account page offers Zed keychain import',
-      (tester) async {
+  test('en_US account labels preserve regional and inherited translations', () {
+    expect(
+      AppLocalizationsEnUs().llmAccountUiCrossAccount,
+      'Cross-account rollback range',
+    );
+    expect(
+      AppLocalizationsEn().llmAccountUiCrossAccount,
+      'Cross-account fallback scope',
+    );
+    expect(
+      AppLocalizationsEn().llmAccountUiMacOSDenied,
+      'If macOS denies a keychain request, that entry is skipped.',
+    );
+    expect(
+      AppLocalizationsEnUs().llmAccountUiMacOSDenied,
+      'If macOS denies a keychain request, that entry is skipped.',
+    );
+  });
+
+  testWidgets('desktop account page offers Zed keychain import', (
+    tester,
+  ) async {
     final service = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentialStore(),
@@ -64,9 +85,8 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           theme: ThemeData.dark(),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: const TextScaler.linear(1.8),
-            ),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
             child: child!,
           ),
           home: LlmAccountManagementPage(gateway: _testGateway(service)),
@@ -3521,9 +3541,7 @@ void main() {
         'kimi-for-coding-highspeed',
       ]);
       expect(
-        (await gateway.modelDiscovery.discoverModels(
-          saved,
-        ))
+        (await gateway.modelDiscovery.discoverModels(saved))
             .map((model) => model.upstreamModelId),
         ['kimi-for-coding', 'kimi-for-coding-highspeed'],
       );
@@ -3566,9 +3584,8 @@ void main() {
     await tester.tap(find.byTooltip('添加账号'));
     await tester.pumpAndSettle();
 
-    final claudeProvider = _testGateway(
-      service,
-    ).providerCatalog.findProvider('claude')!;
+    final claudeProvider =
+        _testGateway(service).providerCatalog.findProvider('claude')!;
     expect(claudeProvider.supportedAuthTypes, contains('setup_token'));
     final connectorDropdown =
         find.byType(DropdownButtonFormField<String>).at(0);
@@ -4627,9 +4644,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Google OAuth Access Token'), findsNothing);
     expect(
-      _testGateway(
-        service,
-      ).providerCatalog.findProvider('vertex')!.authTypeLimitations['oauth'],
+      _testGateway(service)
+          .providerCatalog
+          .findProvider('vertex')!
+          .authTypeLimitations['oauth'],
       contains('No public third-party OAuth inference flow'),
     );
   });

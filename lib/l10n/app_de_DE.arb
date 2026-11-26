@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "Melden Sie sich bei Kilo Code an",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "Wenn macOS eine Schlüsselbundanfrage ablehnt, wird dieser Eintrag übersprungen.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS fragt möglicherweise Element für Element, ob Stroom beim Generieren eines importierbaren Manifests nach passenden Schlüsselbundeinträgen suchen darf.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "Verbleibender Restbetrag im Hauptfenster",

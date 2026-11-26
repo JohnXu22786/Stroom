@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "킬로코드에 로그인하세요",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "macOS가 키체인 요청을 거부하면 해당 항목은 건너뜁니다.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "macOS는 가져오기 가능한 매니페스트를 생성할 때 Stroom이 일치하는 키체인 항목을 확인하도록 허용할지 여부를 항목별로 물을 수 있습니다.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "메인 창 잔여 잔액",

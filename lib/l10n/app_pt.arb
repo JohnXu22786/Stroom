@@ -7401,6 +7401,8 @@
   "@llmAccountUiLoginTo": {"description": "Account management UI copy."},
   "llmAccountUiLoginToKilo": "Faça login no código do quilo",
   "@llmAccountUiLoginToKilo": {"description": "Account management UI copy."},
+  "llmAccountUiMacOSDenied": "Se o macOS negar uma solicitação do chaveiro, essa entrada será ignorada.",
+  "@llmAccountUiMacOSDenied": {"description": "Zed keychain import behavior when macOS denies an item request."},
   "llmAccountUiMacOSMay": "O macOS pode perguntar, item por item, se permite que o Stroom verifique entradas de chaves correspondentes ao gerar um manifesto importável.",
   "@llmAccountUiMacOSMay": {"description": "Account management UI copy."},
   "llmAccountUiMainWindow": "Saldo restante da janela principal",
