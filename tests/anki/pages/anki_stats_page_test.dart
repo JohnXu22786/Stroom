@@ -13,32 +13,42 @@ class _StubAnkiDatabase extends AnkiDatabase {
   _StubAnkiDatabase({
     this.reviewDueTimes = const [],
     this.dayLearningCount = 0,
+    this.totalCardCount = 10,
+    this.reviewHistoryCount = 5,
   });
 
   final List<int> reviewDueTimes;
   final int dayLearningCount;
+  final int totalCardCount;
+  final int reviewHistoryCount;
 
   @override
   late final CardDao cards = _StubCardDao(
     reviewDueTimes: reviewDueTimes,
     dayLearningCount: dayLearningCount,
+    totalCardCount: totalCardCount,
   );
 
   @override
   late final ColDao col = _StubColDao();
 
   @override
-  late final RevlogDao revlog = _StubRevlogDao();
+  late final RevlogDao revlog = _StubRevlogDao(reviewHistoryCount);
 }
 
 class _StubCardDao implements CardDao {
   final List<int> reviewDueTimes;
   final int dayLearningCount;
+  final int totalCardCount;
 
-  _StubCardDao({this.reviewDueTimes = const [], this.dayLearningCount = 0});
+  _StubCardDao({
+    this.reviewDueTimes = const [],
+    this.dayLearningCount = 0,
+    this.totalCardCount = 10,
+  });
 
   @override
-  Future<int> totalCountAll() async => 10;
+  Future<int> totalCountAll() async => totalCardCount;
 
   @override
   Future<int> countByQueueAll(int queueValue) async {
@@ -68,14 +78,122 @@ class _StubColDao implements ColDao {
 }
 
 class _StubRevlogDao implements RevlogDao {
+  final int reviewHistoryCount;
+
+  _StubRevlogDao(this.reviewHistoryCount);
+
   @override
-  Future<int> count() async => 5;
+  Future<int> count() async => reviewHistoryCount;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
+  testWidgets('keeps a large statistics value inside its card at high scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiDatabaseProvider.overrideWith(
+            (_) async => _StubAnkiDatabase(
+              totalCardCount: 9876543,
+              reviewHistoryCount: 9876543,
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(3),
+              disableAnimations: true,
+            ),
+            child: child!,
+          ),
+          home: const AnkiStatsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('9876543'), findsWidgets);
+
+    final totalCard = find.ancestor(
+      of: find.text('Total cards'),
+      matching: find.byType(Card),
+    );
+    final totalValue = find.descendant(
+      of: totalCard,
+      matching: find.text('9876543'),
+    );
+    expect(totalValue, findsOneWidget);
+    final valueTooltip = find.ancestor(
+      of: totalValue,
+      matching: find.byType(Tooltip),
+    );
+    expect(tester.widget<Tooltip>(valueTooltip).message, '9876543');
+    await tester.longPress(valueTooltip);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('9876543'), findsWidgets);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        key: const ValueKey('fitting-scale-app'),
+        overrides: [
+          ankiDatabaseProvider.overrideWith(
+            (_) async => _StubAnkiDatabase(
+              totalCardCount: 123,
+              reviewHistoryCount: 9876543,
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1),
+            ),
+            child: child!,
+          ),
+          home: const AnkiStatsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+    final fittingCard = find.ancestor(
+      of: find.text('Total cards'),
+      matching: find.byType(Card),
+    );
+    final fittingValue = find.descendant(
+      of: fittingCard,
+      matching: find.text('123'),
+    );
+    expect(
+      (tester.getRect(fittingCard).right -
+              20 -
+              tester.getRect(fittingValue.first).right)
+          .abs(),
+      lessThan(1),
+    );
+  });
+
   testWidgets(
     'localizes statistics labels and progress in English and Chinese',
     (tester) async {
