@@ -162,33 +162,57 @@ class _StatCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(fontSize: 15, color: cs.onSurface),
-              ),
-            ),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final valueStyle = TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            );
+            final valuePainter = TextPainter(
+              text: TextSpan(text: value, style: valueStyle),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+              locale: Localizations.maybeLocaleOf(context),
+            )..layout();
+            final availableValueWidth =
+                (constraints.maxWidth - 44 - 12).clamp(0.0, double.infinity);
+            final maximumValueWidth = availableValueWidth * 0.45;
+            final valueWidget = valuePainter.width > maximumValueWidth
+                ? SizedBox(
+                    width: maximumValueWidth,
+                    child: ConstrainedText(
+                      value,
+                      style: valueStyle,
+                      textAlign: TextAlign.end,
+                      maxLines: 1,
+                      useNaturalWidthLayout: true,
+                    ),
+                  )
+                : Text(value, style: valueStyle);
+
+            return Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(fontSize: 15, color: cs.onSurface),
+                  ),
+                ),
+                valueWidget,
+              ],
+            );
+          },
         ),
       ),
     );
