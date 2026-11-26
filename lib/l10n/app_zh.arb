@@ -7175,6 +7175,20 @@
   "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。",
   "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。"
+  "providerResponsesEndpointHelp": "请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。",
+  "assistantSchemaNonEmptyString": "非空字符串",
+  "assistantSchemaIso8601OptionalString": "ISO 8601 字符串，可省略",
+  "assistantSchemaOptionalObject": "对象，可省略",
+  "assistantSchemaObjectList": "对象列表",
+  "assistantSchemaSameOriginRelativePath": "同源相对路径",
+  "assistantSchemaSha256HexString": "64 位十六进制字符串",
+  "assistantSchemaOptionalStringList": "字符串列表，可省略",
+  "assistantSchemaPositiveInteger": "正整数",
+  "assistantSchemaInteger": "整数",
+  "assistantSchemaModelConfiguredOnDevice": "当前设备已配置的模型",
+  "assistantSchemaOptionalStringListNoTools": "字符串列表（当前未发现可用工具）",
+  "assistantSchemaOptionalString": "字符串，可省略",
+  "assistantSchemaString": "字符串",
+  "assistantSchemaCharacterRangeBool": "100–100000 字符 / bool"
 
 }

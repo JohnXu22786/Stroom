@@ -7191,6 +7191,20 @@
   "ocrSamplingSliderRepairRequired": "範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。",
   "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。"
+  "providerResponsesEndpointHelp": "このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。",
+  "assistantSchemaNonEmptyString": "Non-empty string",
+  "assistantSchemaIso8601OptionalString": "ISO 8601 string, optional",
+  "assistantSchemaOptionalObject": "Optional object",
+  "assistantSchemaObjectList": "Object list",
+  "assistantSchemaSameOriginRelativePath": "Same-origin relative path",
+  "assistantSchemaSha256HexString": "64-character hexadecimal string",
+  "assistantSchemaOptionalStringList": "Optional string list",
+  "assistantSchemaPositiveInteger": "Positive integer",
+  "assistantSchemaInteger": "Integer",
+  "assistantSchemaModelConfiguredOnDevice": "Model configured on this device",
+  "assistantSchemaOptionalStringListNoTools": "Optional string list (no tools currently available)",
+  "assistantSchemaOptionalString": "Optional string",
+  "assistantSchemaString": "String",
+  "assistantSchemaCharacterRangeBool": "100–100000 characters / bool"
 
 }

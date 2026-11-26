@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../widgets/constrained_text.dart';
 
 /// Reference panel for the exact Stroom-owned remote assistant schema.
@@ -21,6 +22,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final isZh = Localizations.localeOf(context).languageCode == 'zh';
     final colorScheme = Theme.of(context).colorScheme;
     final groups = <_InfoGroup>[
@@ -32,31 +34,31 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'catalogId',
-          '非空字符串',
+          l10n.assistantSchemaNonEmptyString,
           isZh ? '目录来源的稳定 ID。' : 'Stable identifier for this catalog.',
         ),
         _InfoRow(
           'updatedAt',
-          'ISO 8601 字符串，可省略',
+          l10n.assistantSchemaIso8601OptionalString,
           isZh ? '目录生成时间。' : 'Catalog generation timestamp.',
         ),
         _InfoRow(
           'extensions',
-          '对象，可省略',
+          l10n.assistantSchemaOptionalObject,
           isZh
               ? '供未来 Stroom 扩展保留；当前不会执行。'
               : 'Reserved for future Stroom extensions; not executed today.',
         ),
         _InfoRow(
           'assistants',
-          '对象列表',
+          l10n.assistantSchemaObjectList,
           isZh
               ? '每项包含助手摘要、版本、文件路径、格式和 SHA-256。'
               : 'Entries include summary, version, file path, format, and SHA-256.',
         ),
         _InfoRow(
           'file',
-          '同源相对路径',
+          l10n.assistantSchemaSameOriginRelativePath,
           isZh ? '目录中的助手文件位置。' : 'Assistant file path relative to the catalog.',
         ),
         _InfoRow(
@@ -68,14 +70,14 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'sha256',
-          '64 位十六进制字符串',
+          l10n.assistantSchemaSha256HexString,
           isZh
               ? '校验下载文件是否与目录清单一致。'
               : 'Verifies the downloaded file matches the manifest.',
         ),
         _InfoRow(
           'requiresCapabilities',
-          '字符串列表，可省略',
+          l10n.assistantSchemaOptionalStringList,
           isZh
               ? '仅支持 stroom.assistant.v1、stroom.settings.v1、stroom.defaultTools.v1；未知能力会拒绝导入。'
               : 'Supported values: stroom.assistant.v1, stroom.settings.v1, stroom.defaultTools.v1; unknown capabilities are rejected.',
@@ -89,41 +91,41 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'id',
-          '非空字符串',
+          l10n.assistantSchemaNonEmptyString,
           isZh
               ? '目录内稳定唯一，用于识别后续更新。'
               : 'Stable unique catalog ID used to match updates.',
         ),
         _InfoRow(
           'name',
-          '非空字符串',
+          l10n.assistantSchemaNonEmptyString,
           isZh ? '助手显示名称，最多 120 个字符。' : 'Display name, up to 120 characters.',
         ),
         _InfoRow(
           'description',
-          '字符串，可省略',
+          l10n.assistantSchemaOptionalString,
           isZh ? '列表中的说明文字。' : 'Short description shown in the market.',
         ),
         _InfoRow(
           'emoji',
-          '字符串，可省略',
+          l10n.assistantSchemaOptionalString,
           isZh ? '助手图标，默认 🤖。' : 'Assistant icon; defaults to 🤖.',
         ),
         _InfoRow(
           'version',
-          '非空字符串',
+          l10n.assistantSchemaNonEmptyString,
           isZh ? '目录和文件中的版本必须一致。' : 'Must match the version in the catalog.',
         ),
         _InfoRow(
           'prompt',
-          '非空字符串',
+          l10n.assistantSchemaNonEmptyString,
           isZh
               ? '助手系统提示词；Markdown 格式中使用前置区后的正文。'
               : 'System prompt; in Markdown, use the body after front matter.',
         ),
         _InfoRow(
           'settings',
-          '对象，可省略',
+          l10n.assistantSchemaOptionalObject,
           isZh
               ? '下面列出的参数必须使用这些固定名称。'
               : 'Optional object containing the exact parameter names below.',
@@ -149,7 +151,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'maxToolCalls / enableMaxToolCalls',
-          '正整数 / bool',
+          '${l10n.assistantSchemaPositiveInteger} / bool',
           isZh
               ? '最大工具调用轮数；UI 接受任意正整数，运行时最多按 100 轮执行；关闭开关表示不限。'
               : 'Tool-call rounds; the UI accepts any positive integer and runtime execution is capped at 100 rounds; disabled means unlimited.',
@@ -171,7 +173,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'seed / enableSeed',
-          '整数 / bool',
+          '${l10n.assistantSchemaInteger} / bool',
           isZh ? '随机种子和启用开关。' : 'Integer seed and its enable toggle.',
         ),
         _InfoRow(
@@ -181,7 +183,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'maxToolOutputChars / enableMaxToolOutputChars',
-          '100–100000 字符 / bool',
+          l10n.assistantSchemaCharacterRangeBool,
           isZh
               ? '工具结果截断长度和启用开关。'
               : 'Tool-result truncation length and its enable toggle.',
@@ -197,14 +199,14 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
       _InfoGroup(isZh ? '默认设置' : 'Defaults', [
         _InfoRow(
           'defaultModelName',
-          '当前设备已配置的模型',
+          l10n.assistantSchemaModelConfiguredOnDevice,
           isZh
               ? '值必须匹配本机模型；不匹配时接入后不设默认模型。'
               : 'Must match a model configured on this device; otherwise no default model is applied.',
         ),
         _InfoRow(
           'defaultModelId / defaultProviderName',
-          '字符串',
+          l10n.assistantSchemaString,
           isZh
               ? '模型 ID 与供应商名应对应本机配置，用于稳定识别。'
               : 'Should identify a model and provider configured on this device.',
@@ -212,7 +214,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         _InfoRow(
           'defaultToolNames',
           supportedToolNames.isEmpty
-              ? '字符串列表（当前未发现可用工具）'
+              ? l10n.assistantSchemaOptionalStringListNoTools
               : (supportedToolNames.toList()..sort()).join(', '),
           isZh
               ? '每项必须是当前设备可用的 Stroom 工具名；空列表表示全部关闭；省略表示保留应用默认行为。'
@@ -220,7 +222,7 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         ),
         _InfoRow(
           'extensions',
-          '对象，可省略',
+          l10n.assistantSchemaOptionalObject,
           isZh
               ? '保留可选扩展数据；未支持的扩展不会启用。'
               : 'Optional extension data is preserved but not activated.',
