@@ -146,7 +146,7 @@ with sync_playwright() as playwright:
     save_screenshot(
         fitting,
         FITTING_SCREENSHOT,
-        ((668, 250), {"x": 16, "y": 70, "width": 668, "height": 250}),
+        ((668, 140), {"x": 16, "y": 70, "width": 668, "height": 140}),
     )
 
     print(
