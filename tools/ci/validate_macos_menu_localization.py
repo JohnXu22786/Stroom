@@ -139,6 +139,44 @@ def _file_reference_location(
     return posixpath.normpath(posixpath.join(base_path, path))
 
 
+def _project_target_ids(project: str) -> set[str]:
+    project = _strip_project_comments(project)
+    root_object = _project_object_value(project, "rootObject")
+    if root_object is None:
+        return set()
+    targets = set()
+    for match in re.finditer(
+        r"(?m)^\t\t([0-9A-F]{24})(?:\s*/\*.*?\*/)?\s*=\s*\{", project
+    ):
+        if match.group(1) != root_object:
+            continue
+        body_start = match.end()
+        depth = 1
+        in_string = False
+        escaped = False
+        for index in range(body_start, len(project)):
+            char = project[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+            elif char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    body = project[body_start:index]
+                    if _project_object_value(body, "isa") == "PBXProject":
+                        targets.update(_project_object_array(body, "targets"))
+                    break
+    return targets
+
+
 def has_localization_build_membership(project: str, localized_paths: dict[str, str]) -> bool:
     """Return whether Runner builds one variant group containing every localized file."""
     objects = _project_objects(project)
@@ -148,11 +186,15 @@ def has_localization_build_membership(project: str, localized_paths: dict[str, s
         posixpath.normpath(posixpath.join(project_root, "Runner", path))
         for path in localized_paths.values()
     }
+    project_targets = _project_target_ids(project)
     runner_targets = {
         object_id
         for object_id, body in objects.items()
         if _project_object_value(body, "isa") == "PBXNativeTarget"
         and _project_object_value(body, "name") == "Runner"
+        and _project_object_value(body, "productType")
+        == "com.apple.product-type.application"
+        and object_id in project_targets
     }
     for target_id in runner_targets:
         target = objects[target_id]

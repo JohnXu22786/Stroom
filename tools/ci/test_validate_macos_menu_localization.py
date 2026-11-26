@@ -8,6 +8,7 @@ VALID_PROJECT = """
 \t\t900000000000000000000001 = {
 \t\t\tisa = PBXProject;
 \t\t\tmainGroup = 100000000000000000000001;
+\t\t\ttargets = (C00000000000000000000001, );
 \t\t};
 /* End PBXProject section */
 /* Begin PBXBuildFile section */
@@ -37,6 +38,7 @@ VALID_PROJECT = """
 /* Begin PBXNativeTarget section */
 \t\tC00000000000000000000001 = {
 \t\t\tisa = PBXNativeTarget; buildPhases = (F00000000000000000000001, ); name = Runner;
+\t\t\tproductType = "com.apple.product-type.application";
 \t\t};
 /* End PBXNativeTarget section */
 /* Begin PBXResourcesBuildPhase section */
@@ -49,6 +51,7 @@ VALID_PROJECT = """
 \t\t\tisa = PBXVariantGroup; children = (E00000000000000000000001, D00000000000000000000001, ); path = Runner; sourceTree = \"<group>\";
 \t\t};
 /* End PBXVariantGroup section */
+rootObject = 900000000000000000000001;
 """
 
 
@@ -70,6 +73,58 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
             "\n\t\t\tisa = PBXVariantGroup; children = (E00000000000000000000001, D00000000000000000000001, ); path = Runner; sourceTree = \"<group>\";"
             "\n\t\t};\n/* End PBXVariantGroup section */",
             "/* Begin PBXVariantGroup section */\n/* End PBXVariantGroup section */",
+        )
+
+        self.assertFalse(
+            has_localization_build_membership(project, self.localized_paths)
+        )
+
+    def test_rejects_orphan_runner_target_with_localization_resources(self):
+        project = VALID_PROJECT.replace(
+            "buildPhases = (F00000000000000000000001, ); name = Runner;",
+            "buildPhases = (); name = Runner;",
+        ).replace(
+            "/* End PBXNativeTarget section */",
+            """
+\t\tD00000000000000000000001 = {
+\t\t\tisa = PBXNativeTarget; buildPhases = (F00000000000000000000001, ); name = Runner;
+\t\t\tproductType = "com.apple.product-type.application";
+\t\t};
+/* End PBXNativeTarget section */""",
+        )
+
+        self.assertFalse(
+            has_localization_build_membership(project, self.localized_paths)
+        )
+
+    def test_ignores_targets_from_unreferenced_project_objects(self):
+        project = VALID_PROJECT.replace(
+            "/* End PBXVariantGroup section */",
+            """/* End PBXVariantGroup section */
+\t\t800000000000000000000001 = {
+\t\t\tisa = PBXProject; targets = (D00000000000000000000001, );
+\t\t};""",
+        ).replace(
+            "buildPhases = (F00000000000000000000001, ); name = Runner;",
+            "buildPhases = (); name = Runner;",
+        ).replace(
+            "/* End PBXNativeTarget section */",
+            """
+\t\tD00000000000000000000001 = {
+\t\t\tisa = PBXNativeTarget; buildPhases = (F00000000000000000000001, ); name = Runner;
+\t\t\tproductType = "com.apple.product-type.application";
+\t\t};
+/* End PBXNativeTarget section */""",
+        )
+
+        self.assertFalse(
+            has_localization_build_membership(project, self.localized_paths)
+        )
+
+    def test_rejects_non_application_runner_target(self):
+        project = VALID_PROJECT.replace(
+            'productType = "com.apple.product-type.application";',
+            'productType = "com.apple.product-type.bundle.unit-test";',
         )
 
         self.assertFalse(
