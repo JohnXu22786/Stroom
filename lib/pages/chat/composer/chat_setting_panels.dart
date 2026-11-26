@@ -17,12 +17,16 @@ import '../../../widgets/constrained_text.dart';
 void showModelPanel({
   required BuildContext context,
   required List<String> models,
+  List<String>? modelIdentities,
   required int selectedModelIndex,
   required ValueChanged<int> onModelSelected,
+  ValueChanged<String>? onModelIdentitySelected,
   ValueChanged<List<String>>? onModelsReordered,
 }) {
   var localSelectedIndex = selectedModelIndex;
   var localModels = List<String>.from(models);
+  final localModelIdentities =
+      modelIdentities == null ? null : List<String>.from(modelIdentities);
 
   void handleReorder(int oldIndex, int newIndex) {
     // onReorderItem 的 newIndex 已是移除 oldIndex 项之后调整过的索引，
@@ -30,6 +34,10 @@ void showModelPanel({
     // 回调的写法，双重调整会导致向下拖动一格无效）。
     final item = localModels.removeAt(oldIndex);
     localModels.insert(newIndex, item);
+    if (localModelIdentities != null) {
+      final identity = localModelIdentities.removeAt(oldIndex);
+      localModelIdentities.insert(newIndex, identity);
+    }
 
     // Update selected index to follow the dragged model
     if (localSelectedIndex == oldIndex) {
@@ -195,7 +203,13 @@ void showModelPanel({
                                     : null,
                                 onTap: () {
                                   setState(() => localSelectedIndex = i);
-                                  onModelSelected(i);
+                                  final identity = localModelIdentities;
+                                  if (identity != null &&
+                                      onModelIdentitySelected != null) {
+                                    onModelIdentitySelected(identity[i]);
+                                  } else {
+                                    onModelSelected(i);
+                                  }
                                   Navigator.pop(context);
                                 },
                               ),

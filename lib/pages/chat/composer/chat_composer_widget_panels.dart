@@ -9,8 +9,10 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
     showModelPanel(
       context: context,
       models: widget.modelNames,
+      modelIdentities: widget.modelIdentities,
       selectedModelIndex: widget.selectedModelIndex,
       onModelSelected: widget.onModelSelected,
+      onModelIdentitySelected: widget.onModelIdentitySelected,
       onModelsReordered: widget.onModelsReordered,
     );
   }

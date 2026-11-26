@@ -20,21 +20,13 @@ extension _ChatPageModelsExt on _ChatPageState {
   /// selected model, mapped through the display order (saved drag-sort).
   void _recalculateSelectedModelIndex() {
     final entriesState = ref.read(providerEntriesProvider);
-    final models = _adapter.availableModels(entriesState);
+    final models = _orderedAvailableModels(entriesState);
     final idx = models.indexWhere(
       (m) =>
           m.configIndex == _adapter.currentConfigIndex &&
           m.modelIndex == _adapter.currentModelIndex,
     );
-    if (idx >= 0) {
-      final selectedName = models[idx].displayName;
-      // Map to display order index so the panel highlights the right model
-      final displayNames = _getModelNames();
-      final displayIdx = displayNames.indexOf(selectedName);
-      _selectedModelIndex = displayIdx >= 0 ? displayIdx : 0;
-    } else {
-      _selectedModelIndex = 0;
-    }
+    _selectedModelIndex = idx >= 0 ? idx : 0;
   }
 
   void _navigateToProviderConfig() {
@@ -70,39 +62,51 @@ extension _ChatPageModelsExt on _ChatPageState {
   /// ordered according to the user's saved drag-sort order if available.
   List<String> _getModelNames() {
     final entriesState = ref.read(providerEntriesProvider);
-    final names = _adapter
-        .availableModels(entriesState)
-        .map((m) => m.displayName)
+    return _orderedAvailableModels(entriesState)
+        .map((model) => model.displayName)
         .toList();
-    // Apply saved order: bring known names to the front in saved order,
-    // then append any new names not yet in the saved order.
-    return applySavedOrder(names, _savedModelOrder);
+  }
+
+  List<String> _getModelIdentities() => _orderedAvailableModels(
+        ref.read(providerEntriesProvider),
+      ).map(_modelSettingsKey).toList();
+
+  /// Applies the legacy name-based order while retaining every model entry.
+  /// The display name is not unique, so each saved occurrence consumes only
+  /// one matching model and duplicate labels keep their configured order.
+  List<AvailableModel> _orderedAvailableModels(
+    ProviderEntriesState entriesState,
+  ) {
+    final remaining = _adapter.availableModels(entriesState).toList();
+    final savedOrder = _savedModelOrder;
+    if (savedOrder == null || savedOrder.isEmpty) return remaining;
+
+    final ordered = <AvailableModel>[];
+    for (final name in savedOrder) {
+      final index = remaining.indexWhere((model) => model.displayName == name);
+      if (index >= 0) ordered.add(remaining.removeAt(index));
+    }
+    ordered.addAll(remaining);
+    return ordered;
   }
 
   /// Called when model is selected from the attachment panel.
-  /// Uses the model name from the display list to find the correct
-  /// adapter model, so that drag-reordered indices still select the
-  /// right model. Saves current model's settings and restores the
-  /// new model's per-model settings.
+  /// Uses the display-ordered model entry at [idx], preserving identity when
+  /// labels repeat. Saves current settings and restores the selected model's.
   void _onModelSelected(int idx) {
     final entriesState = ref.read(providerEntriesProvider);
-    final models = _adapter.availableModels(entriesState);
-    final displayNames = _getModelNames();
-    if (idx < 0 || idx >= displayNames.length) return;
+    final models = _orderedAvailableModels(entriesState);
+    if (idx < 0 || idx >= models.length) return;
 
-    final selectedName = displayNames[idx];
-    final modelIdx = models.indexWhere((m) => m.displayName == selectedName);
-    if (modelIdx < 0) return;
+    // Capture the old model before setState changes _selectedModelIndex.
+    final oldModel = _getCurrentAvailableModel();
 
-    // Capture old model name BEFORE setState changes _selectedModelIndex
-    final oldModelName = _getCurrentModelName();
-
-    // Save current model's settings before switching, using captured name
+    // Save current model's settings before switching, using captured identity.
     SharedPreferences.getInstance().then((prefs) {
       try {
-        if (oldModelName.isNotEmpty) {
+        if (oldModel != null) {
           final allSettings = _loadPerModelSettingsMap(prefs);
-          allSettings[oldModelName] = {
+          allSettings[_modelSettingsKey(oldModel)] = {
             'reasoningEnabled': ref.read(reasoningEnabledProvider),
             'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
             'reasoningEffort': ref.read(reasoningEffortProvider),
@@ -116,7 +120,8 @@ extension _ChatPageModelsExt on _ChatPageState {
       }
     });
 
-    final model = models[modelIdx];
+    final model = models[idx];
+    final selectedName = model.displayName;
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
     // Persist the choice for THIS conversation so the user's switch survives
@@ -143,6 +148,11 @@ extension _ChatPageModelsExt on _ChatPageState {
     });
   }
 
+  void _onModelIdentitySelected(String identity) {
+    final index = _getModelIdentities().indexOf(identity);
+    if (index >= 0) _onModelSelected(index);
+  }
+
   /// Called when models are reordered by drag-and-drop in the model panel.
   void _onModelsReordered(List<String> reordered) {
     setState(() => _savedModelOrder = reordered);
@@ -165,7 +175,6 @@ extension _ChatPageModelsExt on _ChatPageState {
   }) {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
-    final displayNames = _getModelNames();
     final resolved = resolveModelRef(
       models: models,
       modelId: modelId,
@@ -173,7 +182,11 @@ extension _ChatPageModelsExt on _ChatPageState {
       displayName: modelName,
     );
     if (resolved == null) return;
-    final displayIdx = displayNames.indexOf(resolved.displayName);
+    final displayIdx = _orderedAvailableModels(entriesState).indexWhere(
+      (model) =>
+          model.configIndex == resolved.configIndex &&
+          model.modelIndex == resolved.modelIndex,
+    );
     if (displayIdx < 0) return;
 
     final model = resolved;
@@ -197,31 +210,42 @@ extension _ChatPageModelsExt on _ChatPageState {
     _selectModelByName(displayNames.first);
   }
 
-  /// Returns the display name of the currently selected model.
-  String _getCurrentModelName() {
-    final names = _getModelNames();
-    if (_selectedModelIndex >= 0 && _selectedModelIndex < names.length) {
-      return names[_selectedModelIndex];
+  AvailableModel? _getCurrentAvailableModel() {
+    final models = _orderedAvailableModels(ref.read(providerEntriesProvider));
+    if (_selectedModelIndex >= 0 && _selectedModelIndex < models.length) {
+      return models[_selectedModelIndex];
     }
-    return '';
+    return null;
+  }
+
+  /// Stable per-model settings key, with display names retained as a legacy
+  /// fallback when reading settings saved by older versions.
+  String _modelSettingsKey(AvailableModel model) =>
+      jsonEncode([model.providerName, model.modelId]);
+
+  void _writeCurrentModelSettings(
+    Map<String, dynamic> allSettings,
+    AvailableModel model,
+  ) {
+    allSettings[_modelSettingsKey(model)] = {
+      'reasoningEnabled': ref.read(reasoningEnabledProvider),
+      'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
+      'reasoningEffort': ref.read(reasoningEffortProvider),
+      'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+      'customParamValues': ref.read(customParamValuesProvider),
+    };
   }
 
   /// Saves the current reasoning/reasoning-effort/reasoning-param settings
-  /// to SharedPreferences, keyed by the current model's display name.
+  /// to SharedPreferences, keyed by the current model's stable identity.
   void _saveCurrentModelSettings(SharedPreferences prefs) {
     try {
-      final modelName = _getCurrentModelName();
-      if (modelName.isEmpty) return;
+      final model = _getCurrentAvailableModel();
+      if (model == null) return;
 
       // Load existing per-model settings map
       final allSettings = _loadPerModelSettingsMap(prefs);
-      allSettings[modelName] = {
-        'reasoningEnabled': ref.read(reasoningEnabledProvider),
-        'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
-        'reasoningEffort': ref.read(reasoningEffortProvider),
-        'reasoningParamValues': ref.read(reasoningParamValuesProvider),
-        'customParamValues': ref.read(customParamValuesProvider),
-      };
+      _writeCurrentModelSettings(allSettings, model);
       prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
     } catch (e) {
       debugPrint('_saveCurrentModelSettings failed: $e');
@@ -316,12 +340,14 @@ extension _ChatPageModelsExt on _ChatPageState {
   /// Restores the reasoning/reasoning-effort/reasoning-param settings
   /// for the model at the given display [index].
   void _restorePerModelSettings(SharedPreferences prefs, int index) {
-    final names = _getModelNames();
-    if (index < 0 || index >= names.length) return;
-    final modelName = names[index];
+    final models = _orderedAvailableModels(ref.read(providerEntriesProvider));
+    if (index < 0 || index >= models.length) return;
+    final model = models[index];
+    final modelName = model.displayName;
 
     final allSettings = _loadPerModelSettingsMap(prefs);
-    final modelSettings = allSettings[modelName];
+    final modelSettings =
+        allSettings[_modelSettingsKey(model)] ?? allSettings[model.displayName];
     if (modelSettings
         case {
           'reasoningEnabled': bool re,
@@ -488,8 +514,10 @@ extension _ChatPageModelsExt on _ChatPageState {
         _saveEnabledToolsToConversation();
       },
       modelNames: _getModelNames(),
+      modelIdentities: _getModelIdentities(),
       selectedModelIndex: _selectedModelIndex,
       onModelSelected: _onModelSelected,
+      onModelIdentitySelected: _onModelIdentitySelected,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
       customParams: _adapter.customParams,

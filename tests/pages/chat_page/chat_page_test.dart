@@ -83,6 +83,107 @@ void main() {
   // ====================================================================
   group('Per-conversation model persistence', () {
     testWidgets(
+        'selecting the second model with a duplicate label persists its identity',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(ref);
+              notifier.state = [
+                Conversation(
+                  id: 'conv-a',
+                  title: '话题A',
+                  createdAt: DateTime(2026, 1, 1),
+                  updatedAt: DateTime(2026, 1, 1),
+                  messages: [],
+                  assistantId: null,
+                ),
+              ];
+              return notifier;
+            }),
+            activeConversationIdProvider.overrideWith((ref) => 'conv-a'),
+            providerEntriesProvider.overrideWith((ref) {
+              final notifier = ProviderEntriesNotifier();
+              notifier.state = ProviderEntriesState(
+                entries: [
+                  ProviderEntry(
+                    id: 'test_llm',
+                    type: 'llm',
+                    name: 'LLM供应商',
+                    configs: [
+                      ProviderConfigItem(
+                        providerName: 'OpenAI',
+                        host: 'https://api.openai.com/v1',
+                        key: 'test-key',
+                        models: [
+                          ModelConfig(name: 'Shared name', modelId: 'model-a'),
+                          ModelConfig(name: 'Shared name', modelId: 'model-b'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Shared name | OpenAI'));
+      await tester.pumpAndSettle();
+      expect(find.text('Shared name | OpenAI').evaluate().length,
+          greaterThanOrEqualTo(2));
+      await tester.tap(find.text('Shared name | OpenAI').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Shared name | OpenAI'));
+      await tester.pumpAndSettle();
+      final modelList = tester.widget<ReorderableListView>(
+        find.byType(ReorderableListView),
+      );
+      // Move the first same-label entry below the second, then select the
+      // moved entry. Its stable identity must follow the row through reorder.
+      modelList.onReorderItem?.call(0, 1);
+      await tester.pump();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(ReorderableListView),
+              matching: find.byType(ListTile),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+      final conv = container.read(conversationsProvider).single;
+      expect(conv.lastUsedModelId, 'model-a');
+      expect(conv.lastUsedProviderName, 'OpenAI');
+
+      final prefs = await SharedPreferences.getInstance();
+      final settings = jsonDecode(
+        prefs.getString('per_model_chat_settings')!,
+      ) as Map<String, dynamic>;
+      expect(settings, contains('["OpenAI","model-b"]'));
+    });
+
+    testWidgets(
         'switching model in the composer persists to the active conversation',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
