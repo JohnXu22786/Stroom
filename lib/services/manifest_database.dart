@@ -1024,10 +1024,13 @@ class ManifestDatabase {
   static Future<void> deleteImageRecord(String id) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        list.removeWhere((r) => (r as Map)['id'] == id);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          list.removeWhere((r) => (r as Map)['id'] == id);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1047,11 +1050,14 @@ class ManifestDatabase {
   static Future<void> deleteImageRecords(List<String> ids) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        final idSet = ids.toSet();
-        list.removeWhere((r) => idSet.contains((r as Map)['id']));
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          final idSet = ids.toSet();
+          list.removeWhere((r) => idSet.contains((r as Map)['id']));
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1339,10 +1345,13 @@ class ManifestDatabase {
   static Future<void> deleteVideoRecord(String id) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        list.removeWhere((r) => (r as Map)['id'] == id);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          list.removeWhere((r) => (r as Map)['id'] == id);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1362,11 +1371,14 @@ class ManifestDatabase {
   static Future<void> deleteVideoRecords(List<String> ids) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        final idSet = ids.toSet();
-        list.removeWhere((r) => idSet.contains((r as Map)['id']));
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          final idSet = ids.toSet();
+          list.removeWhere((r) => idSet.contains((r as Map)['id']));
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1508,10 +1520,12 @@ class ManifestDatabase {
   static Future<void> deleteTextRecord(String id) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        list.removeWhere((r) => (r as Map)['id'] == id);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          list.removeWhere((r) => (r as Map)['id'] == id);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1531,11 +1545,13 @@ class ManifestDatabase {
   static Future<void> deleteTextRecords(List<String> ids) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        final idSet = ids.toSet();
-        list.removeWhere((r) => idSet.contains((r as Map)['id']));
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final idSet = ids.toSet();
+          list.removeWhere((r) => idSet.contains((r as Map)['id']));
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1651,14 +1667,17 @@ class ManifestDatabase {
         throw ArgumentError('recordTable is required in v2+ format');
       }
       final folderTable = ManifestTables.folderTableFor(recordTable);
-      beforeFolderDeleteForTesting?.call(path);
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[folderTable] as List<dynamic>? ?? [];
-        list.remove(path);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          beforeFolderDeleteForTesting?.call(path);
+          final data = await _loadWebData();
+          final list = data[folderTable] as List<dynamic>? ?? [];
+          list.remove(path);
+          await _saveWebData();
+        });
         return;
       }
+      beforeFolderDeleteForTesting?.call(path);
       final db = await database;
       await db.delete(
         folderTable,
@@ -1698,11 +1717,7 @@ class ManifestDatabase {
           await _saveWebData();
         }
 
-        if (tableName == ManifestTables.audioRecords) {
-          await _withJsonRecordRegistrationLock(clearJsonRecords);
-        } else {
-          await clearJsonRecords();
-        }
+        await _withJsonRecordRegistrationLock(clearJsonRecords);
       } else {
         final db = await database;
         await db.delete(tableName);
@@ -1725,9 +1740,11 @@ class ManifestDatabase {
       }
       final folderTable = ManifestTables.folderTableFor(recordTable);
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        data[folderTable] = <dynamic>[];
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          data[folderTable] = <dynamic>[];
+          await _saveWebData();
+        });
       } else {
         final db = await database;
         await db.delete(folderTable);
