@@ -81,6 +81,9 @@ extension on WidgetTester {
     ThemeData? theme,
     List<ModelConfig> models = const [],
     Map<String, dynamic> typeConfig = const {},
+    Locale locale = const Locale('zh', 'CN'),
+    double textScale = 1,
+    bool disableAnimations = false,
   }) {
     return pumpWidget(
       ProviderScope(
@@ -107,9 +110,16 @@ extension on WidgetTester {
         ],
         child: MaterialApp(
           theme: theme,
-          locale: const Locale('zh', 'CN'),
+          locale: locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+              disableAnimations: disableAnimations,
+            ),
+            child: child!,
+          ),
           home: ProviderConfigDetailPage(
             entryId: 'test_entry_id',
             configIndex: configIndex,
@@ -124,7 +134,15 @@ extension on WidgetTester {
 List<String> modelTileTitles(WidgetTester tester) {
   return tester
       .widgetList<ListTile>(find.byType(ListTile))
-      .map((t) => (t.title as Text?)?.data ?? '')
+      .map((t) {
+        final title = t.title;
+        if (title is Tooltip && title.child is ConstrainedText) {
+          return (title.child as ConstrainedText).data;
+        }
+        if (title is ConstrainedText) return title.data;
+        if (title is Text) return title.data ?? '';
+        return '';
+      })
       .where((s) => s.isNotEmpty)
       .toList();
 }
@@ -148,6 +166,140 @@ Future<void> _openExistingAsrSettings(WidgetTester tester) async {
 void main() {
   setUpAll(() {
     registerBuiltinProviderTypes();
+  });
+
+  group('provider model tile labels', () {
+    const modelName = 'Very long model name for a provider configuration tile';
+    const modelId =
+        'provider-model-id-with-a-very-long-unbroken-identifier-123456789';
+
+    testWidgets('narrow scaled tile reveals clipped model name and ID', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpDetailPage(
+        locale: const Locale('de', 'DE'),
+        textScale: 1.8,
+        models: [ModelConfig(name: modelName, modelId: modelId)],
+      );
+      await tester.pump();
+
+      final tile = tester.widget<ListTile>(find.byType(ListTile).last);
+      final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId(modelId);
+      expect(tile.title, isA<Tooltip>());
+      expect(tile.subtitle, isA<Tooltip>());
+      expect((tile.title as Tooltip).child, isA<ConstrainedText>());
+      expect((tile.subtitle as Tooltip).child, isA<ConstrainedText>());
+      final nameFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == modelName,
+      );
+      final idFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == expectedId,
+      );
+      final name = tester.widget<ConstrainedText>(nameFinder);
+      final id = tester.widget<ConstrainedText>(idFinder);
+      expect(name.maxLines, 1);
+      expect(id.maxLines, 1);
+      expect(
+        tester.getSize(find.text(modelName)).width,
+        greaterThan(tester.getSize(nameFinder).width),
+      );
+      expect(
+        tester.getSize(find.text(expectedId)).width,
+        greaterThan(tester.getSize(idFinder).width),
+      );
+      expect(find.byIcon(Icons.delete), findsOneWidget);
+      expect(find.byIcon(Icons.drag_handle), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('fitting tile labels preserve the full values and controls', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpDetailPage(
+        locale: const Locale('en'),
+        models: [ModelConfig(name: 'Model name', modelId: 'model-id')],
+      );
+      await tester.pump();
+
+      final tile = tester.widget<ListTile>(find.byType(ListTile).last);
+      expect(tile.title, isA<Tooltip>());
+      expect(tile.subtitle, isA<Tooltip>());
+      expect((tile.title as Tooltip).child, isA<ConstrainedText>());
+      expect((tile.subtitle as Tooltip).child, isA<ConstrainedText>());
+      expect(find.text('Model name'), findsOneWidget);
+      final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId('model-id');
+      expect(find.text(expectedId), findsOneWidget);
+      final nameFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == 'Model name',
+      );
+      final idFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == expectedId,
+      );
+      expect(
+        tester.getSize(find.text('Model name')).width,
+        lessThanOrEqualTo(tester.getSize(nameFinder).width),
+      );
+      expect(
+        tester.getSize(find.text(expectedId)).width,
+        lessThanOrEqualTo(tester.getSize(idFinder).width),
+      );
+      expect(find.byIcon(Icons.delete), findsOneWidget);
+      expect(find.byIcon(Icons.drag_handle), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reduced motion exposes full values through tooltips', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpDetailPage(
+        locale: const Locale('de', 'DE'),
+        textScale: 1.8,
+        disableAnimations: true,
+        models: [ModelConfig(name: modelName, modelId: modelId)],
+      );
+      await tester.pump();
+
+      final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId(modelId);
+      expect(MediaQuery.disableAnimationsOf(pageContext), isTrue);
+      expect(find.byTooltip(modelName), findsOneWidget);
+      expect(find.byTooltip(expectedId), findsOneWidget);
+
+      await tester.longPress(find.text(modelName));
+      await tester.pumpAndSettle();
+      expect(find.text(modelName), findsNWidgets(2));
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.longPress(find.text(expectedId));
+      await tester.pumpAndSettle();
+      expect(find.text(expectedId), findsNWidgets(2));
+      expect(find.byIcon(Icons.delete), findsOneWidget);
+      expect(find.byIcon(Icons.drag_handle), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('Display mode (existing config)', () {
