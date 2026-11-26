@@ -23,6 +23,9 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   final _searchCtl = TextEditingController();
   List<Card> _allCards = [];
   List<Card> _filtered = [];
+  Map<int, String>? _noteTextById;
+  bool _loadingSearchableNotes = false;
+  bool _searchableNotesLoadFailed = false;
   bool _loaded = false;
   String? _loadError;
 
@@ -37,6 +40,8 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
       setState(() {
         _loaded = false;
         _loadError = null;
+        _noteTextById = null;
+        _searchableNotesLoadFailed = false;
       });
     }
     try {
@@ -50,6 +55,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
         _filtered = _filterCards(cards, _searchCtl.text);
         _loaded = true;
       });
+      if (_searchCtl.text.isNotEmpty) _loadSearchableNotes();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -61,16 +67,51 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
 
   void _search(String q) {
     setState(() {
+      if (q.isEmpty && _searchableNotesLoadFailed) {
+        _noteTextById = null;
+        _searchableNotesLoadFailed = false;
+      }
       _filtered = _filterCards(_allCards, q);
     });
+    if (q.isNotEmpty && _noteTextById == null && !_loadingSearchableNotes) {
+      _loadSearchableNotes();
+    }
+  }
+
+  Future<void> _loadSearchableNotes() async {
+    if (_loadingSearchableNotes) return;
+    _loadingSearchableNotes = true;
+    try {
+      final noteDao = await ref.read(ankiNoteDaoProvider.future);
+      final notes = await noteDao.all();
+      if (!mounted) return;
+      setState(() {
+        _noteTextById = {
+          for (final note in notes) note.id: note.fields.join(' '),
+        };
+        _searchableNotesLoadFailed = false;
+        _filtered = _filterCards(_allCards, _searchCtl.text);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        final searchIsClear = _searchCtl.text.isEmpty;
+        _noteTextById = searchIsClear ? null : {};
+        _searchableNotesLoadFailed = !searchIsClear;
+      });
+    } finally {
+      _loadingSearchableNotes = false;
+    }
   }
 
   List<Card> _filterCards(List<Card> cards, String query) {
     final normalizedQuery = query.toLowerCase();
     return cards.where((card) {
       if (card.id.toString().contains(normalizedQuery)) return true;
-      // We could also search note text but that requires joining
-      return false;
+      return _noteTextById?[card.note_id]
+              ?.toLowerCase()
+              .contains(normalizedQuery) ??
+          false;
     }).toList();
   }
 
