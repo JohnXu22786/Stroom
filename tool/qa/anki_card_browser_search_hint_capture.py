@@ -127,7 +127,7 @@ try:
         page.locator("flt-semantics-placeholder").wait_for(timeout=120_000)
         page.wait_for_timeout(1_500)
         page.mouse.click(160, 84)
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(1_500)
         screenshot = page.screenshot()
         if Image.open(BytesIO(screenshot)).size != (320, 640):
             raise RuntimeError("Unexpected French screenshot dimensions")
