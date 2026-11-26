@@ -893,32 +893,39 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.multitrack_audio_outlined,
-            size: 64,
-            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            AppLocalizations.of(context)!.noAudioSelected,
-            style: TextStyle(
-              fontSize: 16,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.multitrack_audio_outlined,
+                  size: 64,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  AppLocalizations.of(context)!.noAudioSelected,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  AppLocalizations.of(context)!.supportedAudioFormats,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            AppLocalizations.of(context)!.supportedAudioFormats,
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

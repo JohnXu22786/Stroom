@@ -44,6 +44,35 @@ Widget _buildTestApp({List<ProviderEntry>? entries}) {
   );
 }
 
+const _emptyStateCaptureKey = ValueKey('asr-empty-state-capture');
+
+Widget _buildEmptyStateLayoutTestApp({
+  required Locale locale,
+  required double textScale,
+}) {
+  return RepaintBoundary(
+    key: _emptyStateCaptureKey,
+    child: ProviderScope(
+      overrides: [
+        audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
+      ],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.light(useMaterial3: true),
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const AsrPage(),
+      ),
+    ),
+  );
+}
+
 const _modelSelectorCaptureKey = ValueKey('asr-model-selector-capture');
 
 Widget _buildModelSelectorLayoutTestApp({
@@ -146,6 +175,89 @@ ProviderEntry _createAsrEntry({bool withModels = true}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('German empty state scrolls when scaled content is taller', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _buildEmptyStateLayoutTestApp(
+        locale: const Locale('de', 'DE'),
+        textScale: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final scrollView = find.byType(SingleChildScrollView);
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: scrollView, matching: find.byType(Scrollable)).first,
+    );
+    expect(scrollable.position.maxScrollExtent, greaterThan(0));
+    expect(find.text('Keine Audiodateien ausgewählt'), findsOneWidget);
+    expect(
+      find.text('Unterstützt gängige Audioformate wie WAV, MP3, M4A und OGG'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(_emptyStateCaptureKey),
+      matchesGoldenFile(
+        '../../../docs/images/ui-guidelines/asr-empty-state/asr-empty-state-de-DE-320x480-scale2-light.png',
+      ),
+    );
+
+    await tester.drag(scrollView, const Offset(0, -1000));
+    await tester.pumpAndSettle();
+    final guidance = tester.getRect(
+      find.text('Unterstützt gängige Audioformate wie WAV, MP3, M4A und OGG'),
+    );
+    final viewport = tester.getRect(scrollView);
+    expect(guidance.bottom, lessThanOrEqualTo(viewport.bottom + 1));
+    expect(guidance.bottom, greaterThan(viewport.top));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fitting German empty state remains centered', (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _buildEmptyStateLayoutTestApp(
+        locale: const Locale('de', 'DE'),
+        textScale: 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final scrollView = find.byType(SingleChildScrollView);
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: scrollView, matching: find.byType(Scrollable)).first,
+    );
+    expect(scrollable.position.maxScrollExtent, 0);
+
+    final icon = tester.getRect(find.byIcon(Icons.multitrack_audio_outlined));
+    final supportingText = tester.getRect(
+      find.text('Unterstützt gängige Audioformate wie WAV, MP3, M4A und OGG'),
+    );
+    final viewport = tester.getRect(scrollView);
+    expect(
+      (icon.top + supportingText.bottom) / 2,
+      closeTo(viewport.center.dy, 1),
+    );
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(_emptyStateCaptureKey),
+      matchesGoldenFile(
+        '../../../docs/images/ui-guidelines/asr-empty-state/asr-empty-state-de-DE-430x932-scale1-light.png',
+      ),
+    );
+  });
 
   setUpAll(() async {
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
