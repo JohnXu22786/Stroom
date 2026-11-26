@@ -211,7 +211,8 @@ void main() {
     await tester.pumpAndSettle();
     final pipeOption = find.text('Senkrechter Strich (|)').last;
     await tester.tapAt(Offset(80, tester.getRect(pipeOption).center.dy));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
 
     final card = find.byType(Card).first;
     expect(tester.widget<DropdownButton<String>>(dropdown).value, '竖线 (|)');
@@ -223,6 +224,60 @@ void main() {
       tester.getRect(dropdown).right,
       lessThanOrEqualTo(tester.getRect(card).right),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('scaled separator label clips within slot but keeps full value', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Clear the page AppBar's separate large-scale overflow.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    final pipeOption = find.text('Senkrechter Strich (|)').last;
+    await tester.tapAt(Offset(80, tester.getRect(pipeOption).center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final selectedLabel = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == 'Senkrechter Strich (|)',
+    );
+    expect(selectedLabel, findsOneWidget);
+    final label = tester.widget<ConstrainedText>(selectedLabel);
+    final context = tester.element(selectedLabel);
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label.data,
+        style: DefaultTextStyle.of(context).style.merge(label.style),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: tester.getSize(selectedLabel).width);
+
+    expect(painter.didExceedMaxLines, isTrue);
+    expect(tester.getSemantics(selectedLabel).label, label.data);
     expect(tester.takeException(), isNull);
   });
 
