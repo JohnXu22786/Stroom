@@ -164,14 +164,38 @@ String uniqueGallerySaveAsName({
       existingFolders: existingFolders,
     );
 
+String _editedGalleryImageFormat(Uint8List bytes, String sourceFormat) {
+  if (bytes.length >= 3 &&
+      bytes[0] == 0xff &&
+      bytes[1] == 0xd8 &&
+      bytes[2] == 0xff) {
+    return sourceFormat.toLowerCase() == 'jpeg' ? sourceFormat : 'jpg';
+  }
+
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length >= pngSignature.length) {
+    var isPng = true;
+    for (var index = 0; index < pngSignature.length; index++) {
+      if (bytes[index] != pngSignature[index]) {
+        isPng = false;
+        break;
+      }
+    }
+    if (isPng) return 'png';
+  }
+
+  return sourceFormat;
+}
+
 /// Saves the edited bytes and publishes the resulting Gallery record.
 Future<ImageRecord> saveEditedGalleryImageRecord(
   ImageRecord file,
   Uint8List editedBytes, {
   required bool isSaveAs,
 }) async {
+  final outputFormat = _editedGalleryImageFormat(editedBytes, file.format);
   final newHash = computeImageHash(editedBytes);
-  final newFileName = '$newHash.${file.format}';
+  final newFileName = '$newHash.$outputFormat';
   late ImageRecord newRecord;
   Future<void> save() => ImageManifest.withSaveLocks(
         [newHash, file.hash],
@@ -186,11 +210,11 @@ Future<ImageRecord> saveEditedGalleryImageRecord(
                   records: existingRecords,
                   folder: file.folder,
                   sourceName: file.name,
-                  format: file.format,
+                  format: outputFormat,
                   existingFolders: existingFolders,
                 ),
                 hash: newHash,
-                format: file.format,
+                format: outputFormat,
                 createdAt: DateTime.now(),
                 size: editedBytes.length,
                 folder: file.folder,
@@ -200,7 +224,7 @@ Future<ImageRecord> saveEditedGalleryImageRecord(
               newRecord = ImageRecord(
                 name: file.name,
                 hash: newHash,
-                format: file.format,
+                format: outputFormat,
                 createdAt: file.createdAt,
                 size: editedBytes.length,
                 folder: file.folder,
