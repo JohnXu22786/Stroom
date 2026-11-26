@@ -22,6 +22,7 @@ import 'task_flow/providers/task_flow_execution_provider.dart';
 import 'task_flow/services/task_flow_execution_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
+import 'services/macos_menu_service.dart';
 import 'services/notification_service.dart';
 import 'providers/locale_provider.dart';
 import 'widgets/startup_initialization_error_screen.dart';
@@ -238,6 +239,9 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+          MacOSMenuService.installPlatformHandler();
+        }
         // 桌面端：窗口管理器必须在 Flutter 首帧前拦截关闭事件。
         // 在它完成后立即显示轻量加载页，再继续其余启动初始化。
         if (DesktopAppService.isDesktopPlatform) {
