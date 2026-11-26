@@ -18,6 +18,7 @@ import 'package:path/path.dart' as p;
 import '../providers/video_provider.dart';
 import 'video_gallery_shared.dart';
 import '../utils/video_manifest.dart';
+import '../utils/video_player_cleanup.dart';
 import '../utils/file_picker_utils.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
@@ -76,14 +77,17 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   /// This is separate from thumbnail generation.
   Future<int> _probeVideoDuration(String videoPath) async {
     if (kIsWeb) return 0;
-    final controller = VideoPlayerController.file(File(videoPath));
+    final controller = VideoPlayerController.file(
+      File(videoPath),
+      videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: true),
+    );
     try {
       await controller.initialize();
       final duration = controller.value.duration.inMilliseconds;
       await controller.dispose();
       return duration;
     } catch (_) {
-      await controller.dispose();
+      await disposeVideoPlayerAfterInitializationFailure(controller);
       return 0;
     }
   }
