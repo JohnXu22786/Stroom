@@ -45,20 +45,40 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
   if (utf16_string == nullptr) {
     return std::string();
   }
-  unsigned int target_length = ::WideCharToMultiByte(
-      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string,
-      -1, nullptr, 0, nullptr, nullptr)
-    -1; // remove the trailing null character
-  int input_length = (int)wcslen(utf16_string);
+
+  // Windows command lines are limited to 32767 UTF-16 characters, including
+  // the terminating null. Bound the scan and allocation to that limit.
+  constexpr size_t kMaxCommandLineLength = 32767;
+  size_t input_length = 0;
+  while (input_length < kMaxCommandLineLength &&
+         utf16_string[input_length] != L'\0') {
+    ++input_length;
+  }
+  if (input_length == kMaxCommandLineLength) {
+    return std::string();
+  }
+
+  if (input_length == 0) {
+    return std::string();
+  }
+
+  const int input_length_int = static_cast<int>(input_length);
+  const int required_length = ::WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string, input_length_int, nullptr, 0,
+      nullptr, nullptr);
+  if (required_length == 0) {
+    return std::string();
+  }
+
   std::string utf8_string;
-  if (target_length == 0 || target_length > utf8_string.max_size()) {
+  if (static_cast<size_t>(required_length) > utf8_string.max_size()) {
     return utf8_string;
   }
-  utf8_string.resize(target_length);
-  int converted_length = ::WideCharToMultiByte(
-      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string,
-      input_length, utf8_string.data(), target_length, nullptr, nullptr);
-  if (converted_length == 0) {
+  utf8_string.resize(static_cast<size_t>(required_length));
+  const int converted_length = ::WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string, input_length_int,
+      utf8_string.data(), required_length, nullptr, nullptr);
+  if (converted_length != required_length) {
     return std::string();
   }
   return utf8_string;
