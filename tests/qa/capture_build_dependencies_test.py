@@ -18,7 +18,10 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         self.entrypoint = self.root / "tool/qa/capture.dart"
         self.entrypoint.parent.mkdir(parents=True)
         self.entrypoint.write_text(
-            "import 'package:stroom/pages/capture_page.dart';\n", encoding="utf-8"
+            "import 'package:stroom/pages/capture_page.dart'; "
+            "export 'package:stroom/utils/capture_extra.dart'; "
+            "import 'package:local_capture_package/local_widget.dart';\n",
+            encoding="utf-8",
         )
         self.transitive_input = self.root / "lib/widgets/capture_widget.dart"
         self.transitive_input.parent.mkdir(parents=True)
@@ -26,7 +29,8 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         (self.root / "lib/pages").mkdir(parents=True)
         (self.root / "lib/pages/capture_page.dart").write_text(
             "import '../widgets/capture_widget.dart';\n"
-            "export '../utils/capture_platform_stub.dart'\n"
+            "/* platform selection */ export '../utils/capture_platform_stub.dart' "
+            "// conditional; web target follows\n"
             "    if (dart.library.html) '../utils/capture_platform_web.dart';\n",
             encoding="utf-8",
         )
@@ -36,6 +40,22 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         )
         self.web_implementation = self.root / "lib/utils/capture_platform_web.dart"
         self.web_implementation.write_text("class CapturePlatform {}\n", encoding="utf-8")
+        self.same_line_input = self.root / "lib/utils/capture_extra.dart"
+        self.same_line_input.write_text("class CaptureExtra {}\n", encoding="utf-8")
+        self.local_package = self.root / "packages/local_capture_package"
+        (self.local_package / "lib").mkdir(parents=True)
+        (self.local_package / "pubspec.yaml").write_text(
+            "name: local_capture_package\n", encoding="utf-8"
+        )
+        (self.root / "pubspec.yaml").write_text(
+            "name: capture_test\n"
+            "dependency_overrides:\n"
+            "  local_capture_package:\n"
+            "    path: packages/local_capture_package\n",
+            encoding="utf-8",
+        )
+        self.local_package_input = self.local_package / "lib/local_widget.dart"
+        self.local_package_input.write_text("class LocalWidget {}\n", encoding="utf-8")
         self.bundle = self.root / "build/index.html"
         self.bundle.parent.mkdir()
         self.bundle.write_text("built bundle\n", encoding="utf-8")
@@ -52,6 +72,18 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
     def test_newer_conditional_production_import_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
         os.utime(self.web_implementation, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_newer_same_line_production_import_requires_rebuild(self):
+        newer_mtime = self.bundle.stat().st_mtime + 1
+        os.utime(self.same_line_input, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_newer_import_from_local_path_package_requires_rebuild(self):
+        newer_mtime = self.bundle.stat().st_mtime + 1
+        os.utime(self.local_package_input, (newer_mtime, newer_mtime))
 
         self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
 
