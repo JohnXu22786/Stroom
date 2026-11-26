@@ -467,33 +467,14 @@ class StartupCheckService {
       // ================================================================
       // 注意：configs/models 字段本身也可能是损坏的（int/map/string），
       // 不能用 `as List?` 强转 —— 非 List 类型一律按「字段无效」上报。
-      final rawConfigs = entry['configs'];
-      if (rawConfigs != null && rawConfigs is! List) {
-        issues.add(
-          StartupIssue(
-            message: 'provider_entries[$i].configs: 字段不是合法列表',
-            severity: StartupIssueSeverity.error,
-            dataKey: 'provider_entries',
-          ),
-        );
-      }
       _validateNestedListSync(entry, 'configs', i, issues);
+      final rawConfigs = entry['configs'];
       final configs = rawConfigs is List ? rawConfigs : null;
       if (configs != null) {
         for (int ci = 0; ci < configs.length; ci++) {
           if (configs[ci] is! Map<String, dynamic>) continue;
           final config = configs[ci] as Map<String, dynamic>;
           final rawModels = config['models'];
-          if (rawModels != null && rawModels is! List) {
-            issues.add(
-              StartupIssue(
-                message: 'provider_entries[$i].configs[$ci].models: '
-                    '字段不是合法列表',
-                severity: StartupIssueSeverity.error,
-                dataKey: 'provider_entries',
-              ),
-            );
-          }
           _validateNestedListSync(
             config,
             'customParams',
@@ -508,16 +489,42 @@ class StartupCheckService {
             issues,
             fieldPath: 'provider_entries[$i].configs[$ci].reasoningParams',
           );
-          _validateNestedListSync(config, 'models', i, issues);
+          _validateNestedListSync(
+            config,
+            'models',
+            i,
+            issues,
+            fieldPath: 'provider_entries[$i].configs[$ci].models',
+          );
           final models = rawModels is List ? rawModels : null;
           if (models != null) {
             for (int mi = 0; mi < models.length; mi++) {
               if (models[mi] is! Map<String, dynamic>) continue;
               final model = models[mi] as Map<String, dynamic>;
-              _validateNestedListSync(model, 'customParams', i, issues);
-              _validateNestedListSync(model, 'voices', i, issues);
-              _validateNestedListSync(model, 'reasoningParams', i, issues);
+              final modelPath = 'provider_entries[$i].configs[$ci].models[$mi]';
+              _validateModelFieldsSync(model, modelPath, i, issues);
             }
+          }
+        }
+      }
+      if (!entry.containsKey('configs')) {
+        final legacyModels = entry['models'];
+        _validateNestedListSync(
+          entry,
+          'models',
+          i,
+          issues,
+          fieldPath: 'provider_entries[$i].models',
+        );
+        if (legacyModels is List) {
+          for (int mi = 0; mi < legacyModels.length; mi++) {
+            if (legacyModels[mi] is! Map<String, dynamic>) continue;
+            _validateModelFieldsSync(
+              legacyModels[mi] as Map<String, dynamic>,
+              'provider_entries[$i].models[$mi]',
+              i,
+              issues,
+            );
           }
         }
       }
@@ -533,7 +540,18 @@ class StartupCheckService {
     String? fieldPath,
   }) {
     final list = parent[fieldName];
-    if (list is! List) return;
+    if (list == null) return;
+    if (list is! List) {
+      issues.add(
+        StartupIssue(
+          message: '${fieldPath ?? 'provider_entries[$entryIndex].$fieldName'}: '
+              '字段不是合法列表',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ),
+      );
+      return;
+    }
     for (int j = 0; j < list.length; j++) {
       if (list[j] is! Map<String, dynamic>) {
         issues.add(
@@ -546,6 +564,45 @@ class StartupCheckService {
           ),
         );
       }
+    }
+  }
+
+  static void _validateModelFieldsSync(
+    Map<String, dynamic> model,
+    String modelPath,
+    int entryIndex,
+    List<StartupIssue> issues,
+  ) {
+    _validateNestedListSync(
+      model,
+      'customParams',
+      entryIndex,
+      issues,
+      fieldPath: '$modelPath.customParams',
+    );
+    _validateNestedListSync(
+      model,
+      'voices',
+      entryIndex,
+      issues,
+      fieldPath: '$modelPath.voices',
+    );
+    _validateNestedListSync(
+      model,
+      'reasoningParams',
+      entryIndex,
+      issues,
+      fieldPath: '$modelPath.reasoningParams',
+    );
+    final typeConfig = model['typeConfig'];
+    if (typeConfig != null && typeConfig is! Map) {
+      issues.add(
+        StartupIssue(
+          message: '$modelPath.typeConfig: 字段不是合法对象',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ),
+      );
     }
   }
 

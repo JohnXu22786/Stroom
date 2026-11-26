@@ -279,6 +279,91 @@ void main() {
         contains('provider_entries[0].configs[0].reasoningParams[0]'),
       );
     });
+
+    test('validateDataFormats reports malformed saved model field shapes',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': DataMigrationService.currentFormatVersion,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'broken_provider',
+            'type': 'tts',
+            'name': 'Broken Provider',
+            'configs': [
+              {
+                'models': [
+                  {
+                    'voices': 'not a list',
+                    'customParams': {'paramName': 'temperature'},
+                    'reasoningParams': 42,
+                    'typeConfig': ['not', 'a', 'map'],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            'id': '',
+            'type': 'tts',
+            'name': 'Also Broken',
+            'configs': 'not a list',
+          },
+          {
+            'id': 'broken_models',
+            'type': 'tts',
+            'name': 'Broken Models',
+            'configs': [
+              {'models': 'not a list'},
+            ],
+          },
+          {
+            'id': 'legacy_provider',
+            'type': 'tts',
+            'name': 'Legacy Provider',
+            'providerName': 'Legacy Config',
+            'models': [
+              {
+                'voices': 'not a list',
+                'customParams': {'paramName': 'temperature'},
+                'reasoningParams': 42,
+                'typeConfig': ['not', 'a', 'map'],
+              },
+            ],
+          },
+        ]),
+      });
+      AppStorage.resetCache();
+
+      final issues = await StartupCheckService.validateDataFormats();
+      final messages = issues.map((issue) => issue.message).toList();
+
+      expect(
+        messages,
+        containsAll([
+          'provider_entries[0].configs[0].models[0].voices: 字段不是合法列表',
+          'provider_entries[0].configs[0].models[0].customParams: 字段不是合法列表',
+          'provider_entries[0].configs[0].models[0].reasoningParams: 字段不是合法列表',
+          'provider_entries[0].configs[0].models[0].typeConfig: 字段不是合法对象',
+          'provider_entries[1]: id 字段缺失或为空',
+          'provider_entries[1].configs: 字段不是合法列表',
+          'provider_entries[2].configs[0].models: 字段不是合法列表',
+          'provider_entries[3].models[0].voices: 字段不是合法列表',
+          'provider_entries[3].models[0].customParams: 字段不是合法列表',
+          'provider_entries[3].models[0].reasoningParams: 字段不是合法列表',
+          'provider_entries[3].models[0].typeConfig: 字段不是合法对象',
+        ]),
+      );
+      expect(
+        messages.where((message) =>
+            message == 'provider_entries[1].configs: 字段不是合法列表'),
+        hasLength(1),
+      );
+      expect(
+        messages.where((message) =>
+            message == 'provider_entries[2].configs[0].models: 字段不是合法列表'),
+        hasLength(1),
+      );
+    });
   });
 
   group('StartupCheckService - validateDataFormats - mixed', () {

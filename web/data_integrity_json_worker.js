@@ -1011,36 +1011,49 @@ function validateProviderEntriesValue(list, parseFailed, issues) {
     }
 
     const rawConfigs = entry.configs;
-    if (rawConfigs != null && !Array.isArray(rawConfigs)) {
-      issues.push(issue(
-        `provider_entries[${i}].configs: 字段不是合法列表`,
-        'error',
-        'provider_entries',
-      ));
-    }
     validateNestedList(entry, 'configs', i, issues);
-    if (!Array.isArray(rawConfigs)) return;
+    if (Array.isArray(rawConfigs)) {
+      rawConfigs.forEach(function (config, ci) {
+        if (!isRecord(config)) return;
+        const rawModels = config.models;
+        validateNestedList(
+          config,
+          'models',
+          i,
+          issues,
+          `provider_entries[${i}].configs[${ci}].models`,
+        );
+        if (!Array.isArray(rawModels)) return;
 
-    rawConfigs.forEach(function (config, ci) {
-      if (!isRecord(config)) return;
-      const rawModels = config.models;
-      if (rawModels != null && !Array.isArray(rawModels)) {
-        issues.push(issue(
-          `provider_entries[${i}].configs[${ci}].models: 字段不是合法列表`,
-          'error',
-          'provider_entries',
-        ));
-      }
-      validateNestedList(config, 'models', i, issues);
-      if (!Array.isArray(rawModels)) return;
-
-      rawModels.forEach(function (model) {
-        if (!isRecord(model)) return;
-        validateNestedList(model, 'customParams', i, issues);
-        validateNestedList(model, 'voices', i, issues);
-        validateNestedList(model, 'reasoningParams', i, issues);
+        rawModels.forEach(function (model, mi) {
+          if (!isRecord(model)) return;
+          const modelPath = `provider_entries[${i}].configs[${ci}].models[${mi}]`;
+          validateModelFields(model, modelPath, i, issues);
+        });
       });
-    });
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(entry, 'configs')) {
+      const legacyModels = entry.models;
+      validateNestedList(
+        entry,
+        'models',
+        i,
+        issues,
+        `provider_entries[${i}].models`,
+      );
+      if (Array.isArray(legacyModels)) {
+        legacyModels.forEach(function (model, mi) {
+          if (!isRecord(model)) return;
+          validateModelFields(
+            model,
+            `provider_entries[${i}].models[${mi}]`,
+            i,
+            issues,
+          );
+        });
+      }
+    }
   });
 }
 
@@ -1098,18 +1111,58 @@ function validateConversationsValue(list, parseFailed, issues) {
   });
 }
 
-function validateNestedList(parent, fieldName, entryIndex, issues) {
+function validateNestedList(parent, fieldName, entryIndex, issues, fieldPath) {
   const list = parent[fieldName];
-  if (!Array.isArray(list)) return;
+  if (list == null) return;
+  if (!Array.isArray(list)) {
+    issues.push(issue(
+      `${fieldPath || `provider_entries[${entryIndex}].${fieldName}`}: ` +
+        '字段不是合法列表',
+      'error',
+      'provider_entries',
+    ));
+    return;
+  }
   list.forEach(function (item, itemIndex) {
     if (!isRecord(item)) {
       issues.push(issue(
-        `provider_entries[${entryIndex}].${fieldName}[${itemIndex}]: 条目不是合法对象，可能会导致解析闪退`,
+        `${fieldPath || `provider_entries[${entryIndex}].${fieldName}`}[${itemIndex}]: 条目不是合法对象，可能会导致解析闪退`,
         'error',
         'provider_entries',
       ));
     }
   });
+}
+
+function validateModelFields(model, modelPath, entryIndex, issues) {
+  validateNestedList(
+    model,
+    'customParams',
+    entryIndex,
+    issues,
+    `${modelPath}.customParams`,
+  );
+  validateNestedList(
+    model,
+    'voices',
+    entryIndex,
+    issues,
+    `${modelPath}.voices`,
+  );
+  validateNestedList(
+    model,
+    'reasoningParams',
+    entryIndex,
+    issues,
+    `${modelPath}.reasoningParams`,
+  );
+  if (model.typeConfig != null && !isRecord(model.typeConfig)) {
+    issues.push(issue(
+      `${modelPath}.typeConfig: 字段不是合法对象`,
+      'error',
+      'provider_entries',
+    ));
+  }
 }
 
 function isRecord(value) {
