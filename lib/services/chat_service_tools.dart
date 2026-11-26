@@ -22,11 +22,17 @@ extension _ChatServiceToolsExt on ChatService {
     // the disabled name, while still blocking the local handler itself.
     final entry = isDisabled ? null : ChatService._toolRegistries[name];
     if (entry != null) {
+      final contextualHandler = entry['contextualLocalizedHandler']
+          as dynamic Function(Map<String, dynamic>, Locale?, String?)?;
       final localizedHandler = entry['localizedHandler'] as dynamic Function(
           Map<String, dynamic>, Locale?)?;
-      final result = localizedHandler != null
-          ? localizedHandler(args, _localeOverride?.call())
-          : (entry['handler'] as dynamic Function(Map<String, dynamic>))(args);
+      final result = contextualHandler != null
+          ? contextualHandler(args, _localeOverride?.call(), conversationId)
+          : localizedHandler != null
+              ? localizedHandler(args, _localeOverride?.call())
+              : (entry['handler'] as dynamic Function(Map<String, dynamic>))(
+                  args,
+                );
       // Handle both sync and async handlers
       if (result is Future<String>) {
         return await result;
