@@ -19,8 +19,8 @@ import id.flutter.flutter_background_service.BackgroundService
  * Android (especially Chinese ROMs) may kill the app process even when a
  * foreground service is active. This receiver schedules a periodic
  * keep-alive alarm that, when fired, tries to restart the foreground
- * service. If the process is already running with the service active,
- * the alarm is a no-op.
+ * service if needed and always schedules the next check while keep-alive
+ * remains enabled.
  *
  * Scheduling strategy:
  * - Prefer an **exact** alarm ([AlarmManager.setExactAndAllowWhileIdle])
@@ -563,18 +563,21 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 val claimedGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
                 // Preserve any still-pending paired alarm until a replacement
                 // succeeds; its generation token is updated during scheduling.
-                if (!prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) ||
-                    !prefs.getBoolean(KEY_SERVICE_ENABLED, false) ||
-                    !prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
-                ) {
+                val serviceRunning = isServiceRunning(context)
+                val deliveryPlan = keepAliveAlarmDeliveryPlan(
+                    serviceRunning = serviceRunning,
+                    keepAliveActive = prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false),
+                    serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false),
+                    watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, false),
+                )
+                if (!deliveryPlan.shouldScheduleNextAlarm) {
                     cancelAlarm(context)
                     return
                 }
 
-                val serviceRunning = isServiceRunning(context)
                 val startWasPending = prefs.getBoolean(KEY_KEEP_ALIVE_START_PENDING, false)
                 var startRequestFailed = false
-                if (!serviceRunning) {
+                if (deliveryPlan.shouldStartService) {
                     try {
                         // 进程被系统杀掉后，这里会冷启动进程并重建前台服务；
                         // 插件会重新初始化 Flutter engine 并恢复后台任务。
@@ -614,11 +617,13 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
                     )
                 }
-                scheduleReceiverAlarm(
-                    context,
-                    startState.nextIntervalMs,
-                    generationToReuse = claimedGeneration,
-                )
+                if (deliveryPlan.shouldScheduleNextAlarm) {
+                    scheduleReceiverAlarm(
+                        context,
+                        startState.nextIntervalMs,
+                        generationToReuse = claimedGeneration,
+                    )
+                }
             }
         }
     }
