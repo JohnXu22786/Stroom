@@ -16,6 +16,17 @@ internal data class KeepAliveAlarmDeliveryPlan(
     val shouldScheduleNextAlarm: Boolean,
 )
 
+internal fun <T> cancelExistingAlarm(
+    pendingIntent: T?,
+    cancelAlarm: (T) -> Unit,
+    cancelPendingIntent: (T) -> Unit,
+) {
+    pendingIntent?.let {
+        cancelAlarm(it)
+        cancelPendingIntent(it)
+    }
+}
+
 internal fun keepAliveAlarmDeliveryPlan(
     serviceRunning: Boolean,
     keepAliveActive: Boolean,

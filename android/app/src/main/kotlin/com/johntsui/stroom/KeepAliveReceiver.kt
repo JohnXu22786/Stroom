@@ -363,16 +363,12 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         private fun cancelAlarmIntent(context: Context, action: String, requestCode: Int) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
-            } else {
-                PendingIntent.FLAG_NO_CREATE
-            }
-            val pendingIntent = createPendingIntent(context, flags, action, requestCode)
-            if (pendingIntent != null) {
-                alarmManager.cancel(pendingIntent)
-                pendingIntent.cancel()
-            }
+            val pendingIntent = findExistingPendingIntent(context, action, requestCode)
+            cancelExistingAlarm(
+                pendingIntent = pendingIntent,
+                cancelAlarm = alarmManager::cancel,
+                cancelPendingIntent = PendingIntent::cancel,
+            )
         }
 
         private fun nextAlarmGeneration(context: Context): Long? {
@@ -458,6 +454,22 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_IMMUTABLE or extraFlags
             } else {
                 extraFlags
+            }
+            return PendingIntent.getBroadcast(context, requestCode, intent, flags)
+        }
+
+        private fun findExistingPendingIntent(
+            context: Context,
+            action: String,
+            requestCode: Int,
+        ): PendingIntent? {
+            val intent = Intent(context, KeepAliveReceiver::class.java).apply {
+                this.action = action
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+            } else {
+                PendingIntent.FLAG_NO_CREATE
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, flags)
         }
