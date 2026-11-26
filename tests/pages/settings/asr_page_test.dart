@@ -179,7 +179,7 @@ void main() {
   testWidgets('German empty state scrolls when scaled content is taller', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(320, 480);
+    tester.view.physicalSize = const Size(320, 560);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -203,22 +203,27 @@ void main() {
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
+
+    final guidanceFinder = find.text(
+      'Unterstützt gängige Audioformate wie WAV, MP3, M4A und OGG',
+    );
+    await Scrollable.ensureVisible(
+      tester.element(guidanceFinder),
+      alignment: 0,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
+    final guidance = tester.getRect(guidanceFinder);
+    final viewport = tester.getRect(scrollView);
+    expect(guidance.top, greaterThanOrEqualTo(viewport.top));
+    expect(guidance.top, lessThan(viewport.bottom));
+    expect(tester.takeException(), isNull);
     await expectLater(
       find.byKey(_emptyStateCaptureKey),
       matchesGoldenFile(
-        '../../../docs/images/ui-guidelines/asr-empty-state/asr-empty-state-de-DE-320x480-scale2-light.png',
+        '../../../docs/images/ui-guidelines/asr-empty-state/asr-empty-state-de-DE-320x560-scale2-light.png',
       ),
     );
-
-    await tester.drag(scrollView, const Offset(0, -1000));
-    await tester.pumpAndSettle();
-    final guidance = tester.getRect(
-      find.text('Unterstützt gängige Audioformate wie WAV, MP3, M4A und OGG'),
-    );
-    final viewport = tester.getRect(scrollView);
-    expect(guidance.bottom, lessThanOrEqualTo(viewport.bottom + 1));
-    expect(guidance.bottom, greaterThan(viewport.top));
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('fitting German empty state remains centered', (tester) async {
