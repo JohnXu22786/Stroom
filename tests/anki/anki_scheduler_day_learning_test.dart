@@ -79,6 +79,48 @@ void main() {
     },
   );
 
+  test('preview-repeat cards are not advertised as normal study due work',
+      () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final dueCard = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.previewRepeat
+      ..due = nowSec - 1;
+    final futureCard = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.previewRepeat
+      ..due = nowSec + 60;
+    await collection.cards.insert(dueCard);
+    await collection.cards.insert(futureCard);
+
+    final today = collection.col.dayOrdinalAt(nowSec);
+    expect(
+      await collection.cards.listDue(1, nowSec, dayOrdinal: today),
+      isEmpty,
+    );
+    expect(
+      await collection.cards.listDueInDeck(1, nowSec, dayOrdinal: today),
+      isEmpty,
+    );
+    expect(
+      await AnkiScheduler().countDue(collection.col, collection.cards, 1),
+      0,
+    );
+    expect(
+      (await AnkiScheduler().getNextCard(
+        collection.col,
+        collection.cards,
+        1,
+      ))?.id,
+      isNull,
+    );
+  });
+
   test('review selection treats imported due values as collection day ordinals',
       () async {
     final note = Note.createNew(
