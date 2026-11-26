@@ -85,60 +85,101 @@ class TaskCard extends ConsumerWidget {
                             color: Colors.red.withValues(alpha: 0.25),
                           ),
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 14,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final hasOriginalDetail =
+                                task.originalRequest != null ||
+                                    task.originalResponse != null;
+                            const detailStyle = TextStyle(
+                              fontSize: 12,
                               color: Colors.red,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => _showErrorDetailDialog(
-                                  context,
-                                  task.error!,
+                              fontWeight: FontWeight.w600,
+                            );
+                            final measuredDetailStyle =
+                                DefaultTextStyle.of(context).style.merge(
+                                      detailStyle,
+                                    );
+                            final detailPainter = TextPainter(
+                              text: TextSpan(
+                                text: strings.taskListDetail,
+                                style: measuredDetailStyle,
+                              ),
+                              textDirection: Directionality.of(context),
+                              textScaler: MediaQuery.textScalerOf(context),
+                              locale: Localizations.localeOf(context),
+                            )..layout();
+                            final detailSlotWidth = constraints.maxWidth -
+                                14 -
+                                6 -
+                                (hasOriginalDetail ? 8 : 0) -
+                                (canControlStandalone ? 16 : 0);
+                            final detailNeedsConstraint = hasOriginalDetail &&
+                                detailPainter.width > detailSlotWidth;
+
+                            final detailLabel = GestureDetector(
+                              onTap: () =>
+                                  _showOriginalDetailDialog(context, task),
+                              child: detailNeedsConstraint
+                                  ? ConstrainedText(
+                                      strings.taskListDetail,
+                                      style: detailStyle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  : Text(
+                                      strings.taskListDetail,
+                                      style: detailStyle,
+                                    ),
+                            );
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  size: 14,
+                                  color: Colors.red,
                                 ),
-                                child: Text(
-                                  task.error!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red,
-                                    height: 1.4,
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  flex: detailNeedsConstraint ? 2 : 1,
+                                  child: GestureDetector(
+                                    onTap: () => _showErrorDetailDialog(
+                                      context,
+                                      task.error!,
+                                    ),
+                                    child: Text(
+                                      task.error!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.red,
+                                        height: 1.4,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            if (task.originalRequest != null ||
-                                task.originalResponse != null) ...[
-                              const SizedBox(width: 4),
-                              GestureDetector(
-                                onTap: () =>
-                                    _showOriginalDetailDialog(context, task),
-                                child: Text(
-                                  strings.taskListDetail,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.w600,
+                                if (hasOriginalDetail) ...[
+                                  const SizedBox(width: 4),
+                                  if (detailNeedsConstraint)
+                                    Flexible(child: detailLabel)
+                                  else
+                                    detailLabel,
+                                ],
+                                const SizedBox(width: 4),
+                                if (canControlStandalone)
+                                  GestureDetector(
+                                    onTap: () => ref
+                                        .read(taskListProvider.notifier)
+                                        .dismissError(task.id),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Colors.red[300],
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 4),
-                            if (canControlStandalone)
-                              GestureDetector(
-                                onTap: () => ref
-                                    .read(taskListProvider.notifier)
-                                    .dismissError(task.id),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 16,
-                                  color: Colors.red[300],
-                                ),
-                              ),
-                          ],
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ),
