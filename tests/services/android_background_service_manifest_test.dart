@@ -18,23 +18,34 @@ void main() {
       return match!.group(0)!;
     }
 
+    String componentBlock(String tag, String name) {
+      final startTag = component(tag, name);
+      final start = manifest.indexOf(startTag);
+      if (startTag.endsWith('/>')) return startTag;
+
+      final endTag = '</$tag>';
+      final end = manifest.indexOf(endTag, start + startTag.length);
+      expect(end, isNonNegative, reason: 'Missing $name closing tag');
+      return manifest.substring(start, end + endTag.length);
+    }
+
     expect(component('service', 'BackgroundService'),
         contains('android:exported="false"'));
     expect(component('receiver', 'WatchdogReceiver'),
         contains('android:exported="false"'));
 
-    final bootReceiver = component('receiver', 'BootReceiver');
+    final bootReceiver = componentBlock('receiver', 'BootReceiver');
     expect(bootReceiver, contains('android:exported="true"'));
     expect(
-        manifest,
+        bootReceiver,
         contains(
             '<action android:name="android.intent.action.BOOT_COMPLETED"'));
     expect(
-        manifest,
+        bootReceiver,
         contains(
             '<action android:name="android.intent.action.MY_PACKAGE_REPLACED"'));
     expect(
-        manifest,
+        bootReceiver,
         contains(
             '<action android:name="android.intent.action.QUICKBOOT_POWERON"'));
   });
