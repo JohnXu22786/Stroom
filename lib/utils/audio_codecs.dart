@@ -125,11 +125,29 @@ const List<int> _imaStepTable = [
 /// IMA ADPCM index adjustment table.
 const List<int> _imaIndexTable = [-1, -1, -1, -1, 2, 4, 6, 8];
 
+int _adpcmSamplesPerBlock(AdpcmConfig config) => config.channels == 1
+    ? config.blockSize
+    : 1 + ((config.blockSize - 1 + 7) ~/ 8) * 8;
+
 /// Encode PCM S16LE samples to IMA ADPCM.
 ///
 /// Returns ADPCM bytes (4-bit nibbles, packed high nibble first per IMA spec).
 /// A trailing partial block is padded by repeating its last sample.
 Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
+  if (config.channels <= 0) {
+    throw ArgumentError.value(config.channels, 'channels', 'must be positive');
+  }
+  if (config.blockSize <= 0) {
+    throw ArgumentError.value(
+      config.blockSize,
+      'blockSize',
+      'must be positive',
+    );
+  }
+  if (config.channels > 1) {
+    return _encodeInterleavedAdpcm(pcmSamples, config);
+  }
+
   final numBlocks =
       (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
   final nibblesPerBlock = config.blockSize;
@@ -229,6 +247,111 @@ Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
   return out.toBytes();
 }
 
+/// Encodes channel-interleaved PCM into WAVE_FORMAT_IMA_ADPCM blocks.
+///
+/// WAV ADPCM payloads interleave groups of eight samples per channel. Blocks
+/// are rounded up to a complete group; this keeps every channel's sample
+/// count and predictor state aligned even when the configured block size is
+/// not a multiple of eight after its initial predictor sample.
+Uint8List _encodeInterleavedAdpcm(Int16List pcmSamples, AdpcmConfig config) {
+  if (pcmSamples.length % config.channels != 0) {
+    throw ArgumentError.value(
+      pcmSamples.length,
+      'pcmSamples.length',
+      'must contain a whole number of interleaved frames',
+    );
+  }
+
+  final frameCount = pcmSamples.length ~/ config.channels;
+  final encodedFramesPerBlock = _adpcmSamplesPerBlock(config);
+  final out = BytesOutput();
+
+  for (var firstFrame = 0;
+      firstFrame < frameCount;
+      firstFrame += encodedFramesPerBlock) {
+    final sourceFrames =
+        (frameCount - firstFrame).clamp(0, encodedFramesPerBlock);
+    final samples = List<Int16List>.generate(
+      config.channels,
+      (_) => Int16List(encodedFramesPerBlock),
+    );
+    final predictors = List<int>.filled(config.channels, 0);
+    final stepIndices = List<int>.filled(config.channels, 0);
+    final channelNibbles = List<Uint8List>.generate(
+      config.channels,
+      (_) => Uint8List(encodedFramesPerBlock - 1),
+    );
+
+    for (var channel = 0; channel < config.channels; channel++) {
+      for (var frame = 0; frame < sourceFrames; frame++) {
+        samples[channel][frame] =
+            pcmSamples[(firstFrame + frame) * config.channels + channel];
+      }
+      if (sourceFrames < encodedFramesPerBlock) {
+        samples[channel].fillRange(
+          sourceFrames,
+          encodedFramesPerBlock,
+          samples[channel][sourceFrames - 1],
+        );
+      }
+      predictors[channel] = samples[channel][0];
+      out.writeUint16LE(predictors[channel]);
+      out.writeByte(0);
+      out.writeByte(0);
+    }
+
+    for (var channel = 0; channel < config.channels; channel++) {
+      for (var frame = 1; frame < encodedFramesPerBlock; frame++) {
+        var delta = samples[channel][frame] - predictors[channel];
+        final sign = delta < 0 ? 0x8 : 0;
+        if (delta < 0) delta = -delta;
+
+        var step = _imaStepTable[stepIndices[channel]];
+        var nibble = 0;
+        var difference = step >> 3;
+        if (delta >= step) {
+          nibble |= 4;
+          delta -= step;
+          difference += step;
+        }
+        step >>= 1;
+        if (delta >= step) {
+          nibble |= 2;
+          delta -= step;
+          difference += step;
+        }
+        step >>= 1;
+        if (delta >= step) {
+          nibble |= 1;
+          difference += step;
+        }
+        nibble |= sign;
+
+        predictors[channel] += (nibble & 0x8) != 0 ? -difference : difference;
+        predictors[channel] = predictors[channel].clamp(-32768, 32767);
+        stepIndices[channel] =
+            (stepIndices[channel] + _imaIndexTable[nibble & 0x7]).clamp(0, 88);
+        channelNibbles[channel][frame - 1] = nibble;
+      }
+    }
+
+    // Each channel contributes four bytes (eight samples) in turn.
+    for (var group = 0; group < (encodedFramesPerBlock - 1) ~/ 8; group++) {
+      for (var channel = 0; channel < config.channels; channel++) {
+        for (var byte = 0; byte < 4; byte++) {
+          final nibble = group * 8 + byte * 2;
+          out.writeByte(
+            (channelNibbles[channel][nibble] << 4) |
+                channelNibbles[channel][nibble + 1],
+          );
+        }
+      }
+    }
+  }
+
+  return out.toBytes();
+}
+
 /// Web-compatible ADPCM encoder that yields after bounded block batches.
 Future<Uint8List> encodeAdpcmWithEventLoopYield(
   Int16List pcmSamples,
@@ -240,17 +363,35 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
   if (yieldEveryBlocks <= 0) {
     throw ArgumentError.value(yieldEveryBlocks, 'yieldEveryBlocks');
   }
+  if (config.channels <= 0) {
+    throw ArgumentError.value(config.channels, 'channels', 'must be positive');
+  }
+  if (config.blockSize <= 0) {
+    throw ArgumentError.value(
+      config.blockSize,
+      'blockSize',
+      'must be positive',
+    );
+  }
+  if (pcmSamples.length % config.channels != 0) {
+    throw ArgumentError.value(
+      pcmSamples.length,
+      'pcmSamples.length',
+      'must contain a whole number of interleaved frames',
+    );
+  }
   checkCancelled?.call();
   final output = BytesBuilder(copy: false);
-  final blockCount =
-      (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
+  final frameCount = pcmSamples.length ~/ config.channels;
+  final framesPerBlock = _adpcmSamplesPerBlock(config);
+  final blockCount = (frameCount + framesPerBlock - 1) ~/ framesPerBlock;
   for (var firstBlock = 0;
       firstBlock < blockCount;
       firstBlock += yieldEveryBlocks) {
     checkCancelled?.call();
     final lastBlock = (firstBlock + yieldEveryBlocks).clamp(0, blockCount);
-    final firstSample = firstBlock * config.blockSize;
-    final lastSample = (lastBlock * config.blockSize).clamp(
+    final firstSample = firstBlock * framesPerBlock * config.channels;
+    final lastSample = (lastBlock * framesPerBlock * config.channels).clamp(
       0,
       pcmSamples.length,
     );
@@ -272,22 +413,43 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
 /// The final block is zero-padded to a full [samplesPerBlock] block so
 /// decoders don't reject a truncated last block.
 ///
-/// [adpcmBytes] must come from [encodeAdpcm] with mono PCM.
+/// [adpcmBytes] must come from [encodeAdpcm] with matching channel and block
+/// settings. Multichannel payloads use the standard four-byte-per-channel
+/// interleave groups.
 Uint8List adpcmToWav(
   Uint8List adpcmBytes, {
   required int sampleRate,
+  int channels = 1,
   // Matches AdpcmConfig().blockSize (the default used by encodeAdpcm).
   int samplesPerBlock = 256,
   int? sampleCount,
 }) {
-  // Mono IMA ADPCM block layout (per encodeAdpcm):
-  // 4-byte header + nibbles for (samplesPerBlock - 1) samples.
-  final blockAlign = 4 + ((samplesPerBlock - 1) + 1) ~/ 2;
-  final avgBytesPerSec = sampleRate * blockAlign ~/ samplesPerBlock;
+  if (channels <= 0) {
+    throw ArgumentError.value(channels, 'channels', 'must be positive');
+  }
+  if (samplesPerBlock <= 0) {
+    throw ArgumentError.value(
+      samplesPerBlock,
+      'samplesPerBlock',
+      'must be positive',
+    );
+  }
+  // Each channel has a four-byte header. WAV IMA ADPCM payloads are stored in
+  // groups of four bytes per channel, each representing eight samples. The
+  // encoder rounds multichannel blocks to that group size, including the
+  // default 256-frame block which is encoded as 257 frames.
+  final wavSamplesPerBlock = channels == 1
+      ? samplesPerBlock
+      : 1 + ((samplesPerBlock - 1 + 7) ~/ 8) * 8;
+  final blockAlign = channels == 1
+      ? 4 + wavSamplesPerBlock ~/ 2
+      : 4 * channels +
+            ((wavSamplesPerBlock - 1) ~/ 8) * 4 * channels;
+  final avgBytesPerSec = sampleRate * blockAlign ~/ wavSamplesPerBlock;
 
   // Pad trailing partial block with a silent block (zero header + nibbles).
   final paddedLength = (adpcmBytes.length / blockAlign).ceil() * blockAlign;
-  final encodedSampleCapacity = paddedLength ~/ blockAlign * samplesPerBlock;
+  final encodedSampleCapacity = paddedLength ~/ blockAlign * wavSamplesPerBlock;
   final declaredSampleCount = sampleCount ?? encodedSampleCapacity;
   if (declaredSampleCount < 0 || declaredSampleCount > encodedSampleCapacity) {
     throw ArgumentError.value(
@@ -304,7 +466,7 @@ Uint8List adpcmToWav(
   // The 4-byte per-block headers (predictor/index/reserved) are plain bytes
   // and must NOT be swapped.
   for (int i = 0; i < adpcmBytes.length; i++) {
-    data[i] = i % blockAlign >= 4
+    data[i] = i % blockAlign >= 4 * channels
         ? ((adpcmBytes[i] & 0x0F) << 4) | (adpcmBytes[i] >> 4)
         : adpcmBytes[i];
   }
@@ -320,13 +482,13 @@ Uint8List adpcmToWav(
   // next chunk, so an 18-vs-20 mismatch makes the file unparseable.
   out.writeUint32LE(20); // fmt chunk size
   out.writeUint16LE(0x11); // WAVE_FORMAT_IMA_ADPCM
-  out.writeUint16LE(1); // channels (mono)
+  out.writeUint16LE(channels);
   out.writeUint32LE(sampleRate);
   out.writeUint32LE(avgBytesPerSec);
   out.writeUint16LE(blockAlign);
   out.writeUint16LE(4); // bits per sample (4-bit nibbles)
   out.writeUint16LE(2); // cbSize
-  out.writeUint16LE(samplesPerBlock); // samples per block (extension)
+  out.writeUint16LE(wavSamplesPerBlock); // samples per block (extension)
   // Compressed formats use `fact` to report the number of source samples,
   // which may be shorter than the padded final ADPCM block.
   out.writeString('fact');
