@@ -109,6 +109,33 @@ void main() {
       );
     });
 
+    testWidgets('slow repeat tap on same tab does not reset folder', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(TabBar)),
+      );
+      final initialReset = container.read(fileTabFolderResetSignalProvider(0));
+      final textTab = find.widgetWithText(Tab, '文本');
+
+      await tester.tap(textTab);
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 400)),
+      );
+      await tester.tap(textTab);
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(fileTabFolderResetSignalProvider(0)),
+        initialReset,
+        reason: 'A later ordinary tap should not reset the folder',
+      );
+    });
+
     testWidgets('switching tabs and back does NOT trigger reset signal', (
       tester,
     ) async {

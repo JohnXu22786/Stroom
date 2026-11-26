@@ -32,6 +32,10 @@ class _FilesPageState extends ConsumerState<FilesPage>
   /// reordering does not cause false resets.
   /// Initialized to -1 so the first tap never triggers a reset.
   int _lastTappedLogicalTabIndex = -1;
+  final Stopwatch _tapStopwatch = Stopwatch()..start();
+  Duration? _lastTabTapTime;
+
+  static const _doubleTapWindow = Duration(milliseconds: 300);
 
   @override
   void initState() {
@@ -68,11 +72,16 @@ class _FilesPageState extends ConsumerState<FilesPage>
     // Map physical position → logical tab index via the current order.
     final tabOrder = ref.read(fileTabOrderProvider);
     final logicalIndex = tabOrder[physicalIndex];
-    if (logicalIndex == _lastTappedLogicalTabIndex) {
-      // Same tab tapped again → reset to root (home).
+    final now = _tapStopwatch.elapsed;
+    final lastTapTime = _lastTabTapTime;
+    if (logicalIndex == _lastTappedLogicalTabIndex &&
+        lastTapTime != null &&
+        now - lastTapTime <= _doubleTapWindow) {
+      // A rapid second tap on the same tab resets it to root (home).
       ref.read(fileTabFolderResetSignalProvider(logicalIndex).notifier).state++;
     }
     _lastTappedLogicalTabIndex = logicalIndex;
+    _lastTabTapTime = now;
   }
 
   @override
