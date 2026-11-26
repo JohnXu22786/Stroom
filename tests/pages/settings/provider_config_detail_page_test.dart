@@ -83,6 +83,7 @@ extension on WidgetTester {
     Map<String, dynamic> typeConfig = const {},
     Locale locale = const Locale('zh', 'CN'),
     double textScale = 1,
+    bool disableAnimations = false,
   }) {
     return pumpWidget(
       ProviderScope(
@@ -113,8 +114,10 @@ extension on WidgetTester {
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(textScale)),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+              disableAnimations: disableAnimations,
+            ),
             child: child!,
           ),
           home: ProviderConfigDetailPage(
@@ -133,6 +136,9 @@ List<String> modelTileTitles(WidgetTester tester) {
       .widgetList<ListTile>(find.byType(ListTile))
       .map((t) {
         final title = t.title;
+        if (title is Tooltip && title.child is ConstrainedText) {
+          return (title.child as ConstrainedText).data;
+        }
         if (title is ConstrainedText) return title.data;
         if (title is Text) return title.data ?? '';
         return '';
@@ -186,8 +192,10 @@ void main() {
       final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
       final expectedId =
           AppLocalizations.of(pageContext)!.providerModelId(modelId);
-      expect(tile.title, isA<ConstrainedText>());
-      expect(tile.subtitle, isA<ConstrainedText>());
+      expect(tile.title, isA<Tooltip>());
+      expect(tile.subtitle, isA<Tooltip>());
+      expect((tile.title as Tooltip).child, isA<ConstrainedText>());
+      expect((tile.subtitle as Tooltip).child, isA<ConstrainedText>());
       final nameFinder = find.byWidgetPredicate(
         (widget) => widget is ConstrainedText && widget.data == modelName,
       );
@@ -227,8 +235,10 @@ void main() {
       await tester.pump();
 
       final tile = tester.widget<ListTile>(find.byType(ListTile).last);
-      expect(tile.title, isA<ConstrainedText>());
-      expect(tile.subtitle, isA<ConstrainedText>());
+      expect(tile.title, isA<Tooltip>());
+      expect(tile.subtitle, isA<Tooltip>());
+      expect((tile.title as Tooltip).child, isA<ConstrainedText>());
+      expect((tile.subtitle as Tooltip).child, isA<ConstrainedText>());
       expect(find.text('Model name'), findsOneWidget);
       final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
       final expectedId =
@@ -248,6 +258,43 @@ void main() {
         tester.getSize(find.text(expectedId)).width,
         lessThanOrEqualTo(tester.getSize(idFinder).width),
       );
+      expect(find.byIcon(Icons.delete), findsOneWidget);
+      expect(find.byIcon(Icons.drag_handle), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reduced motion exposes full values through tooltips', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpDetailPage(
+        locale: const Locale('de', 'DE'),
+        textScale: 1.8,
+        disableAnimations: true,
+        models: [ModelConfig(name: modelName, modelId: modelId)],
+      );
+      await tester.pump();
+
+      final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId(modelId);
+      expect(MediaQuery.disableAnimationsOf(pageContext), isTrue);
+      expect(find.byTooltip(modelName), findsOneWidget);
+      expect(find.byTooltip(expectedId), findsOneWidget);
+
+      await tester.longPress(find.text(modelName));
+      await tester.pumpAndSettle();
+      expect(find.text(modelName), findsNWidgets(2));
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.longPress(find.text(expectedId));
+      await tester.pumpAndSettle();
+      expect(find.text(expectedId), findsNWidgets(2));
       expect(find.byIcon(Icons.delete), findsOneWidget);
       expect(find.byIcon(Icons.drag_handle), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);

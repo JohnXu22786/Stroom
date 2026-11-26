@@ -907,6 +907,9 @@ class _ProviderConfigDetailPageState
     final storageIndex =
         config != null ? config.models.indexOf(model) : displayIndex;
     final reorderable = _enableModelReorder;
+    final l10n = AppLocalizations.of(context)!;
+    final title = model.name.isNotEmpty ? model.name : l10n.providerUnnamed;
+    final subtitle = l10n.providerModelId(model.modelId);
 
     return ListTile(
       key: reorderable
@@ -918,17 +921,21 @@ class _ProviderConfigDetailPageState
               child: Icon(Icons.drag_handle, color: Colors.grey),
             )
           : const Icon(Icons.smart_toy),
-      title: ConstrainedText(
-        model.name.isNotEmpty
-            ? model.name
-            : AppLocalizations.of(context)!.providerUnnamed,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      title: Tooltip(
+        message: title,
+        child: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
-      subtitle: ConstrainedText(
-        AppLocalizations.of(context)!.providerModelId(model.modelId),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      subtitle: Tooltip(
+        message: subtitle,
+        child: ConstrainedText(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

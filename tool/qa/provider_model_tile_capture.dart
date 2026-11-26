@@ -36,6 +36,7 @@ final _models = [
 void main() {
   final query = Uri.base.queryParameters;
   final fitting = query['state'] == 'fitting';
+  final reducedMotion = query['reducedMotion'] == 'true';
   final locale = switch (query['locale']) {
     'en' => const Locale('en'),
     _ => const Locale('de', 'DE'),
@@ -61,8 +62,10 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         theme: ThemeData(useMaterial3: true, brightness: brightness),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: reducedMotion,
+          ),
           child: child!,
         ),
         home: ProviderConfigDetailPage(

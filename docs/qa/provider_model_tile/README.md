@@ -6,7 +6,9 @@ text at 1.8× scale, the name wrapped to a 473 px text block inside a 160 px
 slot, making the compact model row expand far beyond its intended height.
 Both values now use the shared measured one-line `ConstrainedText` behavior.
 They stay in their original leading alignment when they fit and reveal only
-when their actual slot clips them.
+when their actual slot clips them. With reduced motion enabled, the labels stay
+stationary and the complete value is available in a tooltip on hover or long
+press.
 
 ## Captures
 
@@ -19,6 +21,9 @@ when their actual slot clips them.
   stationary at their original leading alignment.
 - `narrow-de-reveal-320x640-scale1_8-light.webm`: playable reveal from the same
   production page and viewport as the narrow capture.
+- `reduced-motion-tooltip-de-320x640-scale1_8-light.png`: the same narrow
+  German state with animations disabled and the title's full-value tooltip
+  open on hover. On touch devices, long press opens the tooltip.
 
 The fixture is local synthetic provider/model data and makes no network
 requests. Run `python3 tool/qa/capture_provider_model_tile.py` to rebuild the
