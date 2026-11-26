@@ -38,7 +38,7 @@ Future<List<StartupIssue>> _validateMalformedConfigParam(
             'reasoningParams': [
               {
                 'paramName': 'effort',
-                'options': ['low', 'high']
+                'options': ['low', 'high'],
               },
             ],
             'models': [],
@@ -61,227 +61,236 @@ void main() {
   });
 
   group('StartupCheckService - validateDataFormats - nested data', () {
-    test('validateDataFormats detects non-Map entries in configs list',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'Test Provider',
-            'configs': [
-              null,
-              'invalid',
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats detects non-Map entries in configs list',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'llm',
+              'name': 'Test Provider',
+              'configs': [null, 'invalid'],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect format issues in configs
-      final configsIssues = issues.where(
-        (i) => i.message.contains('configs'),
-      );
-      expect(configsIssues, isNotEmpty);
-    });
+        // Should detect format issues in configs
+        final configsIssues = issues.where(
+          (i) => i.message.contains('configs'),
+        );
+        expect(configsIssues, isNotEmpty);
+      },
+    );
 
-    test('validateDataFormats detects non-Map entries in models list',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'Test Provider',
-            'configs': [
-              {
-                'providerName': 'Config1',
-                'host': '',
-                'key': '',
-                'models': [
-                  null,
-                  'not a map',
-                  {'name': 'Valid', 'modelId': 'valid_id'},
-                ],
-              },
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats detects non-Map entries in models list',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'llm',
+              'name': 'Test Provider',
+              'configs': [
+                {
+                  'providerName': 'Config1',
+                  'host': '',
+                  'key': '',
+                  'models': [
+                    null,
+                    'not a map',
+                    {'name': 'Valid', 'modelId': 'valid_id'},
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect non-Map entries in models
-      final modelsIssues = issues.where(
-        (i) => i.message.contains('models'),
-      );
-      expect(modelsIssues, isNotEmpty);
-    });
+        // Should detect non-Map entries in models
+        final modelsIssues = issues.where((i) => i.message.contains('models'));
+        expect(modelsIssues, isNotEmpty);
+      },
+    );
 
-    test('validateDataFormats detects non-Map entries in customParams list',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'Test Provider',
-            'configs': [
-              {
-                'providerName': 'Config1',
-                'host': '',
-                'key': '',
-                'models': [
-                  {
-                    'name': 'Model1',
-                    'modelId': 'model1',
-                    'customParams': [
-                      null,
-                      'invalid param',
-                      {'paramName': 'valid_param', 'defaultValue': 'val'},
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats detects non-Map entries in customParams list',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'llm',
+              'name': 'Test Provider',
+              'configs': [
+                {
+                  'providerName': 'Config1',
+                  'host': '',
+                  'key': '',
+                  'models': [
+                    {
+                      'name': 'Model1',
+                      'modelId': 'model1',
+                      'customParams': [
+                        null,
+                        'invalid param',
+                        {'paramName': 'valid_param', 'defaultValue': 'val'},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect non-Map entries in customParams
-      final customParamsIssues = issues.where(
-        (i) => i.message.contains('customParams'),
-      );
-      expect(customParamsIssues, isNotEmpty);
-    });
+        // Should detect non-Map entries in customParams
+        final customParamsIssues = issues.where(
+          (i) => i.message.contains('customParams'),
+        );
+        expect(customParamsIssues, isNotEmpty);
+      },
+    );
 
-    test('validateDataFormats detects non-Map entries in voices list',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'tts',
-            'name': 'TTS Provider',
-            'configs': [
-              {
-                'providerName': 'TTS Config',
-                'host': '',
-                'key': '',
-                'models': [
-                  {
-                    'name': 'VoiceModel',
-                    'modelId': 'voice_1',
-                    'voices': [
-                      null,
-                      'invalid voice',
-                      {'name': 'Valid Voice', 'id': 'voice_123'},
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats detects non-Map entries in voices list',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'tts',
+              'name': 'TTS Provider',
+              'configs': [
+                {
+                  'providerName': 'TTS Config',
+                  'host': '',
+                  'key': '',
+                  'models': [
+                    {
+                      'name': 'VoiceModel',
+                      'modelId': 'voice_1',
+                      'voices': [
+                        null,
+                        'invalid voice',
+                        {'name': 'Valid Voice', 'id': 'voice_123'},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect non-Map entries in voices
-      final voicesIssues = issues.where(
-        (i) => i.message.contains('voices'),
-      );
-      expect(voicesIssues, isNotEmpty);
-    });
+        // Should detect non-Map entries in voices
+        final voicesIssues = issues.where((i) => i.message.contains('voices'));
+        expect(voicesIssues, isNotEmpty);
+      },
+    );
 
-    test('validateDataFormats detects non-Map entries in reasoningParams list',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'LLM Provider',
-            'configs': [
-              {
-                'providerName': 'LLM Config',
-                'host': '',
-                'key': '',
-                'models': [
-                  {
-                    'name': 'ReasonModel',
-                    'modelId': 'reason_1',
-                    'reasoningParams': [
-                      null,
-                      12345,
-                      {
-                        'paramName': 'reasoning_effort',
-                        'options': ['low', 'high'],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats detects non-Map entries in reasoningParams list',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'llm',
+              'name': 'LLM Provider',
+              'configs': [
+                {
+                  'providerName': 'LLM Config',
+                  'host': '',
+                  'key': '',
+                  'models': [
+                    {
+                      'name': 'ReasonModel',
+                      'modelId': 'reason_1',
+                      'reasoningParams': [
+                        null,
+                        12345,
+                        {
+                          'paramName': 'reasoning_effort',
+                          'options': ['low', 'high'],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect non-Map entries in reasoningParams
-      final reasoningParamsIssues = issues.where(
-        (i) => i.message.contains('reasoningParams'),
-      );
-      expect(reasoningParamsIssues, isNotEmpty);
-    });
+        // Should detect non-Map entries in reasoningParams
+        final reasoningParamsIssues = issues.where(
+          (i) => i.message.contains('reasoningParams'),
+        );
+        expect(reasoningParamsIssues, isNotEmpty);
+      },
+    );
 
-    test('validateDataFormats detects config-level malformed customParams',
-        () async {
-      final issues = await _validateMalformedConfigParam('customParams', null);
+    test(
+      'validateDataFormats detects config-level malformed customParams',
+      () async {
+        final issues = await _validateMalformedConfigParam(
+          'customParams',
+          null,
+        );
 
-      final customParamsIssues = issues
-          .where((issue) => issue.message.contains('customParams'))
-          .toList();
-      expect(customParamsIssues, hasLength(1));
-      expect(
-        customParamsIssues.single.message,
-        contains('provider_entries[0].configs[0].customParams[0]'),
-      );
-    });
+        final customParamsIssues = issues
+            .where((issue) => issue.message.contains('customParams'))
+            .toList();
+        expect(customParamsIssues, hasLength(1));
+        expect(
+          customParamsIssues.single.message,
+          contains('provider_entries[0].configs[0].customParams[0]'),
+        );
+      },
+    );
 
-    test('validateDataFormats detects config-level malformed reasoningParams',
-        () async {
-      final issues = await _validateMalformedConfigParam(
-        'reasoningParams',
-        'invalid',
-      );
+    test(
+      'validateDataFormats detects config-level malformed reasoningParams',
+      () async {
+        final issues = await _validateMalformedConfigParam(
+          'reasoningParams',
+          'invalid',
+        );
 
-      final reasoningParamsIssues = issues
-          .where((issue) => issue.message.contains('reasoningParams'))
-          .toList();
-      expect(reasoningParamsIssues, hasLength(1));
-      expect(
-        reasoningParamsIssues.single.message,
-        contains('provider_entries[0].configs[0].reasoningParams[0]'),
-      );
-    });
+        final reasoningParamsIssues = issues
+            .where((issue) => issue.message.contains('reasoningParams'))
+            .toList();
+        expect(reasoningParamsIssues, hasLength(1));
+        expect(
+          reasoningParamsIssues.single.message,
+          contains('provider_entries[0].configs[0].reasoningParams[0]'),
+        );
+      },
+    );
 
-    test('validateDataFormats reports malformed saved model field shapes',
-        () async {
+    test('validateDataFormats reports malformed saved model field shapes', () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -354,62 +363,65 @@ void main() {
         ]),
       );
       expect(
-        messages.where((message) =>
-            message == 'provider_entries[1].configs: 字段不是合法列表'),
+        messages.where(
+          (message) => message == 'provider_entries[1].configs: 字段不是合法列表',
+        ),
         hasLength(1),
       );
       expect(
-        messages.where((message) =>
-            message == 'provider_entries[2].configs[0].models: 字段不是合法列表'),
+        messages.where(
+          (message) =>
+              message == 'provider_entries[2].configs[0].models: 字段不是合法列表',
+        ),
         hasLength(1),
       );
     });
   });
 
   group('StartupCheckService - validateDataFormats - mixed', () {
-    test('validateDataFormats preserves valid entries and detects invalid ones',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'Test Provider',
-            'configs': [
-              {'providerName': 'Valid', 'host': '', 'key': '', 'models': []},
-              null,
-              {
-                'providerName': 'Also Valid',
-                'host': '',
-                'key': '',
-                'models': []
-              },
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats preserves valid entries and detects invalid ones',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'data_format_version': DataMigrationService.currentFormatVersion,
+          'provider_entries': jsonEncode([
+            {
+              'id': 'test_provider',
+              'type': 'llm',
+              'name': 'Test Provider',
+              'configs': [
+                {'providerName': 'Valid', 'host': '', 'key': '', 'models': []},
+                null,
+                {
+                  'providerName': 'Also Valid',
+                  'host': '',
+                  'key': '',
+                  'models': [],
+                },
+              ],
+            },
+          ]),
+        });
+        AppStorage.resetCache();
 
-      final issues = await StartupCheckService.validateDataFormats();
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect the null entry in configs
-      final configsIssues = issues.where(
-        (i) => i.message.contains('configs'),
-      );
-      expect(configsIssues, isNotEmpty);
-      // Should NOT report errors about valid entries' fields
-      final idIssues = issues.where(
-        (i) => i.message.contains('id') && i.message.contains('缺失'),
-      );
-      expect(idIssues, isEmpty);
-    });
+        // Should detect the null entry in configs
+        final configsIssues = issues.where(
+          (i) => i.message.contains('configs'),
+        );
+        expect(configsIssues, isNotEmpty);
+        // Should NOT report errors about valid entries' fields
+        final idIssues = issues.where(
+          (i) => i.message.contains('id') && i.message.contains('缺失'),
+        );
+        expect(idIssues, isEmpty);
+      },
+    );
   });
 
   group('StartupCheckService - checkDataIntegrity - non-Map entries', () {
-    test(
-        'checkDataIntegrity handles non-Map entry without crash and continues checking valid entries',
-        () async {
+    test('checkDataIntegrity handles non-Map entry without crash and continues checking valid entries', () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -419,7 +431,7 @@ void main() {
             'id': 'valid',
             'type': 'unknown_type',
             'name': 'Valid',
-            'configs': []
+            'configs': [],
           },
         ]),
       });
@@ -435,32 +447,29 @@ void main() {
       expect(
         issues.any((i) => i.message.contains('unknown_type')),
         isTrue,
-        reason:
-            'Valid entries should still be checked after skipping non-Map items',
+        reason: 'Valid entries should still be checked after skipping non-Map items',
       );
     });
   });
 
   group('ProviderEntry.fromMap - nested data resilience', () {
-    test('validateDataFormats does not crash on top-level null/s tring entries',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': jsonEncode([
-          null,
-          'not a map',
-          42,
-        ]),
-      });
-      AppStorage.resetCache();
+    test(
+      'validateDataFormats does not crash on top-level null/s tring entries',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': jsonEncode([null, 'not a map', 42]),
+        });
+        AppStorage.resetCache();
 
-      // Should NOT crash - validateDataFormats has is! guard
-      final issues = await StartupCheckService.validateDataFormats();
+        // Should NOT crash - validateDataFormats has is! guard
+        final issues = await StartupCheckService.validateDataFormats();
 
-      // Should report errors for all 3 invalid entries
-      final nullTypeIssues = issues.where(
-        (i) => i.message.contains('provider_entries'),
-      );
-      expect(nullTypeIssues.length, equals(3));
-    });
+        // Should report errors for all 3 invalid entries
+        final nullTypeIssues = issues.where(
+          (i) => i.message.contains('provider_entries'),
+        );
+        expect(nullTypeIssues.length, equals(3));
+      },
+    );
   });
 }

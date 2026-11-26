@@ -57,7 +57,7 @@ class StartupJsonBatchResult {
 
 @visibleForTesting
 Future<List<StartupIssue>> Function(List<StartupIssue> Function() computation)?
-    debugStartupIsolateRunnerForTesting;
+debugStartupIsolateRunnerForTesting;
 
 Future<List<StartupIssue>> _runStartupIsolate(
   List<StartupIssue> Function() computation,
@@ -544,7 +544,8 @@ class StartupCheckService {
     if (list is! List) {
       issues.add(
         StartupIssue(
-          message: '${fieldPath ?? 'provider_entries[$entryIndex].$fieldName'}: '
+          message:
+              '${fieldPath ?? 'provider_entries[$entryIndex].$fieldName'}: '
               '字段不是合法列表',
           severity: StartupIssueSeverity.error,
           dataKey: 'provider_entries',
@@ -703,8 +704,9 @@ class StartupCheckService {
   /// CPU 密集的 JSON 解析工作在后台 Isolate 中执行，
   /// 避免阻塞主 UI 线程。
   static Future<List<StartupIssue>> checkDataIntegrity() async {
-    final providerEntriesJson =
-        await StartupPreferences.getString('provider_entries');
+    final providerEntriesJson = await StartupPreferences.getString(
+      'provider_entries',
+    );
 
     if (kIsWeb) {
       try {
@@ -778,7 +780,8 @@ class StartupCheckService {
       if (!_isKnownProviderType(type)) {
         issues.add(
           StartupIssue(
-            message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
+            message:
+                'provider_entries[$i]: 未知的供应商类型 "$type"，'
                 '应用可能无法正常使用该供应商',
             severity: StartupIssueSeverity.warning,
             dataKey: 'provider_entries',
