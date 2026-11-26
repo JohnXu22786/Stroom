@@ -76,7 +76,10 @@ class SearchMatch {
 
 /// Finds case-insensitive matches in [text] and returns source UTF-16 ranges.
 List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) =>
-    _caseInsensitiveMatchOffsets(text, query, (value) => value.toLowerCase());
+    _caseInsensitiveMatchOffsets(text, query, _normalizeSearchText);
+
+String _normalizeSearchText(String value) =>
+    value.toLowerCase().replaceAll('\u03C2', '\u03C3');
 
 /// Allows tests to model lowercase mappings that expand a Unicode character.
 List<(int, int)> caseInsensitiveMatchOffsetsForTesting(
