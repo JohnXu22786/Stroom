@@ -122,6 +122,7 @@ void main() {
         ManifestDatabase.deleteTextRecord('text-delete'),
         ManifestDatabase.deleteTextRecords(['text-batch-delete']),
       ]);
+      ManifestDatabase.invalidateWebDataCacheForTesting();
 
       expect(readCount, 1, reason: 'JSON deletes must share the cold read');
       expect(await ManifestDatabase.getAllImageRecords(), isEmpty);
@@ -149,6 +150,7 @@ void main() {
         ManifestDatabase.clearRecords(ManifestTables.videoRecords),
         ManifestDatabase.clearRecords(ManifestTables.textRecords),
       ]);
+      ManifestDatabase.invalidateWebDataCacheForTesting();
 
       expect(readCount, 1, reason: 'JSON clears must share the cold read');
       expect(await ManifestDatabase.getAllImageRecords(), isEmpty);
@@ -191,6 +193,7 @@ void main() {
           recordTable: ManifestTables.audioRecords,
         ),
       ]);
+      ManifestDatabase.invalidateWebDataCacheForTesting();
 
       expect(
         readCount,
