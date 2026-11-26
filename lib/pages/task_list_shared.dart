@@ -112,7 +112,7 @@ class TaskCard extends ConsumerWidget {
                                 14 -
                                 6 -
                                 (hasOriginalDetail ? 8 : 0) -
-                                (canControlStandalone ? 20 : 0);
+                                (canControlStandalone ? 16 : 0);
                             final detailNeedsConstraint = hasOriginalDetail &&
                                 detailPainter.width > detailSlotWidth;
 

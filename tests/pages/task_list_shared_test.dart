@@ -286,6 +286,51 @@ void main() {
     expect(tester.getTopLeft(find.text('Details')), fittingLabelPosition);
   });
 
+  testWidgets('fitting detail label preserves layout beside standalone control',
+      (
+    tester,
+  ) async {
+    final task = SynthesisTask(
+      id: 'failed-detail-fitting-boundary',
+      title: 'Failed task',
+      status: TaskStatus.failed,
+      error: 'Timeout',
+      text: 'Request text',
+      providerConfig: ProviderConfigItem(providerName: 'Example'),
+      modelConfig: ModelConfig(name: 'Voice', modelId: 'voice'),
+      originalRequest: '{"model":"voice"}',
+    );
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(700, 640),
+      restoreStatus: FlowExecutionRestoreStatus.ready,
+    );
+
+    final label = find.text('Details');
+    final constrainedDetails = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'Details',
+    );
+    expect(constrainedDetails, findsNothing);
+    final labelWidth = tester.getSize(label).width;
+    final errorRow =
+        find.ancestor(of: label, matching: find.byType(Container)).first;
+    final currentRowWidth = tester.getSize(errorRow).width - 20;
+    final targetRowWidth = labelWidth + 14 + 6 + 8 + 16 + 2;
+    final targetViewportWidth = 700 - (currentRowWidth - targetRowWidth);
+
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: Size(targetViewportWidth, 640),
+      restoreStatus: FlowExecutionRestoreStatus.ready,
+    );
+
+    expect(find.text('Details'), findsOneWidget);
+    expect(constrainedDetails, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('detail measurement inherits letter spacing', (
     tester,
   ) async {
