@@ -6,10 +6,6 @@ import time
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
-from playwright.sync_api import sync_playwright
-
-
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/qa/provider_model_tile"
 WEB = Path("/tmp/stroom-provider-model-tile-web")
@@ -30,6 +26,9 @@ def server_command(port: int) -> list[str]:
 
 
 def main() -> None:
+    from PIL import Image
+    from playwright.sync_api import sync_playwright
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--skip-build",
