@@ -100,6 +100,7 @@ class HtmlRenderer implements NodeVisitor {
   String render(List<Node> nodes) {
     buffer = StringBuffer();
     uniqueIds = <String>{};
+    _lastVisitedTag = null;
 
     for (final node in nodes) {
       node.accept(this);

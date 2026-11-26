@@ -2559,7 +2559,10 @@ $$
     test('tab in mermaid info string does not shift parsed fence ordinals', () {
       const streamingText = '```mermaid\tmetadata\nA\n```\n\n```mermaid\nA';
       final parsed = _parseLikeMarkdownGenerator(streamingText);
-      expect(_findElement(parsed, 'pre'), isNotNull);
+      final parsedPre = _findElement(parsed, 'pre');
+      final parsedCode = _findElement(parsed, 'code');
+      expect(parsedPre?.attributes['data-metadata'], 'metadata');
+      expect(parsedCode?.attributes['class'], 'language-mermaid');
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,
@@ -2572,8 +2575,8 @@ $$
       );
 
       expect(codeWidgets, hasLength(2));
-      expect(codeWidgets.first, isA<CodeBlockSourceView>(),
-          reason: 'the parser treats the tab suffix as part of the language');
+      expect(codeWidgets.first, isA<MermaidRenderWidget>(),
+          reason: 'the closed tab-metadata Mermaid fence should render');
       expect(codeWidgets.last, isNot(isA<MermaidRenderWidget>()),
           reason: 'the parsed trailing Mermaid block should keep loading');
     });

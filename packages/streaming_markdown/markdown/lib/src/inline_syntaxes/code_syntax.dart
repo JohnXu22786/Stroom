@@ -39,6 +39,7 @@ class CodeSyntax extends InlineSyntax {
     if (match == null) {
       return false;
     }
+
     parser.writeText();
     if (onMatch(parser, match)) parser.consume(match.match.length);
     return true;
