@@ -49,7 +49,8 @@ class LinkReferenceDefinitionSyntax extends BlockSyntax {
     // ends, so that the next syntax can continue parsing from there.
     parser.retreatBy(linkParser.unconsumedLines);
 
-    final labelString = normalizeLinkLabel(linkParser.label!);
+    final labelString =
+        normalizeLinkLabel(escapePunctuation(linkParser.label!));
 
     parser.document.linkReferences.putIfAbsent(
       labelString,
