@@ -450,6 +450,21 @@ void main() {
   });
 
   group('In-conversation search offset tests', () {
+    test('matches sigma query in Greek word ending with capital sigma', () {
+      expect(caseInsensitiveMatchOffsets('ΟΣ', 'σ'), [(1, 2)]);
+    });
+
+    test('matches final sigma query against capital sigma', () {
+      expect(caseInsensitiveMatchOffsets('Σ', 'ς'), [(0, 1)]);
+    });
+
+    test(
+      'sigma matches preserve UTF-16 offsets after supplementary characters',
+      () {
+        expect(caseInsensitiveMatchOffsets('😀ΟΣ', 'σ'), [(3, 4)]);
+      },
+    );
+
     test('case-insensitive offsets map expanded lowercase to source text', () {
       final text = '\u0130x foo';
       String lowercaseWithExpansion(String value) =>
