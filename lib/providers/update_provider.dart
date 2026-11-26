@@ -1747,10 +1747,16 @@ rm -- "\$0"
     bool prefsOk = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kPendingUpdateRestartKey, true);
-      prefsOk = true;
+      prefsOk = await prefs.setBool(_kPendingUpdateRestartKey, true);
     } catch (_) {}
     _pendingRestartInMemory = prefsOk;
+    if (!prefsOk) {
+      await _clearPendingRestartFlags();
+      state = state.copyWith(
+        downloadError: _localizations().startupSafetyUpdateAttemptUnavailable,
+      );
+      return;
+    }
 
     try {
       const channel = MethodChannel('com.johntsui.stroom/install');
