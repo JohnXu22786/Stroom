@@ -64,6 +64,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     'txt',
     'md',
     'mmd',
+    'html',
     'json',
     'xml',
     'csv',

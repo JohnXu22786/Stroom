@@ -58,6 +58,7 @@ class _TextFilesPicker extends FilePickerPlatform {
   _TextFilesPicker(this.inputs);
 
   final List<PlatformFile> inputs;
+  List<String>? lastAllowedExtensions;
 
   @override
   Future<List<PlatformFile>> pickFiles({
@@ -72,8 +73,10 @@ class _TextFilesPicker extends FilePickerPlatform {
     WindowsOptions windowsOptions = const WindowsOptions(),
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
-  }) async =>
-      inputs;
+  }) async {
+    lastAllowedExtensions = allowedExtensions;
+    return inputs;
+  }
 }
 
 Widget _buildApp({
@@ -140,6 +143,33 @@ void main() {
     expect(records.single.size, 0);
     expect(records.single.textLength, 0);
     expect(await TextManifest.readText(records.single.storagePath), '');
+  });
+
+  testWidgets('imports HTML text files using the supported format allowlist',
+      (tester) async {
+    const content = '<h1>Notes</h1>';
+    final picker = _TextFilesPicker([
+      FakePlatformFile(
+        name: 'notes.html',
+        bytes: Uint8List.fromList(content.codeUnits),
+      ),
+    ]);
+    FilePickerPlatform.instance = picker;
+    await tester.pumpWidget(_buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('导入'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(picker.lastAllowedExtensions, contains('html'));
+    expect(picker.lastAllowedExtensions, contains('mmd'));
+    final records = await TextManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.name, 'notes');
+    expect(records.single.format, 'html');
+    expect(await TextManifest.readText(records.single.storagePath), content);
   });
 
   testWidgets('file format label uses the shared bounded text behavior', (
