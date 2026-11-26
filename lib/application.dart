@@ -24,6 +24,7 @@ import 'providers/task_provider.dart' show TaskStatus;
 import 'services/app_log_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
+import 'services/macos_menu_service.dart';
 import 'services/notification_service.dart';
 import 'services/snapshot_service.dart';
 import 'widgets/update_dialog.dart';
@@ -76,12 +77,17 @@ class _ApplicationState extends ConsumerState<Application>
   /// [showDialog] can find [MaterialLocalizations] and the
   /// [NavigatorState] it needs.
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  MacOSMenuService? _macOSMenuService;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(ref.read(localeProvider.notifier).load());
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      _macOSMenuService = MacOSMenuService(_navigatorKey)..attach();
+    }
 
     // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
     // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
@@ -156,6 +162,7 @@ class _ApplicationState extends ConsumerState<Application>
 
   @override
   void dispose() {
+    _macOSMenuService?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     startupReadyNotifier.removeListener(_onStartupReady);
     if (DesktopAppService.instance.onQuitConfirmation ==
