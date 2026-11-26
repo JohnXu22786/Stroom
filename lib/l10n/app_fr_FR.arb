@@ -3044,6 +3044,7 @@
   "reasoningDisableEffort": "Désactiver l'effort de raisonnement",
   "reasoningEnableEffort": "Activer l'effort de raisonnement",
   "ocrJsonSizePositive": "La taille du JSON de la requête doit être une valeur positive en Mio.",
+  "ttsRangeInvalid": "Saisissez des valeurs numériques minimale et maximale pour chaque plage ; le minimum ne doit pas dépasser le maximum.",
   "ttsRangePair": "Saisissez les valeurs minimale et maximale de {kind}, ou laissez les deux champs vides.",
   "@ttsRangePair": {
     "placeholders": {

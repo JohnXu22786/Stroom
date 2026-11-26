@@ -10566,6 +10566,9 @@ abstract class AppLocalizations {
   /// **'Request JSON size must be a positive MiB value.'**
   String get ocrJsonSizePositive;
 
+  /// Validates numeric ranges and displays the existing form error feedback.
+  String get ttsRangeInvalid;
+
   /// No description provided for @ttsRangePair.
   ///
   /// In en, this message translates to:

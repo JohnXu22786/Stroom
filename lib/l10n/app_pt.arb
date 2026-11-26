@@ -3044,6 +3044,7 @@
   "reasoningDisableEffort": "Desativar nível de esforço de raciocínio",
   "reasoningEnableEffort": "Ativar nível de esforço de raciocínio",
   "ocrJsonSizePositive": "O tamanho do JSON da solicitação deve ser um valor positivo em MiB.",
+  "ttsRangeInvalid": "Insira valores numéricos mínimo e máximo para cada intervalo; o mínimo não pode ser maior que o máximo.",
   "ttsRangePair": "Digite os valores mínimo e máximo de {kind}, ou deixe ambos vazios.",
   "@ttsRangePair": {
     "placeholders": {

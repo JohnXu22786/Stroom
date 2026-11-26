@@ -5941,6 +5941,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
 
   @override
+  String get ttsRangeInvalid =>
+      "请为每个范围输入数值最小值和最大值，且最小值不能大于最大值。";
+
+  @override
   String ttsRangePair(String kind) {
     return '最小和最大$kind必须同时填写，或同时留空。';
   }
@@ -17447,6 +17451,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrJsonSizePositive => '请求 JSON 大小必须是大于 0 的 MiB 数值。';
+
+  @override
+  String get ttsRangeInvalid =>
+      "请为每个范围输入数值最小值和最大值，且最小值不能大于最大值。";
 
   @override
   String ttsRangePair(String kind) {

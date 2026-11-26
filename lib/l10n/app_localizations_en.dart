@@ -6240,6 +6240,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Request JSON size must be a positive MiB value.';
 
   @override
+  String get ttsRangeInvalid =>
+      "Enter numeric minimum and maximum values for each range; the minimum must not exceed the maximum.";
+
+  @override
   String ttsRangePair(String kind) {
     return 'Enter both the minimum and maximum $kind, or leave both empty.';
   }
@@ -18391,6 +18395,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ocrJsonSizePositive =>
       'Request JSON size must be a positive MiB value.';
+
+  @override
+  String get ttsRangeInvalid =>
+      "Enter numeric minimum and maximum values for each range; the minimum must not exceed the maximum.";
 
   @override
   String ttsRangePair(String kind) {

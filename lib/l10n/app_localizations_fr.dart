@@ -6346,6 +6346,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'La taille du JSON de la requête doit être une valeur positive en Mio.';
 
   @override
+  String get ttsRangeInvalid =>
+      "Saisissez des valeurs numériques minimale et maximale pour chaque plage ; le minimum ne doit pas dépasser le maximum.";
+
+  @override
   String ttsRangePair(String kind) {
     return 'Saisissez les valeurs minimale et maximale de $kind, ou laissez les deux champs vides.';
   }
@@ -18731,6 +18735,10 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   @override
   String get ocrJsonSizePositive =>
       'La taille du JSON de la requête doit être une valeur positive en Mio.';
+
+  @override
+  String get ttsRangeInvalid =>
+      "Saisissez des valeurs numériques minimale et maximale pour chaque plage ; le minimum ne doit pas dépasser le maximum.";
 
   @override
   String ttsRangePair(String kind) {

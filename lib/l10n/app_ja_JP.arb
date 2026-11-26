@@ -1773,6 +1773,7 @@
   "reasoningDisableEffort": "推論の努力を無効にする",
   "reasoningEnableEffort": "推論の努力を可能にする",
   "ocrJsonSizePositive": "リクエストの JSON サイズは正の MiB 値である必要があります。",
+  "ttsRangeInvalid": "各範囲に数値の最小値と最大値を入力してください。最小値は最大値を超えられません。",
   "ttsRangePair": "{kind} の最小値と最大値の両方を入力するか、両方を空のままにします。",
   "ttsEditTrimTitle": "カスタムトリムを編集する",
   "ttsVoicesCount": "音声 ({count})",

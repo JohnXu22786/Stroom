@@ -3044,6 +3044,7 @@
   "reasoningDisableEffort": "停用推理力度",
   "reasoningEnableEffort": "启用推理力度",
   "ocrJsonSizePositive": "请求 JSON 大小必须是大于 0 的 MiB 数值。",
+  "ttsRangeInvalid": "请为每个范围输入数值最小值和最大值，且最小值不能大于最大值。",
   "ttsRangePair": "最小和最大{kind}必须同时填写，或同时留空。",
   "@ttsRangePair": {
     "placeholders": {
