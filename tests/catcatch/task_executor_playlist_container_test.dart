@@ -154,6 +154,103 @@ fragment.m4s
     );
   });
 
+  test(
+    'keeps DASH alternatives selectable and filters their segment groups',
+    () async {
+      const manifestUrl = 'https://example.com/manifest.mpd';
+      const manifest = r'''
+<MPD mediaPresentationDuration="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4" codecs="avc1.4d401f">
+      <SegmentTemplate media="$RepresentationID$/segment-$Number$.m4s" duration="1"/>
+      <Representation id="low" bandwidth="400000" width="640" height="360"/>
+      <Representation id="high" bandwidth="1200000" width="1280" height="720"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+      final task = CatCatchTask(
+        id: 'dash-representation-selection',
+        url: manifestUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: manifestUrl,
+            name: 'manifest',
+            ext: 'mpd',
+            mimeType: 'application/dash+xml',
+            isPlaylist: true,
+          ),
+        ],
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.parsingPlaylist)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      final cancelToken = CancelToken();
+      CatCatchTask? parsedTask;
+
+      try {
+        await TaskExecutor.retryFromStep(
+          task: task,
+          fromStep: StepType.parsingPlaylist,
+          cancelToken: cancelToken,
+          playlistDioFactory: () => Dio()
+            ..httpClientAdapter = _PlaylistAdapter({manifestUrl: manifest}),
+          onUpdate: (updated) {
+            final parsing = updated.steps.firstWhere(
+              (step) => step.type == StepType.parsingPlaylist,
+            );
+            if (parsing.completed) {
+              parsedTask = updated;
+              cancelToken.cancel();
+            }
+          },
+        );
+      } finally {
+        cancelToken.cancel();
+      }
+
+      final resources = parsedTask!.detectedMedia;
+      final representations = resources.where(
+        (resource) => resource.isPlaylist,
+      );
+      expect(representations, hasLength(2));
+      final byName = {
+        for (final resource in representations) resource.name: resource,
+      };
+      final low = byName['manifest_640x360']!;
+      final high = byName['manifest_1280x720']!;
+      expect(low.url, manifestUrl);
+      expect(high.url, manifestUrl);
+      expect(low.groupId, isNot(high.groupId));
+      expect(low.selectionIdentity, isNot(high.selectionIdentity));
+      expect(low.mimeType, 'video/mp4');
+      expect(low.width, 640);
+      expect(low.height, 360);
+      expect(high.width, 1280);
+      expect(high.height, 720);
+
+      final lowSegments = playlistSegmentsForSelection(low, resources);
+      final highSegments = playlistSegmentsForSelection(high, resources);
+      expect(
+        playlistMergedFileExtensionForSelection(low, lowSegments, const {}),
+        'mp4',
+      );
+      expect(lowSegments.map((resource) => resource.url), [
+        'https://example.com/low/segment-1.m4s',
+        'https://example.com/low/segment-2.m4s',
+      ]);
+      expect(highSegments.map((resource) => resource.url), [
+        'https://example.com/high/segment-1.m4s',
+        'https://example.com/high/segment-2.m4s',
+      ]);
+    },
+  );
+
   test('preserves dynamic playlist HTTP errors for both locales', () async {
     for (final locale in [
       const Locale('en', 'US'),

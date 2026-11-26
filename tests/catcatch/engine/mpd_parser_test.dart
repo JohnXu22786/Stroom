@@ -2,6 +2,110 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/mpd_parser.dart';
 
 void main() {
+  test(
+    'parses DASH representations as separate segment alternatives',
+    () async {
+      const manifest = r'''
+<MPD mediaPresentationDuration="PT4S">
+  <Period duration="PT2S"><BaseURL>period-1/</BaseURL>
+    <AdaptationSet id="video" contentType="video" mimeType="video/mp4" codecs="avc1.4d401f">
+      <SegmentTemplate media="$RepresentationID$/segment-$Number$.m4s" duration="1"/>
+      <Representation id="low" bandwidth="400000" width="640" height="360"/>
+      <Representation id="high" bandwidth="1200000" width="1280" height="720"/>
+    </AdaptationSet>
+    <AdaptationSet id="audio" contentType="audio" mimeType="audio/mp4" codecs="mp4a.40.2">
+      <SegmentTemplate media="$RepresentationID$/segment-$Number$.m4s" duration="1"/>
+      <Representation id="audio" bandwidth="128000"/>
+    </AdaptationSet>
+  </Period>
+  <Period duration="PT2S"><BaseURL>period-2/</BaseURL>
+    <AdaptationSet id="audio" contentType="audio" mimeType="audio/mp4" codecs="mp4a.40.2">
+      <SegmentTemplate media="$RepresentationID$/segment-$Number$.m4s" duration="1"/>
+      <Representation id="audio" bandwidth="128000"/>
+    </AdaptationSet>
+    <AdaptationSet id="video" contentType="video" mimeType="video/mp4" codecs="avc1.4d401f">
+      <SegmentTemplate media="$RepresentationID$/segment-$Number$.m4s" duration="1"/>
+      <Representation id="low" bandwidth="400000" width="640" height="360"/>
+      <Representation id="high" bandwidth="1200000" width="1280" height="720"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+      final representations = await MPDParser.parseRepresentations(
+        manifest,
+        'https://example.com/manifest.mpd',
+      );
+
+      expect(representations, hasLength(3));
+      expect(representations[0].id, 'low');
+      expect(representations[0].bandwidth, 400000);
+      expect(representations[0].width, 640);
+      expect(representations[0].height, 360);
+      expect(representations[0].mimeType, 'video/mp4');
+      expect(representations[0].codecs, 'avc1.4d401f');
+      expect(representations[0].segments.map((segment) => segment.url), [
+        'https://example.com/period-1/low/segment-1.m4s',
+        'https://example.com/period-1/low/segment-2.m4s',
+        'https://example.com/period-2/low/segment-1.m4s',
+        'https://example.com/period-2/low/segment-2.m4s',
+      ]);
+      expect(representations[1].id, 'high');
+      expect(representations[1].bandwidth, 1200000);
+      expect(representations[1].width, 1280);
+      expect(representations[1].height, 720);
+      expect(representations[1].segments.map((segment) => segment.url), [
+        'https://example.com/period-1/high/segment-1.m4s',
+        'https://example.com/period-1/high/segment-2.m4s',
+        'https://example.com/period-2/high/segment-1.m4s',
+        'https://example.com/period-2/high/segment-2.m4s',
+      ]);
+      expect(representations[2].id, 'audio');
+      expect(representations[2].segments.map((segment) => segment.url), [
+        'https://example.com/period-1/audio/segment-1.m4s',
+        'https://example.com/period-1/audio/segment-2.m4s',
+        'https://example.com/period-2/audio/segment-1.m4s',
+        'https://example.com/period-2/audio/segment-2.m4s',
+      ]);
+
+      const singleRepresentation = '''
+<MPD><Period><AdaptationSet>
+  <SegmentList><SegmentURL media="only.m4s"/></SegmentList>
+  <Representation id="only"/>
+</AdaptationSet></Period></MPD>
+''';
+      final single = await MPDParser.parseRepresentations(
+        singleRepresentation,
+        'https://example.com/manifest.mpd',
+      );
+      expect(single, hasLength(1));
+      expect(single.single.segments.map((segment) => segment.url), [
+        'https://example.com/only.m4s',
+      ]);
+
+      const noIdAlternatives = r'''
+<MPD><Period><AdaptationSet mimeType="video/mp4">
+  <SegmentTemplate media="segment-$Number$.m4s" duration="1"/>
+  <Representation><BaseURL>first/</BaseURL></Representation>
+  <Representation><BaseURL>second/</BaseURL></Representation>
+</AdaptationSet></Period></MPD>
+''';
+      final noId = await MPDParser.parseRepresentations(
+        noIdAlternatives,
+        'https://example.com/manifest.mpd',
+      );
+      expect(noId, hasLength(2));
+      expect(
+        noId[0].segments.single.url,
+        'https://example.com/first/segment-1.m4s',
+      );
+      expect(
+        noId[1].segments.single.url,
+        'https://example.com/second/segment-1.m4s',
+      );
+    },
+  );
+
   test('puts SegmentList Initialization before media segments', () async {
     const manifest = r'''
 <MPD>

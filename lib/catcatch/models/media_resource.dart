@@ -52,6 +52,9 @@ class MediaResource {
   /// Stable key for selection/counting, retaining URL identity except for
   /// separate HLS byte ranges that share a URL.
   String get selectionIdentity {
+    if (isMPD && isPlaylist && groupId != null) {
+      return '\u0000dash-representation:${jsonEncode([url, groupId])}';
+    }
     if (!hasByteRange) return url;
     return '\u0000hls-range:${jsonEncode([
           url,
