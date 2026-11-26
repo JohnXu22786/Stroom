@@ -126,13 +126,28 @@ def _dart_directive_uris(source: str):
 
 
 def _local_path_packages(root: Path) -> dict[str, Path]:
-    pubspec = root / "pubspec.yaml"
-    if not pubspec.is_file():
-        return {}
+    pending = [root / "pubspec.yaml"]
+    seen_manifests = set()
+    packages = {}
+    while pending:
+        pubspec = pending.pop().resolve()
+        if pubspec in seen_manifests or not pubspec.is_file():
+            continue
+        seen_manifests.add(pubspec)
+        for package_key, path in _path_dependencies(pubspec):
+            package_root = _register_local_path_package(
+                root, pubspec.parent, package_key, path, packages
+            )
+            if package_root is not None:
+                pending.append(package_root / "pubspec.yaml")
 
+    return packages
+
+
+def _path_dependencies(pubspec: Path) -> list[tuple[str, str]]:
     section = None
     package_key = None
-    packages = {}
+    dependencies = []
     for line in pubspec.read_text(encoding="utf-8").splitlines():
         top_level = re.match(r"^([A-Za-z_][\w-]*):(?:\s|$)", line)
         if top_level:
@@ -150,11 +165,8 @@ def _local_path_packages(root: Path) -> dict[str, Path]:
                 r"(?:^|,)\s*path:\s*([^,}]+)", inline_dependency.group(2)
             )
             if inline_path:
-                _register_local_path_package(
-                    root,
-                    inline_dependency.group(1),
-                    inline_path.group(1),
-                    packages,
+                dependencies.append(
+                    (inline_dependency.group(1), inline_path.group(1))
                 )
             continue
 
@@ -164,24 +176,27 @@ def _local_path_packages(root: Path) -> dict[str, Path]:
             continue
 
         path = re.match(r"^    path:\s*(.+?)\s*(?:#.*)?$", line)
-        if not path or not package_key:
-            continue
-        _register_local_path_package(root, package_key, path.group(1), packages)
-        package_key = None
+        if path and package_key:
+            dependencies.append((package_key, path.group(1)))
+            package_key = None
 
-    return packages
+    return dependencies
 
 
 def _register_local_path_package(
-    root: Path, package_key: str, path: str, packages: dict[str, Path]
-) -> None:
-    package_root = (root / path.strip(" '\" ")).resolve()
+    root: Path,
+    declaring_directory: Path,
+    package_key: str,
+    path: str,
+    packages: dict[str, Path],
+) -> Path | None:
+    package_root = (declaring_directory / path.strip(" '\" ")).resolve()
     if root not in package_root.parents:
-        return
+        return None
 
     package_pubspec = package_root / "pubspec.yaml"
     if not package_pubspec.is_file():
-        return
+        return None
     declared_name = re.search(
         r"^name:\s*['\"]?([A-Za-z0-9_-]+)",
         package_pubspec.read_text(encoding="utf-8"),
@@ -189,6 +204,8 @@ def _register_local_path_package(
     )
     if declared_name and declared_name.group(1) == package_key:
         packages[package_key] = package_root
+        return package_root
+    return None
 
 
 def _local_dart_dependencies(

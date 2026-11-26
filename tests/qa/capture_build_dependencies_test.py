@@ -46,7 +46,11 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         self.local_package = self.root / "packages/local_capture_package"
         (self.local_package / "lib").mkdir(parents=True)
         (self.local_package / "pubspec.yaml").write_text(
-            "name: local_capture_package\n", encoding="utf-8"
+            "name: local_capture_package\n"
+            "dependencies:\n"
+            "  nested_capture_package:\n"
+            "    path: ../nested_capture_package\n",
+            encoding="utf-8",
         )
         (self.root / "pubspec.yaml").write_text(
             "name: capture_test\n"
@@ -57,7 +61,18 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.local_package_input = self.local_package / "lib/local_widget.dart"
-        self.local_package_input.write_text("class LocalWidget {}\n", encoding="utf-8")
+        self.local_package_input.write_text(
+            "import 'package:nested_capture_package/nested_widget.dart';\n"
+            "class LocalWidget {}\n",
+            encoding="utf-8",
+        )
+        self.nested_package = self.root / "packages/nested_capture_package"
+        (self.nested_package / "lib").mkdir(parents=True)
+        (self.nested_package / "pubspec.yaml").write_text(
+            "name: nested_capture_package\n", encoding="utf-8"
+        )
+        self.nested_package_input = self.nested_package / "lib/nested_widget.dart"
+        self.nested_package_input.write_text("class NestedWidget {}\n", encoding="utf-8")
         self.inline_package = self.root / "packages/inline_capture_package"
         (self.inline_package / "lib").mkdir(parents=True)
         (self.inline_package / "pubspec.yaml").write_text(
@@ -99,6 +114,12 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
     def test_newer_import_from_inline_local_path_package_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
         os.utime(self.inline_package_input, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_newer_transitive_local_path_package_import_requires_rebuild(self):
+        newer_mtime = self.bundle.stat().st_mtime + 1
+        os.utime(self.nested_package_input, (newer_mtime, newer_mtime))
 
         self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
 
