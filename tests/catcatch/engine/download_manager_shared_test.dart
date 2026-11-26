@@ -911,4 +911,65 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('cancels a large playlist merge without publishing output', () async {
+    const payloadLength = 2 * 1024 * 1024;
+    final payload = List<int>.filled(payloadLength, 0x61);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requests = 0;
+    final serverDone = server.listen((request) async {
+      requests++;
+      request.response.add(payload);
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp(
+      'cancelled-playlist-merge-',
+    );
+    final outputPath = p.join(directory.path, 'merged.ts');
+    final origin = 'http://${server.address.address}:${server.port}';
+    final cancelToken = CancelToken();
+    var merging = false;
+    var copiedMergeChunks = 0;
+    try {
+      await expectLater(
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/segment.ts'],
+          outputPath: outputPath,
+          cancelToken: cancelToken,
+          onProgress: (_, _, progress) {
+            if (progress == 95) merging = true;
+          },
+          onBytes: (_) {
+            if (merging && !cancelToken.isCancelled) {
+              copiedMergeChunks++;
+              cancelToken.cancel('cancel during playlist merge');
+            }
+          },
+        ),
+        throwsA(anything),
+      );
+
+      expect(copiedMergeChunks, 1);
+      expect(await File(outputPath).exists(), isFalse);
+      expect(
+        Directory(directory.path)
+            .listSync()
+            .where((entry) => p.basename(entry.path).contains('.merge-')),
+        isEmpty,
+      );
+
+      final retryPath = await DownloadManager.downloadSegmentsAndMerge(
+        segmentUrls: ['$origin/segment.ts'],
+        outputPath: outputPath,
+      );
+
+      expect(retryPath, outputPath);
+      expect(await File(retryPath).length(), payloadLength);
+      expect(requests, 2);
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
 }

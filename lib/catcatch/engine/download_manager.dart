@@ -579,6 +579,7 @@ class DownloadManager {
     await mergeFiles(
       validParts,
       outputPath,
+      cancelToken: cancelToken,
       onBytes: (delta) {
         mergeBytes += delta;
         onBytes?.call(totalBytes + mergeBytes);
@@ -614,6 +615,7 @@ class DownloadManager {
   static Future<void> mergeFiles(
     List<String> inputPaths,
     String outputPath, {
+    CancelToken? cancelToken,
     void Function(int delta)? onBytes,
   }) async {
     final stagingFile = File(
@@ -623,6 +625,12 @@ class DownloadManager {
     Object? failure;
     StackTrace? failureStackTrace;
     try {
+      void checkCancelled() {
+        final cancellation = cancelToken?.cancelError;
+        if (cancellation != null) throw cancellation;
+      }
+
+      checkCancelled();
       raf = await stagingFile.open(mode: FileMode.write);
       for (final path in inputPaths) {
         final inputFile = File(path);
@@ -630,12 +638,14 @@ class DownloadManager {
           throw FileSystemException('Segment part file not found', path);
         }
         await for (final chunk in inputFile.openRead()) {
+          checkCancelled();
           await raf.writeFrom(chunk);
           onBytes?.call(chunk.length);
         }
       }
       await raf.close();
       raf = null;
+      checkCancelled();
       await stagingFile.rename(outputPath);
     } catch (error, stackTrace) {
       failure = error;
