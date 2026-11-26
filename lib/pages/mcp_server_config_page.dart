@@ -523,7 +523,9 @@ class _McpServerConfigDialogState
     );
 
     try {
-      await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(entry.id, updated);
     } catch (error) {
       if (!mounted) return;
       setState(() => _isSaving = false);
