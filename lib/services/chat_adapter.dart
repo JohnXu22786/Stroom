@@ -381,6 +381,7 @@ class ChatAdapter {
       providerConfig: providerConfig,
       endpointType: endpointType,
       localeOverride: _localeOverride,
+      conversationId: convId,
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // this conversation's adapter-set assistant template).
@@ -564,6 +565,7 @@ class ChatAdapter {
       providerConfig: providerConfig,
       endpointType: endpointType,
       localeOverride: _localeOverride,
+      conversationId: convId,
     );
     final conversationConfig =
         convId == null ? null : _assistantConfigsByConversation[convId];
