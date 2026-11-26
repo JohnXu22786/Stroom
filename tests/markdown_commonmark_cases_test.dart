@@ -15,18 +15,29 @@ void main() {
     );
   });
 
-  test('adjacent matching backtick runs form an empty code span', () {
+  test('unmatched contiguous backtick runs remain literal', () {
     expect(
-      markdown.markdownToHtml('before ```` after'),
-      '<p>before <code></code> after</p>\n',
+      markdown.markdownToHtml('before `` after'),
+      '<p>before `` after</p>\n',
     );
     expect(
-      markdown.markdownToHtml('before ``code`` after'),
-      '<p>before <code>code</code> after</p>\n',
+      markdown.markdownToHtml('before ```` after'),
+      '<p>before ```` after</p>\n',
     );
     expect(
       markdown.markdownToHtml('before ````code after'),
       '<p>before ````code after</p>\n',
+    );
+  });
+
+  test('separate matching backtick runs still form code spans', () {
+    expect(
+      markdown.markdownToHtml('before `` `` after'),
+      '<p>before <code> </code> after</p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('before ``code`` after'),
+      '<p>before <code>code</code> after</p>\n',
     );
   });
 

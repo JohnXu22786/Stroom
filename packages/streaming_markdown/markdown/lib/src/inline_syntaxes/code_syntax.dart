@@ -37,30 +37,7 @@ class CodeSyntax extends InlineSyntax {
 
     final match = pattern.matchAsPrefix(parser.source, parser.pos);
     if (match == null) {
-      // A pair of adjacent, equal-length backtick runs represents an empty
-      // code span. Since the runs touch, they appear as one even-length run.
-      if (parser.pos >= parser.source.length ||
-          parser.charAt(parser.pos) != $backquote) {
-        return false;
-      }
-
-      var end = parser.pos;
-      while (end < parser.source.length && parser.charAt(end) == $backquote) {
-        end++;
-      }
-      final runLength = end - parser.pos;
-      final hasWhitespaceBefore =
-          parser.pos == 0 || parser.source[parser.pos - 1].trim().isEmpty;
-      final hasWhitespaceAfter =
-          end == parser.source.length || parser.source[end].trim().isEmpty;
-      if (!runLength.isEven || !hasWhitespaceBefore || !hasWhitespaceAfter) {
-        return false;
-      }
-
-      parser.writeText();
-      parser.addNode(Element.text('code', ''));
-      parser.consume(runLength);
-      return true;
+      return false;
     }
 
     parser.writeText();
