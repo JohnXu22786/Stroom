@@ -560,7 +560,7 @@ Widget _buildCodeBlock(
     );
   }
 
-  if (language.toLowerCase() == 'mermaid') {
+  if (_isMermaidCodeLanguage(language)) {
     // During streaming, show a loading animation only while the block's
     // fence is still open. The markdown parser strips backtick fences from
     // the code content and swallows the rest of the document into an
@@ -622,6 +622,9 @@ Widget _buildCodeBlock(
     ),
   );
 }
+
+bool _isMermaidCodeLanguage(String language) =>
+    language.trim().toLowerCase().split('-').last == 'mermaid';
 
 /// Returns the content of the still-OPEN trailing fenced code block in
 /// [text], or `null` when every fenced block is closed.
@@ -2197,7 +2200,7 @@ PreConfig codeBlockPreConfig({
         hasStreamingFenceInfo = true;
       }
       int? mermaidFenceIndex;
-      if (language.trim().toLowerCase() == 'mermaid') {
+      if (_isMermaidCodeLanguage(language)) {
         if (mermaidFenceCount > 0 &&
             nextMermaidFenceIndex >= mermaidFenceCount) {
           nextMermaidFenceIndex = 0;

@@ -4,6 +4,36 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:markdown_widget/widget/link_recognizer_lifecycle.dart';
 
 void main() {
+  test('preserves hyphenated code fence language for custom builders', () {
+    String? language;
+    MarkdownGenerator().buildWidgets(
+      '```objective-c\nint main() {}\n```',
+      config: MarkdownConfig(configs: [
+        PreConfig(builder: (code, codeLanguage) {
+          language = codeLanguage;
+          return const SizedBox();
+        }),
+      ]),
+    );
+
+    expect(language, 'objective-c');
+  });
+
+  test('preserves ordinary code fence language for custom builders', () {
+    String? language;
+    MarkdownGenerator().buildWidgets(
+      '```javascript\nconst answer = 42;\n```',
+      config: MarkdownConfig(configs: [
+        PreConfig(builder: (code, codeLanguage) {
+          language = codeLanguage;
+          return const SizedBox();
+        }),
+      ]),
+    );
+
+    expect(language, 'javascript');
+  });
+
   test('preserves multiline highlighting and rendered code lines', () {
     const commentColor = Colors.red;
     const code =
