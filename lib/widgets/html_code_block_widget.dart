@@ -225,9 +225,14 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 8),
-                  Text(
-                    AppLocalizations.of(context)!.htmlGenerating,
-                    style: TextStyle(fontSize: 12),
+                  Flexible(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.htmlGenerating,
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
               ),

@@ -102,6 +102,39 @@ void main() {
       expect(codeBtn.onPressed, isNotNull);
     });
 
+    testWidgets('German generating status fits a narrow scaled card',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 180,
+                child: HtmlCodeBlockWidget(
+                  htmlCode: '<p>streaming</p>',
+                  isStreaming: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.bySemanticsLabel('Wird generiert …'), findsOneWidget);
+    });
+
     testWidgets('finished card shows no 正在生成中 and enables 全屏查看',
         (tester) async {
       await tester.pumpWidget(
