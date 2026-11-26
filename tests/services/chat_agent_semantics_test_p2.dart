@@ -225,6 +225,65 @@ void chatAgentSemanticsGroup2() {
       container.dispose();
     });
 
+    test('压缩工具结果在截断边界保留完整 Unicode 字符', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-unicode-boundary', title: '')],
+      );
+      await container.read(localeProvider.notifier).setLocaleCode('en_US');
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [AIStreamEvent('## Objective\n- 摘要')],
+        [AIStreamEvent('回答')],
+      ]);
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 5000),
+      ));
+
+      final big = 'x' * 7000;
+      final supplementaryBoundary = '${'x' * 199}😀${'y' * 20}';
+      final ordinaryText = 'z' * 201;
+      await manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-unicode-boundary',
+        history: [
+          ChatMessage(role: 'assistant', content: 'old $big', toolCalls: [
+            ToolCallData(
+              id: 'unicode-boundary-tool',
+              name: 'unicode',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: supplementaryBoundary,
+            ),
+            ToolCallData(
+              id: 'ordinary-text-tool',
+              name: 'ordinary',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: ordinaryText,
+            ),
+          ]),
+          ChatMessage(role: 'user', content: 'old q1 $big'),
+          ChatMessage(role: 'assistant', content: 'old a2 $big'),
+          ChatMessage(role: 'user', content: 'q2'),
+        ],
+      );
+
+      final compactedHistory = (provider.captures[0]['messages'] as List)
+          .cast<Map>()
+          .firstWhere((m) => m['role'] == 'user')['content'] as String;
+      expect(
+        compactedHistory,
+        contains('Assistant called tool unicode: ${'x' * 199}…'),
+      );
+      expect(
+        compactedHistory,
+        contains('Assistant called tool ordinary: ${'z' * 200}…'),
+      );
+
+      container.dispose();
+    });
+
     test('估算未超限时不压缩', () async {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-ok', title: '')],

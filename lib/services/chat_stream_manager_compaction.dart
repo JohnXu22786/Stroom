@@ -135,8 +135,16 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
           // 摘要转写仅需 200 字符的事实：用默认截断渲染即可，
           // 与助手配置的截断上限差异在此处无实质影响。
           final result = rebuildToolResultText(tc);
+          var end = 200;
+          if (result.length > end &&
+              result.codeUnitAt(end - 1) >= 0xD800 &&
+              result.codeUnitAt(end - 1) <= 0xDBFF &&
+              result.codeUnitAt(end) >= 0xDC00 &&
+              result.codeUnitAt(end) <= 0xDFFF) {
+            end--;
+          }
           final trimmed =
-              result.length > 200 ? '${result.substring(0, 200)}…' : result;
+              result.length > 200 ? '${result.substring(0, end)}…' : result;
           sb.writeln(
             strings.contextCompactionToolCall(trimmed, role, tc.name),
           );
