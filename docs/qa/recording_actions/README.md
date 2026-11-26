@@ -1,15 +1,17 @@
 # Recording action reflow QA
 
-These screenshots show the production `RecordingActionGroup` and `RecordingActionButton` at a 320 × 640 CSS-pixel viewport, device scale factor 1, English (United States), light Material 3 theme, and normal 1× text scale. The recording pair stacks at 320 px with 24 px side insets; at 400 px the same pair stays on one row. Paused and completed pairs also stack at 320 px.
+These screenshots show the production `RecordingActionGroup` and `RecordingActionButton` at a 320 × 640 CSS-pixel viewport, device scale factor 1, English (United States), light Material 3 theme, and normal 1× text scale. The recording pair stacks at 320 px with 24 px side insets; at 400 px the same pair stays on one row. Paused and completed pairs also stack at 320 px. The French 3× capture centers the same production pair directly in the component harness: both buttons grow to contain the scaled label line and icon, and the pause label reveals within its existing button width.
 
 - [Recording actions, 320 × 640](recording-320x640-1x-en-light.png)
 - [Paused actions, 320 × 640](paused-320x640-1x-en-light.png)
 - [Completed actions, 320 × 640](completed-320x640-1x-en-light.png)
 - [Recording actions, 400 × 640](recording-400x640-1x-en-light.png)
+- [Recording actions, French 3× text scale](recording-320x640-3x-fr-light.png)
+- [French 3× playable label reveal](recording-actions-reveal-fr-320x640-scale3.webm)
 
-The temporary Flutter Web host uses the actual production `RecordingActionGroup`, `RecordingActionButton`, button dimensions/styles, and generated English localization strings. It is a component harness, not the full `AudioRecordingPage`: the `00:15` timer and recording/paused status badges are fixture content, and it does not render the waveform or page permission flow. Action callbacks are no-ops. No audio plugin, microphone, provider, or network request is used. There are no test-only action labels.
+The temporary Flutter Web host uses the actual production `RecordingActionGroup`, `RecordingActionButton`, button dimensions/styles, and generated localizations for the selected locale. It is a component harness, not the full `AudioRecordingPage`: the `00:15` timer and recording/paused status badges are fixture content, and it does not render the waveform or page permission flow. Action callbacks are no-ops. No audio plugin, microphone, provider, or network request is used. There are no test-only action labels.
 
-Captures were rendered from a Flutter 3.47.9 / Dart 3.13.7 release Web build in headless Chromium 154.0.8037.57 at 1× text scale. No control is focused and the keyboard is closed. Chromium reported no page errors. No playable preview applies because this change adds no motion.
+Captures were rendered from a Flutter 3.47.9 / Dart 3.13.7 release Web build in headless Chromium 154.0.8037.57. No control is focused and the keyboard is closed. The French 3× preview is a 24-second, 4 fps capture without speed adjustment. It shows the pause label's initial stationary period, forward and reverse reveal, and endpoint pauses while the fitting stop label stays still. Chromium reported no page errors.
 
 To reproduce from the repository root:
 
