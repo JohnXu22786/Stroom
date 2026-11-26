@@ -522,7 +522,18 @@ class _McpServerConfigDialogState
       enabled: entry.enabled,
     );
 
-    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    try {
+      await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.chatSaveFailed('$error')),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _isSaving = false);
 
