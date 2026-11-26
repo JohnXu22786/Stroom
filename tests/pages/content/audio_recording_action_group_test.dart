@@ -4,6 +4,79 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/audio_recording_page.dart';
 
 void main() {
+  testWidgets('fitting labels retain 48 px buttons with centered icons', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingActionButton(
+            onPressed: () {},
+            icon: Icons.pause_circle_filled,
+            label: 'Pause',
+            color: Colors.orange,
+          ),
+        ),
+      ),
+    );
+
+    final buttonRect = tester.getRect(find.byType(ElevatedButton));
+    final labelRect = tester.getRect(find.text('Pause'));
+    final iconRect = tester.getRect(find.byIcon(Icons.pause_circle_filled));
+    expect(buttonRect.height, 48);
+    expect(iconRect.center.dy, closeTo(labelRect.center.dy, 0.1));
+    expect(buttonRect.contains(labelRect.topLeft), isTrue);
+    expect(buttonRect.contains(labelRect.bottomRight), isTrue);
+  });
+
+  testWidgets('scaled French labels expand the button slot around its icon', (
+    tester,
+  ) async {
+    const labels = ['Mettre en pause', 'Arrêter'];
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(3)),
+          child: Scaffold(
+            body: RecordingActionGroup(
+              buttons: [
+                for (var i = 0; i < labels.length; i++)
+                  RecordingActionButton(
+                    onPressed: () {},
+                    icon: i == 0 ? Icons.pause_circle_filled : Icons.stop,
+                    label: labels[i],
+                    color: Colors.orange,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    for (final label in labels) {
+      final buttonRect = tester.getRect(
+        find.ancestor(
+          of: find.text(label),
+          matching: find.byType(ElevatedButton),
+        ),
+      );
+      final labelRect = tester.getRect(find.text(label));
+      final icon =
+          label == labels.first ? Icons.pause_circle_filled : Icons.stop;
+      final iconRect = tester.getRect(find.byIcon(icon));
+      expect(buttonRect.height, greaterThan(48));
+      expect(labelRect.top, greaterThanOrEqualTo(buttonRect.top));
+      expect(labelRect.bottom, lessThanOrEqualTo(buttonRect.bottom));
+      expect(iconRect.top, greaterThanOrEqualTo(buttonRect.top));
+      expect(iconRect.bottom, lessThanOrEqualTo(buttonRect.bottom));
+      expect(iconRect.center.dy, closeTo(labelRect.center.dy, 0.1));
+    }
+  });
+
   for (final state in ['recording', 'paused', 'completed']) {
     testWidgets('$state actions reflow at 320 px and share a row when wide', (
       tester,

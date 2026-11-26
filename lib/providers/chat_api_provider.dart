@@ -8,6 +8,7 @@ import 'package:dio/dio.dart';
 import '../l10n/app_localizations.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
+import '../services/sse_data_line.dart';
 import 'anthropic_chat_provider.dart';
 import 'chat_api_shared.dart';
 import 'responses_stream_parser.dart';
@@ -543,15 +544,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           _lastResponseHeaders = headers;
         },
       )) {
-        // Guard: both sse implementations yield lines starting with "data: ",
-        // but be defensive in case a future implementation forgets the prefix.
-        if (!event.startsWith('data: ')) {
+        // Be defensive in case a future implementation emits non-data lines.
+        final dataValue = sseDataLineValue(event);
+        if (dataValue == null) {
           debugPrint(
             'chat_api_provider: skipping unexpected SSE event (no data: prefix)',
           );
           continue;
         }
-        final dataStr = event.substring('data: '.length).trim();
+        final dataStr = dataValue.trim();
         if (dataStr == '[DONE]') break;
 
         try {
