@@ -957,16 +957,17 @@ void main() {
       return Uint8List.fromList(data.sublist(mdatTypeOffset + 4, mdatEnd));
     }
 
-    Uint8List withInvalidSecondAacChunkOffset(List<Uint8List> sourceFrames, {
+    Uint8List withInvalidSecondAacChunkOffset(
+      List<Uint8List> sourceFrames, {
       List<(int, int)>? editListEntries,
+      bool keepInvalidOffsetInFile = false,
     }) {
       final malformed = Uint8List.fromList(
         buildMinimalMp4WithAacAudio(
           asc: Uint8List.fromList([0x12, 0x10]),
           sampleRate: 44100,
           sourceFrames: sourceFrames,
-          sampleDescriptionIndicesPerChunk:
-              List.filled(sourceFrames.length, 1),
+          sampleDescriptionIndicesPerChunk: List.filled(sourceFrames.length, 1),
           editListEntries: editListEntries,
         ),
       );
@@ -974,7 +975,7 @@ void main() {
       malformed.setRange(
         stcoTypeOffset + 16,
         stcoTypeOffset + 20,
-        _u32be(malformed.length - 1),
+        _u32be(keepInvalidOffsetInFile ? 8 : malformed.length - 1),
       );
       return malformed;
     }
@@ -1209,16 +1210,21 @@ void main() {
         Uint8List.fromList([0x11, 0x22, 0x33]),
         Uint8List.fromList([0x44, 0x55, 0x66]),
       ];
-      final malformed = withInvalidSecondAacChunkOffset(sourceFrames);
+      for (final keepInvalidOffsetInFile in [false, true]) {
+        final malformed = withInvalidSecondAacChunkOffset(
+          sourceFrames,
+          keepInvalidOffsetInFile: keepInvalidOffsetInFile,
+        );
 
-      expect(
-        () => extractAudioSync(videoBytes: malformed, videoFormat: 'mp4'),
-        throwsA(isA<Exception>()),
-      );
-      await expectLater(
-        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
-        throwsA(isA<Exception>()),
-      );
+        expect(
+          () => extractAudioSync(videoBytes: malformed, videoFormat: 'mp4'),
+          throwsA(isA<Exception>()),
+        );
+        await expectLater(
+          engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+          throwsA(isA<Exception>()),
+        );
+      }
     });
 
     test('ignores an out-of-range AAC sample excluded by the edit list',
