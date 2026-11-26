@@ -494,6 +494,20 @@ class StartupCheckService {
               ),
             );
           }
+          _validateNestedListSync(
+            config,
+            'customParams',
+            i,
+            issues,
+            fieldPath: 'provider_entries[$i].configs[$ci].customParams',
+          );
+          _validateNestedListSync(
+            config,
+            'reasoningParams',
+            i,
+            issues,
+            fieldPath: 'provider_entries[$i].configs[$ci].reasoningParams',
+          );
           _validateNestedListSync(config, 'models', i, issues);
           final models = rawModels is List ? rawModels : null;
           if (models != null) {
@@ -515,15 +529,17 @@ class StartupCheckService {
     Map<String, dynamic> parent,
     String fieldName,
     int entryIndex,
-    List<StartupIssue> issues,
-  ) {
+    List<StartupIssue> issues, {
+    String? fieldPath,
+  }) {
     final list = parent[fieldName];
     if (list is! List) return;
     for (int j = 0; j < list.length; j++) {
       if (list[j] is! Map<String, dynamic>) {
         issues.add(
           StartupIssue(
-            message: 'provider_entries[$entryIndex].$fieldName[$j]: '
+            message:
+                '${fieldPath ?? 'provider_entries[$entryIndex].$fieldName'}[$j]: '
                 '条目不是合法对象，可能会导致解析闪退',
             severity: StartupIssueSeverity.error,
             dataKey: 'provider_entries',

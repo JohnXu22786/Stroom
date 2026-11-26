@@ -1179,4 +1179,82 @@ void main() {
       expect(task.folder, '');
     });
   });
+
+  testWidgets(
+    'speech-content section label stays bounded when clipped and aligned when fitting',
+    (tester) async {
+      const size = Size(320, 640);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      for (final locale in [
+        const Locale('ar'),
+        const Locale('pt', 'BR'),
+      ]) {
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createTtsEntry()],
+            locale: locale,
+            textScaler: TextScaler.linear(3),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final speechContent = AppLocalizations.of(
+          tester.element(find.byType(TTSCreatePage)),
+        )!
+            .ttsSpeechContent;
+        final speechLabel = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == speechContent,
+        );
+        expect(speechLabel, findsOneWidget, reason: locale.toString());
+        final speechRow = find
+            .ancestor(
+              of: speechLabel,
+              matching: find.byType(Row),
+            )
+            .first;
+        final labelRect = tester.getRect(speechLabel);
+        final rowRect = tester.getRect(speechRow);
+        expect(labelRect.left, greaterThanOrEqualTo(rowRect.left));
+        expect(labelRect.right, lessThanOrEqualTo(rowRect.right));
+        final label = tester.widget<ConstrainedText>(speechLabel);
+        expect(label.style?.fontSize, 12);
+        expect(label.style?.color, isNotNull);
+        expect(label.textAlign, TextAlign.end);
+        expect(tester.takeException(), isNull, reason: locale.toString());
+      }
+
+      tester.view.physicalSize = const Size(600, 640);
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createTtsEntry()],
+          locale: const Locale('pt', 'BR'),
+          textScaler: TextScaler.linear(1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final speechContent = AppLocalizations.of(
+        tester.element(find.byType(TTSCreatePage)),
+      )!
+          .ttsSpeechContent;
+      final speechLabel = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == speechContent,
+      );
+      final speechRow = find
+          .ancestor(
+            of: speechLabel,
+            matching: find.byType(Row),
+          )
+          .first;
+      expect(
+        tester.getRect(speechLabel).right,
+        closeTo(tester.getRect(speechRow).right, 1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
