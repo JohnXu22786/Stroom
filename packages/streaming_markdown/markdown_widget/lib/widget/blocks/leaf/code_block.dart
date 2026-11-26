@@ -24,7 +24,7 @@ class CodeBlockNode extends ElementNode {
     try {
       final languageValue =
           (element.children?.first as m.Element).attributes['class']!;
-      language = languageValue.split('-').last;
+      language = languageValue.substring('language-'.length);
     } catch (e) {
       language = null;
       debugPrint('get language error:$e');
