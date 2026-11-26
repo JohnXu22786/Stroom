@@ -102,6 +102,56 @@ void main() {
       expect(codeBtn.onPressed, isNotNull);
     });
 
+    testWidgets('German generating status keeps its clipped group centered',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 180,
+                child: HtmlCodeBlockWidget(
+                  htmlCode: '<p>streaming</p>',
+                  isStreaming: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.bySemanticsLabel('Wird generiert …'), findsOneWidget);
+      final statusText = find
+          .ancestor(
+            of: find.text('Wird generiert …'),
+            matching: find.byType(ConstrainedText),
+          )
+          .first;
+      expect(tester.widget<ConstrainedText>(statusText).textAlign,
+          TextAlign.start);
+      final statusRow = find
+          .ancestor(
+            of: find.byType(CircularProgressIndicator),
+            matching: find.byType(Row),
+          )
+          .first;
+      final statusRect = tester.getRect(statusRow);
+      expect(statusRect.center.dx, closeTo(160, 0.1));
+      expect(statusRect.width, lessThan(155));
+    });
+
     testWidgets('finished card shows no 正在生成中 and enables 全屏查看',
         (tester) async {
       await tester.pumpWidget(
