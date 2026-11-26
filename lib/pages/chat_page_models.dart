@@ -346,8 +346,8 @@ extension _ChatPageModelsExt on _ChatPageState {
     final modelName = model.displayName;
 
     final allSettings = _loadPerModelSettingsMap(prefs);
-    final modelSettings = allSettings[_modelSettingsKey(model)] ??
-        allSettings[model.displayName];
+    final modelSettings =
+        allSettings[_modelSettingsKey(model)] ?? allSettings[model.displayName];
     if (modelSettings
         case {
           'reasoningEnabled': bool re,

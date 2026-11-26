@@ -160,10 +160,12 @@ void main() {
       modelList.onReorderItem?.call(0, 1);
       await tester.pump();
       await tester.tap(
-        find.descendant(
-          of: find.byType(ReorderableListView),
-          matching: find.byType(ListTile),
-        ).last,
+        find
+            .descendant(
+              of: find.byType(ReorderableListView),
+              matching: find.byType(ListTile),
+            )
+            .last,
       );
       await tester.pumpAndSettle();
 

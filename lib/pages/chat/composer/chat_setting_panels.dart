@@ -25,9 +25,8 @@ void showModelPanel({
 }) {
   var localSelectedIndex = selectedModelIndex;
   var localModels = List<String>.from(models);
-  final localModelIdentities = modelIdentities == null
-      ? null
-      : List<String>.from(modelIdentities);
+  final localModelIdentities =
+      modelIdentities == null ? null : List<String>.from(modelIdentities);
 
   void handleReorder(int oldIndex, int newIndex) {
     // onReorderItem 的 newIndex 已是移除 oldIndex 项之后调整过的索引，
