@@ -5,19 +5,37 @@ import 'package:stroom/pages/audio_recording_page.dart';
 
 void main() {
   final state = Uri.base.queryParameters['state'] ?? 'recording';
-  runApp(_RecordingActionsCaptureApp(state: state));
+  final locale = Uri.base.queryParameters['locale'] ?? 'en';
+  final scale = double.tryParse(Uri.base.queryParameters['scale'] ?? '1') ?? 1;
+  final focus = Uri.base.queryParameters['focus'] ?? 'page';
+  runApp(
+    _RecordingActionsCaptureApp(
+      state: state,
+      locale: locale,
+      scale: scale,
+      focus: focus,
+    ),
+  );
 }
 
 class _RecordingActionsCaptureApp extends StatelessWidget {
-  const _RecordingActionsCaptureApp({required this.state});
+  const _RecordingActionsCaptureApp({
+    required this.state,
+    required this.locale,
+    required this.scale,
+    required this.focus,
+  });
 
   final String state;
+  final String locale;
+  final double scale;
+  final String focus;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      locale: const Locale('en', 'US'),
+      locale: Locale(locale, locale == 'en' ? 'US' : null),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -26,15 +44,28 @@ class _RecordingActionsCaptureApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
-      home: _RecordingActionsCapturePage(state: state),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(scale),
+        ),
+        child: child!,
+      ),
+      home: _RecordingActionsCapturePage(
+        state: state,
+        actionsOnly: focus == 'actions',
+      ),
     );
   }
 }
 
 class _RecordingActionsCapturePage extends StatelessWidget {
-  const _RecordingActionsCapturePage({required this.state});
+  const _RecordingActionsCapturePage({
+    required this.state,
+    required this.actionsOnly,
+  });
 
   final String state;
+  final bool actionsOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +109,21 @@ class _RecordingActionsCapturePage extends StatelessWidget {
           ),
         ],
     };
+
+    final actionGroup = RecordingActionGroup(
+      buttons: [
+        for (final action in actions)
+          RecordingActionButton(
+            onPressed: () {},
+            icon: action.icon,
+            label: action.label,
+            color: action.color,
+          ),
+      ],
+    );
+    if (actionsOnly) {
+      return Scaffold(body: Center(child: actionGroup));
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -123,17 +169,7 @@ class _RecordingActionsCapturePage extends StatelessWidget {
                 const SizedBox(height: 32),
               ] else
                 const SizedBox(height: 32),
-              RecordingActionGroup(
-                buttons: [
-                  for (final action in actions)
-                    RecordingActionButton(
-                      onPressed: () {},
-                      icon: action.icon,
-                      label: action.label,
-                      color: action.color,
-                    ),
-                ],
-              ),
+              actionGroup,
             ],
           ),
         ),
