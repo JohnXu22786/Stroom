@@ -16,6 +16,19 @@ WEB = Path("/tmp/stroom-provider-model-tile-web")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 
+def server_command(port: int) -> list[str]:
+    return [
+        "python3",
+        "-m",
+        "http.server",
+        str(port),
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        str(WEB),
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -45,7 +58,7 @@ def main() -> None:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     server = subprocess.Popen(
-        ["python3", "-m", "http.server", str(port), "--directory", str(WEB)],
+        server_command(port),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
