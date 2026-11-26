@@ -83,6 +83,9 @@ String _exportPathComparisonKey(String path) => unorm.nfc(
 String userVisibleExportPathComparisonKey(String path) =>
     _exportPathComparisonKey(path);
 
+String _normalizeExportPathSeparators(String path) =>
+    path.replaceAll('\\', '/');
+
 /// Rejects file/file and file/directory collisions before an export writes.
 void validateUserVisibleExportPaths({
   required Iterable<String> files,
@@ -95,7 +98,7 @@ void validateUserVisibleExportPaths({
   final invalidWindowsCharacter = RegExp(r'[<>:"|?*\x00-\x1F]');
 
   String safePath(String path) {
-    final segments = path.replaceAll('\\', '/').split('/');
+    final segments = _normalizeExportPathSeparators(path).split('/');
     if (segments.any(
       (segment) => segment.isEmpty || segment == '.' || segment == '..',
     )) {
@@ -172,8 +175,8 @@ Future<List<String>> resolveNonClobberingExportPaths({
   Iterable<String> folders = const [],
   required Future<bool> Function(String path) pathExists,
 }) async {
-  final paths = files.toList();
-  final folderPaths = folders.toList();
+  final paths = files.map(_normalizeExportPathSeparators).toList();
+  final folderPaths = folders.map(_normalizeExportPathSeparators).toList();
   validateUserVisibleExportPaths(files: paths, folders: folderPaths);
 
   final inputPaths = paths.map(_exportPathComparisonKey).toSet();
@@ -240,7 +243,8 @@ Future<void> createUserVisibleExportDirectory(
   String relativePath,
 ) async {
   if (relativePath.isEmpty) return;
-  validateUserVisibleExportPaths(files: const [], folders: [relativePath]);
+  final normalizedPath = _normalizeExportPathSeparators(relativePath);
+  validateUserVisibleExportPaths(files: const [], folders: [normalizedPath]);
 
   final root = Directory(destination);
   if (!await root.exists()) {
@@ -248,7 +252,7 @@ Future<void> createUserVisibleExportDirectory(
   }
   final canonicalRoot = await root.resolveSymbolicLinks();
   var current = canonicalRoot;
-  for (final segment in relativePath.replaceAll('\\', '/').split('/')) {
+  for (final segment in normalizedPath.split('/')) {
     current = p.join(current, segment);
     final type = await FileSystemEntity.type(current, followLinks: false);
     if (type == FileSystemEntityType.link) {

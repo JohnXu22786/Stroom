@@ -926,6 +926,33 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       ),
     );
 
+    Widget buildDurationBadge(VideoRecord file) {
+      final durationLabel = formatDuration(file.duration);
+      return Positioned(
+        left: 4,
+        bottom: 4,
+        right: 4,
+        child: Align(
+          alignment: AlignmentDirectional.bottomEnd,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ConstrainedText(
+              durationLabel,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+              textAlign: TextAlign.end,
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              semanticsLabel: durationLabel,
+            ),
+          ),
+        ),
+      );
+    }
+
     // Build file-thumbnail builder — simplified, just a video cam icon
     Widget buildThumbnailFallback(VideoRecord file) {
       return Container(
@@ -936,25 +963,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             const Center(
               child: Icon(Icons.videocam, size: 40, color: Colors.red),
             ),
-            if (file.duration > 0)
-              Positioned(
-                bottom: 4,
-                right: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    formatDuration(file.duration),
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                  ),
-                ),
-              ),
+            if (file.duration > 0) buildDurationBadge(file),
           ],
         ),
       );
@@ -1039,28 +1048,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                     height: double.infinity,
                     errorBuilder: (_, __, ___) => buildThumbnailFallback(file),
                   ),
-                  if (file.duration > 0)
-                    Positioned(
-                      bottom: 4,
-                      right: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          formatDuration(file.duration),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ),
+                  if (file.duration > 0) buildDurationBadge(file),
                 ],
               ),
             );
