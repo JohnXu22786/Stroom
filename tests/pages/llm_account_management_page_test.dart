@@ -4348,14 +4348,17 @@ void main() {
         jsonEncode(accountsEnvelope);
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: LlmAccountManagementPage(gateway: _testGateway(service)),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('剩余额度：250 credits'), findsOneWidget);
-    expect(find.text('每日额度剩余：75 percent'), findsOneWidget);
-    expect(find.text('额度未知'), findsNothing);
+    expect(find.text('Remaining quota: 250 credits'), findsOneWidget);
+    expect(find.text('Daily quota remaining: 75 percent'), findsOneWidget);
+    expect(find.text('Quota unknown'), findsNothing);
   });
 
   testWidgets(
@@ -5831,26 +5834,36 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: LlmAccountManagementPage(gateway: _testGateway(service)),
       ),
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('5 小时窗口剩余额度保留线：5 USD'),
+      find.text('5 hour window Minimum remaining quota: 5 USD'),
       findsOneWidget,
       reason: 'account-card policy floors must be visible',
     );
-    expect(find.text('5 小时窗口使用上限：50 USD'), findsOneWidget);
-    expect(find.text('月窗口剩余额度保留线：10%'), findsOneWidget);
-    expect(find.text('月窗口使用上限：80%'), findsOneWidget);
-    await tester.tap(find.text('模型组'));
+    expect(find.text('5 hour window Window usage ceiling: 50 USD'),
+        findsOneWidget);
+    expect(
+        find.text('month window Minimum remaining quota: 10%'), findsOneWidget);
+    expect(find.text('month window Window usage ceiling: 80%'), findsOneWidget);
+    await tester.tap(find.text('Model groups'));
     await tester.pumpAndSettle();
 
-    expect(find.text('模型组本地累计用量：请求 1 · tokens 14'), findsOneWidget);
-    expect(find.text('日窗口剩余额度保留线：20 tokens'), findsOneWidget);
-    expect(find.text('日窗口使用上限：100 tokens'), findsOneWidget);
-    expect(find.text('周窗口剩余额度保留线：15%'), findsOneWidget);
-    expect(find.text('周窗口使用上限：90%'), findsOneWidget);
+    expect(find.text('Local model-group usage: Request 1 · tokens 14'),
+        findsOneWidget);
+    expect(find.text('day window Minimum remaining quota: 20 tokens'),
+        findsOneWidget);
+    expect(find.text('day window Window usage ceiling: 100 tokens'),
+        findsOneWidget);
+    expect(find.text('weekly window Minimum remaining quota: 15%'),
+        findsOneWidget);
+    expect(
+        find.text('weekly window Window usage ceiling: 90%'), findsOneWidget);
   });
 
   testWidgets('refreshes displayed usage when routing diagnostics change', (
