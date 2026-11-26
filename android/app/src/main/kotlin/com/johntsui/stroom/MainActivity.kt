@@ -35,12 +35,13 @@ class MainActivity : FlutterActivity() {
         private val backupSafWriteLock = Any()
 
         // 保存 pickDirectory 的结果回调
-        private var pendingSafResult: MethodChannel.Result? = null
+        private val pendingSafResult = SafPickerPendingResult<MethodChannel.Result>()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SAF_REQUEST_CODE) {
+            val result = pendingSafResult.take()
             if (resultCode == Activity.RESULT_OK && data?.data != null) {
                 val uri = data.data!!
                 // 立即固化权限 — 必须成功才能持久化 URI
@@ -51,8 +52,7 @@ class MainActivity : FlutterActivity() {
                             )
                     if (grantedFlags == 0) {
                         Log.w(TAG, "SAF: 提供方未授予读写权限: $uri")
-                        pendingSafResult?.success(null)
-                        pendingSafResult = null
+                        result?.success(null)
                         return
                     }
                     contentResolver.takePersistableUriPermission(
@@ -60,18 +60,17 @@ class MainActivity : FlutterActivity() {
                         grantedFlags
                     )
                     Log.i(TAG, "SAF: 权限已固化: $uri")
-                    pendingSafResult?.success(uri.toString())
+                    result?.success(uri.toString())
                 } catch (e: SecurityException) {
                     Log.w(TAG, "SAF: 无法固化权限: $uri", e)
                     // 固化失败时返回 null，避免 Dart 侧保存一个无效 URI
                     // 否则下次启动时权限丢失，导致授权弹窗反复出现
-                    pendingSafResult?.success(null)
+                    result?.success(null)
                 }
             } else {
                 Log.i(TAG, "SAF: 用户取消了目录选择")
-                pendingSafResult?.success(null)
+                result?.success(null)
             }
-            pendingSafResult = null
         }
     }
 
@@ -438,7 +437,14 @@ class MainActivity : FlutterActivity() {
     /// Documents 文档目录，用户无需手动查找，直接点击「允许」即可。
     /// 低版本 Android 回退到系统默认位置（通常也是最近使用的目录）。
     private fun openSafDirectoryPicker(result: MethodChannel.Result) {
-        pendingSafResult = result
+        if (!pendingSafResult.trySet(result)) {
+            result.error(
+                "PICKER_IN_PROGRESS",
+                "SAF 目录选择器已打开",
+                null
+            )
+            return
+        }
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             intent.addFlags(
@@ -464,8 +470,9 @@ class MainActivity : FlutterActivity() {
             startActivityForResult(intent, SAF_REQUEST_CODE)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 打开目录选择器失败", e)
-            pendingSafResult = null
-            result.error("PICKER_FAILED", "无法打开目录选择器", null)
+            if (pendingSafResult.clear(result)) {
+                result.error("PICKER_FAILED", "无法打开目录选择器", null)
+            }
         }
     }
 
