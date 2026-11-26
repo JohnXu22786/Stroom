@@ -21,6 +21,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   late List<VoiceEntry> _voices;
   late List<TextEditingController> _nameCtrls;
   late List<TextEditingController> _idCtrls;
+  late List<WidgetStatesController> _nameHintStatesControllers;
+  late List<WidgetStatesController> _idHintStatesControllers;
   late List<FocusNode> _idFocusNodes;
   final ScrollController _scrollController = ScrollController();
 
@@ -31,6 +33,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     _nameCtrls =
         _voices.map((v) => TextEditingController(text: v.name)).toList();
     _idCtrls = _voices.map((v) => TextEditingController(text: v.id)).toList();
+    _nameHintStatesControllers =
+        _voices.map((_) => WidgetStatesController()).toList();
+    _idHintStatesControllers =
+        _voices.map((_) => WidgetStatesController()).toList();
     _idFocusNodes = _voices.map((_) => _createIdFocusNode()).toList();
   }
 
@@ -41,6 +47,12 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
       c.dispose();
     }
     for (final c in _idCtrls) {
+      c.dispose();
+    }
+    for (final c in _nameHintStatesControllers) {
+      c.dispose();
+    }
+    for (final c in _idHintStatesControllers) {
       c.dispose();
     }
     for (final f in _idFocusNodes) {
@@ -97,8 +109,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     setState(() {
       _voices.add(VoiceEntry(name: '', id: ''));
       _nameCtrls.add(TextEditingController());
+      _nameHintStatesControllers.add(WidgetStatesController());
       final newIdCtrl = TextEditingController();
       _idCtrls.add(newIdCtrl);
+      _idHintStatesControllers.add(WidgetStatesController());
       _idFocusNodes.add(_createIdFocusNode());
     });
     // 滚动到底部
@@ -126,7 +140,9 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
       for (final v in result) {
         _voices.add(VoiceEntry(name: v.name, id: v.id));
         _nameCtrls.add(TextEditingController(text: v.name));
+        _nameHintStatesControllers.add(WidgetStatesController());
         _idCtrls.add(TextEditingController(text: v.id));
+        _idHintStatesControllers.add(WidgetStatesController());
         _idFocusNodes.add(_createIdFocusNode());
       }
     });
@@ -136,9 +152,13 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     setState(() {
       _nameCtrls[index].dispose();
       _idCtrls[index].dispose();
+      _nameHintStatesControllers[index].dispose();
+      _idHintStatesControllers[index].dispose();
       _idFocusNodes[index].dispose();
       _nameCtrls.removeAt(index);
       _idCtrls.removeAt(index);
+      _nameHintStatesControllers.removeAt(index);
+      _idHintStatesControllers.removeAt(index);
       _idFocusNodes.removeAt(index);
       _voices.removeAt(index);
     });
@@ -153,6 +173,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
       _nameCtrls.insert(newIndex, nc);
       final ic = _idCtrls.removeAt(oldIndex);
       _idCtrls.insert(newIndex, ic);
+      final nh = _nameHintStatesControllers.removeAt(oldIndex);
+      _nameHintStatesControllers.insert(newIndex, nh);
+      final ih = _idHintStatesControllers.removeAt(oldIndex);
+      _idHintStatesControllers.insert(newIndex, ih);
       final fn = _idFocusNodes.removeAt(oldIndex);
       _idFocusNodes.insert(newIndex, fn);
     });
@@ -226,6 +250,30 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     );
 
     return completer.future;
+  }
+
+  TextStyle _voiceEditorHintStyle(
+    BuildContext context,
+    Set<WidgetState> states,
+  ) {
+    final theme = Theme.of(context);
+    final defaultHintStyle = TextStyle(
+      color: states.contains(WidgetState.disabled)
+          ? theme.useMaterial3
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+              : theme.disabledColor
+          : theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+    );
+    final baseStyle = theme.useMaterial3
+        ? theme.textTheme.bodyLarge!
+        : theme.textTheme.titleMedium!;
+    final themedHintStyle = WidgetStateProperty.resolveAs(
+      InputDecorationTheme.of(context).hintStyle,
+      states,
+    );
+    return baseStyle.merge(defaultHintStyle).merge(themedHintStyle);
   }
 
   @override
@@ -373,7 +421,6 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   Widget _buildRow(int index) {
     final l10n = AppLocalizations.of(context)!;
     final isDuplicate = _findDuplicateIndices(index).isNotEmpty;
-
     return Card(
       key: ValueKey('voice_row_$index'),
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -403,8 +450,16 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
             Expanded(
               child: TextField(
                 controller: _nameCtrls[index],
+                statesController: _nameHintStatesControllers[index],
                 decoration: InputDecoration(
-                  hintText: l10n.voiceName,
+                  hint: ValueListenableBuilder<Set<WidgetState>>(
+                    valueListenable: _nameHintStatesControllers[index],
+                    builder: (context, states, _) => ConstrainedText(
+                      l10n.voiceName,
+                      style: _voiceEditorHintStyle(context, states),
+                      maxLines: 1,
+                    ),
+                  ),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -417,8 +472,16 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
               child: TextField(
                 controller: _idCtrls[index],
                 focusNode: _idFocusNodes[index],
+                statesController: _idHintStatesControllers[index],
                 decoration: InputDecoration(
-                  hintText: l10n.voiceId,
+                  hint: ValueListenableBuilder<Set<WidgetState>>(
+                    valueListenable: _idHintStatesControllers[index],
+                    builder: (context, states, _) => ConstrainedText(
+                      l10n.voiceId,
+                      style: _voiceEditorHintStyle(context, states),
+                      maxLines: 1,
+                    ),
+                  ),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
