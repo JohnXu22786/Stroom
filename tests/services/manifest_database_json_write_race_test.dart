@@ -96,4 +96,131 @@ void main() {
       );
     },
   );
+
+  test(
+    'concurrent cold JSON deletes serialize image, video, and text changes',
+    () async {
+      await ManifestDatabase.insertImageRecord({'id': 'image-delete'});
+      await ManifestDatabase.insertImageRecord({'id': 'image-batch-delete'});
+      await ManifestDatabase.insertVideoRecord({'id': 'video-delete'});
+      await ManifestDatabase.insertVideoRecord({'id': 'video-batch-delete'});
+      await ManifestDatabase.insertTextRecord({'id': 'text-delete'});
+      await ManifestDatabase.insertTextRecord({'id': 'text-batch-delete'});
+      ManifestDatabase.invalidateWebDataCacheForTesting();
+
+      var readCount = 0;
+      ManifestDatabase.beforeWebDataReadForTesting = () {
+        readCount++;
+        return Future<void>.value();
+      };
+
+      await Future.wait([
+        ManifestDatabase.deleteImageRecord('image-delete'),
+        ManifestDatabase.deleteImageRecords(['image-batch-delete']),
+        ManifestDatabase.deleteVideoRecord('video-delete'),
+        ManifestDatabase.deleteVideoRecords(['video-batch-delete']),
+        ManifestDatabase.deleteTextRecord('text-delete'),
+        ManifestDatabase.deleteTextRecords(['text-batch-delete']),
+      ]);
+
+      expect(readCount, 1, reason: 'JSON deletes must share the cold read');
+      expect(await ManifestDatabase.getAllImageRecords(), isEmpty);
+      expect(await ManifestDatabase.getAllVideoRecords(), isEmpty);
+      expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+    },
+  );
+
+  test(
+    'concurrent cold JSON clears serialize image, video, and text changes',
+    () async {
+      await ManifestDatabase.insertImageRecord({'id': 'image-clear'});
+      await ManifestDatabase.insertVideoRecord({'id': 'video-clear'});
+      await ManifestDatabase.insertTextRecord({'id': 'text-clear'});
+      ManifestDatabase.invalidateWebDataCacheForTesting();
+
+      var readCount = 0;
+      ManifestDatabase.beforeWebDataReadForTesting = () {
+        readCount++;
+        return Future<void>.value();
+      };
+
+      await Future.wait([
+        ManifestDatabase.clearRecords(ManifestTables.imageRecords),
+        ManifestDatabase.clearRecords(ManifestTables.videoRecords),
+        ManifestDatabase.clearRecords(ManifestTables.textRecords),
+      ]);
+
+      expect(readCount, 1, reason: 'JSON clears must share the cold read');
+      expect(await ManifestDatabase.getAllImageRecords(), isEmpty);
+      expect(await ManifestDatabase.getAllVideoRecords(), isEmpty);
+      expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+    },
+  );
+
+  test(
+    'concurrent cold JSON folder mutations serialize per-type changes',
+    () async {
+      await ManifestDatabase.insertFolder(
+        'image-delete',
+        recordTable: ManifestTables.imageRecords,
+      );
+      await ManifestDatabase.insertFolder(
+        'video-clear',
+        recordTable: ManifestTables.videoRecords,
+      );
+      await ManifestDatabase.insertFolder(
+        'text-keep',
+        recordTable: ManifestTables.textRecords,
+      );
+      ManifestDatabase.invalidateWebDataCacheForTesting();
+
+      var readCount = 0;
+      ManifestDatabase.beforeWebDataReadForTesting = () {
+        readCount++;
+        return Future<void>.value();
+      };
+
+      await Future.wait([
+        ManifestDatabase.deleteFolder(
+          'image-delete',
+          recordTable: ManifestTables.imageRecords,
+        ),
+        ManifestDatabase.clearFolders(recordTable: ManifestTables.videoRecords),
+        ManifestDatabase.insertFolder(
+          'audio-keep',
+          recordTable: ManifestTables.audioRecords,
+        ),
+      ]);
+
+      expect(
+        readCount,
+        1,
+        reason: 'JSON folder mutations must share the cold read',
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords,
+        ),
+        isEmpty,
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords,
+        ),
+        isEmpty,
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.textRecords,
+        ),
+        ['text-keep'],
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        ['audio-keep'],
+      );
+    },
+  );
 }
