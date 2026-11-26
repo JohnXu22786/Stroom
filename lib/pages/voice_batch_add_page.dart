@@ -75,7 +75,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   }
 
   // ============================================================
-  // 辅助：从一行中提取有效字段（剥离首尾分隔符、trim、滤空）
+  // 辅助：剥离首尾分隔符并 trim 字段，同时保留列间空字段
   // ============================================================
 
   List<String> _extractFields(String rawLine, String sep) {
@@ -91,11 +91,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       }
     }
     if (line.isEmpty) return [];
-    return line
-        .split(sep)
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toList();
+    return line.split(sep).map((p) => p.trim()).toList();
   }
 
   void _parseInput() {
