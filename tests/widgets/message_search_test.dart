@@ -312,6 +312,17 @@ void main() {
       expect(find.text('未找到匹配的消息'), findsOneWidget);
     });
 
+    testWidgets('shows initial state for whitespace-only query', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pumpAndSettle();
+
+      expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
+      expect(find.text('未找到匹配的消息'), findsNothing);
+    });
+
     testWidgets('tapping search result returns data via Navigator.pop', (
       tester,
     ) async {
