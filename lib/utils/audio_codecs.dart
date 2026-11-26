@@ -443,8 +443,7 @@ Uint8List adpcmToWav(
       : 1 + ((samplesPerBlock - 1 + 7) ~/ 8) * 8;
   final blockAlign = channels == 1
       ? 4 + wavSamplesPerBlock ~/ 2
-      : 4 * channels +
-            ((wavSamplesPerBlock - 1) ~/ 8) * 4 * channels;
+      : 4 * channels + ((wavSamplesPerBlock - 1) ~/ 8) * 4 * channels;
   final avgBytesPerSec = sampleRate * blockAlign ~/ wavSamplesPerBlock;
 
   // Pad trailing partial block with a silent block (zero header + nibbles).
