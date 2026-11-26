@@ -1,5 +1,16 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
+typedef MpdRepresentation = ({
+  String key,
+  String id,
+  int? bandwidth,
+  int? width,
+  int? height,
+  String? mimeType,
+  String? codecs,
+  List<({String url, double duration})> segments,
+});
+
 /// DASH MPD 解析器
 ///
 /// 支持：
@@ -31,6 +42,160 @@ class MPDParser {
   }) async {
     _validateMaxSegments(maxSegments);
     return _parseAllSegments(content, baseUrl, maxSegments);
+  }
+
+  /// Parses each DASH representation independently, preserving its metadata.
+  ///
+  /// Representations are alternative encodings; callers that offer them for
+  /// selection must not combine their segment lists.
+  static Future<List<MpdRepresentation>> parseRepresentations(
+    String content,
+    String baseUrl, {
+    int maxSegments = defaultMaxSegments,
+  }) async {
+    _validateMaxSegments(maxSegments);
+    final result = <MpdRepresentation>[];
+    final document = _parseXml(content);
+    final mpd = document.firstWhereOrNull((node) => _isDash(node, 'MPD'));
+    final root = mpd ?? _MpdElement('MPD');
+    final mpdBase = _applyBaseUrl(root, baseUrl);
+    final periods =
+        root.children.where((node) => _isDash(node, 'Period')).toList();
+    final resultIndexes = <String, int>{};
+    final totalDuration = _parseIsoDuration(
+      root.attributes['mediaPresentationDuration'],
+    );
+    var segmentCount = 0;
+
+    for (
+      var periodIndex = 0;
+      periodIndex < (periods.isEmpty ? 1 : periods.length);
+      periodIndex++
+    ) {
+      final period = periods.isEmpty ? root : periods[periodIndex];
+      final ancestors = periods.isEmpty ? [root] : [root, period];
+      final periodBase = periods.isEmpty
+          ? mpdBase
+          : _applyBaseUrl(period, mpdBase);
+      final periodDuration = periods.isEmpty
+          ? totalDuration
+          : _getPeriodDuration(periods, periodIndex, totalDuration);
+      final adaptationSets = period.children.where(
+        (node) => _isDash(node, 'AdaptationSet'),
+      );
+
+      final adaptationOccurrences = <String, int>{};
+      for (final adaptationSet in adaptationSets) {
+        final adaptationIdentity = _adaptationSetIdentity(adaptationSet);
+        final occurrence = adaptationOccurrences.update(
+          adaptationIdentity,
+          (count) => count + 1,
+          ifAbsent: () => 0,
+        );
+        final adaptationKey = '$adaptationIdentity#$occurrence';
+        final adaptationBase = _applyBaseUrl(adaptationSet, periodBase);
+        final representations = adaptationSet.children.where(
+          (node) => _isDash(node, 'Representation'),
+        );
+        final representationOccurrences = <String, int>{};
+        for (final representation in representations) {
+          final representationBase = _applyBaseUrl(
+            representation,
+            adaptationBase,
+          );
+          final segments = _parseRepresentation(
+            [...ancestors, adaptationSet, representation],
+            representation,
+            representationBase,
+            periodDuration,
+            maxSegments,
+          );
+          if (segmentCount + segments.length > maxSegments) {
+            throw FormatException(
+              'DASH manifest exceeds the $maxSegments segment limit',
+            );
+          }
+          final id = representation.attributes['id'] ?? '';
+          final bandwidth = int.tryParse(
+            representation.attributes['bandwidth'] ?? '',
+          );
+          final width = int.tryParse(representation.attributes['width'] ?? '');
+          final height = int.tryParse(
+            representation.attributes['height'] ?? '',
+          );
+          final mimeType =
+              representation.attributes['mimeType'] ??
+              adaptationSet.attributes['mimeType'];
+          final codecs =
+              representation.attributes['codecs'] ??
+              adaptationSet.attributes['codecs'];
+          final identity = id.isNotEmpty
+              ? 'id:$id'
+              : 'metadata:$bandwidth:$width:$height:$mimeType:$codecs';
+          final representationOccurrence = representationOccurrences.update(
+            identity,
+            (count) => count + 1,
+            ifAbsent: () => 0,
+          );
+          final representationKey =
+              '$adaptationKey:$identity#$representationOccurrence';
+          final existingIndex = resultIndexes[representationKey];
+          if (existingIndex == null) {
+            resultIndexes[representationKey] = result.length;
+            result.add((
+              key: '${result.length}:$representationKey',
+              id: id,
+              bandwidth: bandwidth,
+              width: width,
+              height: height,
+              mimeType: mimeType,
+              codecs: codecs,
+              segments: segments,
+            ));
+          } else {
+            final existing = result[existingIndex];
+            result[existingIndex] = (
+              key: existing.key,
+              id: existing.id,
+              bandwidth: existing.bandwidth,
+              width: existing.width,
+              height: existing.height,
+              mimeType: existing.mimeType,
+              codecs: existing.codecs,
+              segments: [...existing.segments, ...segments],
+            );
+          }
+          segmentCount += segments.length;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  static String _adaptationSetIdentity(_MpdElement adaptationSet) {
+    final id = adaptationSet.attributes['id'];
+    if (id != null && id.isNotEmpty) return 'id:$id';
+
+    final attributes = const [
+      'contentType',
+      'mimeType',
+      'lang',
+      'codecs',
+      'audioSamplingRate',
+      'par',
+    ].map((name) => '$name=${adaptationSet.attributes[name] ?? ''}').join('|');
+    final roles =
+        adaptationSet.children
+            .where((node) => _isDash(node, 'Role'))
+            .map(
+              (node) =>
+                  '${node.attributes['schemeIdUri'] ?? ''}='
+                  '${node.attributes['value'] ?? ''}',
+            )
+            .toList()
+          ..sort();
+    return 'attributes:$attributes|roles:${roles.join(',')}';
   }
 
   static void _validateMaxSegments(int maxSegments) {

@@ -25,6 +25,42 @@ import 'executor_utils.dart';
 import 'executor_media.dart';
 import 'executor_save.dart';
 
+List<MediaResource> playlistSegmentsForSelection(
+  MediaResource playlist,
+  List<MediaResource> detectedMedia,
+) {
+  return detectedMedia.where((resource) {
+    if (resource.isPlaylist || resource.initiator != playlist.url) return false;
+    if (playlist.isMPD && playlist.groupId != null) {
+      return resource.groupId == playlist.groupId;
+    }
+    return true;
+  }).toList();
+}
+
+String playlistMergedFileExtensionForSelection(
+  MediaResource playlist,
+  List<MediaResource> segmentResources,
+  Map<String, String> taskMetadata,
+) {
+  final knownExtension = PlaylistMergedExtensions.forPlaylist(
+    taskMetadata,
+    playlist.url,
+  );
+  if (knownExtension != null) return knownExtension;
+
+  final mimeType = playlist.mimeType?.toLowerCase().split(';').first;
+  if (mimeType == 'video/mp4' || mimeType == 'audio/mp4') return 'mp4';
+  if (mimeType == 'video/webm' || mimeType == 'audio/webm') return 'webm';
+  if (playlist.isMPD &&
+      segmentResources.any(
+        (resource) => const {'m4s', 'mp4'}.contains(resource.ext.toLowerCase()),
+      )) {
+    return 'mp4';
+  }
+  return 'ts';
+}
+
 class TaskExecutor {
   TaskExecutor._();
 
@@ -744,6 +780,7 @@ class TaskExecutor {
       }
       List<String> segments;
       List<M3U8PlaylistResource> playlistResources = [];
+      List<MpdRepresentation>? dashRepresentations;
       var mediaSegmentCount = 0;
       if (pl.isM3U8) {
         final parsed = await M3U8Parser.parsePlaylistWithDetails(
@@ -758,13 +795,14 @@ class TaskExecutor {
           hasInitializationMap: parsed.hasInitializationMap,
         ));
       } else if (pl.isMPD) {
-        segments = await MPDParser.parseManifest(
+        dashRepresentations = await MPDParser.parseRepresentations(
           content,
           pl.url,
           maxSegments: MPDParser.defaultMaxSegments,
         );
-        playlistResources = segments
-            .map((url) => (url: url, rangeStart: null, rangeLength: null))
+        segments = dashRepresentations
+            .expand((representation) => representation.segments)
+            .map((segment) => segment.url)
             .toList();
         mediaSegmentCount = segments.length;
       } else {
@@ -777,6 +815,13 @@ class TaskExecutor {
         if (pl.isM3U8 && playlistSegmentUrls.contains(resource.url)) {
           continue;
         }
+        if (pl.isMPD &&
+            ((resource.isPlaylist && resource.url == pl.url) ||
+                (!resource.isPlaylist &&
+                    resource.initiator == pl.url &&
+                    playlistSegmentUrls.contains(resource.url)))) {
+          continue;
+        }
         if (!existingUrls.add(resource.url)) continue;
         enrichedMedia.add(
           playlistSegmentUrls.contains(resource.url)
@@ -786,9 +831,7 @@ class TaskExecutor {
       }
       final selectedPlaylistResources = pl.isM3U8
           ? playlistResources
-          : playlistResources
-              .where((resource) => existingUrls.add(resource.url))
-              .toList();
+          : <M3U8PlaylistResource>[];
       final segmentMedia = selectedPlaylistResources.map((resource) {
         final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
@@ -802,6 +845,55 @@ class TaskExecutor {
           byteRangeLength: resource.rangeLength,
         );
       }).toList();
+      if (dashRepresentations != null) {
+        for (var index = 0; index < dashRepresentations.length; index++) {
+          final representation = dashRepresentations[index];
+          final dimensions =
+              representation.width != null && representation.height != null
+              ? '${representation.width}x${representation.height}'
+              : representation.id.isNotEmpty
+              ? representation.id
+              : 'representation-${index + 1}';
+          final groupId =
+              'dash:${Uri.encodeComponent(pl.url)}:${representation.key}';
+          final (baseName, _) = SniffingEngine.parseFileName(pl.url);
+          final totalDuration = representation.segments.fold<double>(
+            0,
+            (sum, segment) => sum + segment.duration,
+          );
+          enrichedMedia.add(
+            MediaResource(
+              url: pl.url,
+              name: '${baseName}_$dimensions',
+              ext: 'mpd',
+              mimeType: representation.mimeType ?? 'application/dash+xml',
+              initiator: pl.url,
+              isPlayable: false,
+              isPlaylist: true,
+              duration: totalDuration > 0
+                  ? Duration(seconds: totalDuration.round()).toString()
+                  : null,
+              groupId: groupId,
+              width: representation.width,
+              height: representation.height,
+            ),
+          );
+          for (final segment in representation.segments) {
+            final (name, ext) = SniffingEngine.parseFileName(segment.url);
+            segmentMedia.add(
+              MediaResource(
+                url: segment.url,
+                name: name,
+                ext: ext.isEmpty ? 'ts' : ext,
+                initiator: pl.url,
+                isPlayable: false,
+                isPlaylist: false,
+                groupId: groupId,
+              ),
+            );
+          }
+        }
+      }
       final totalCount = enrichedMedia.length + segmentMedia.length;
       markExecutorStep(
         steps,
@@ -850,15 +942,21 @@ class TaskExecutor {
         final appDirPath = await AppStorage.directory;
         final downloadDir = p.join(appDirPath, 'catcatch', 'downloads');
         if (media.isPlaylist) {
-          final segmentResources = detectedMedia
-              .where((m) => !m.isPlaylist && m.initiator == media.url)
-              .toList();
+          final segmentResources = playlistSegmentsForSelection(
+            media,
+            detectedMedia,
+          );
           if (segmentResources.isEmpty) {
             throw Exception(
               appLocalizationsForLocale(locale).catCatchPlaylistNoSegments,
             );
           }
           final segments = segmentResources.map((m) => m.url).toList();
+          final mergedExtension = playlistMergedFileExtensionForSelection(
+            media,
+            segmentResources,
+            task.metadata,
+          );
           final segmentRanges = segmentResources.map((m) {
             final start = m.byteRangeStart;
             final length = m.byteRangeLength;
@@ -875,7 +973,7 @@ class TaskExecutor {
             segmentRanges: segmentRanges,
             outputPath: p.join(
               downloadDir,
-              '${playlistBaseName}_merged.${PlaylistMergedExtensions.forPlaylist(task.metadata, media.url) == 'mp4' ? 'mp4' : 'ts'}',
+              '${playlistBaseName}_merged.$mergedExtension',
             ),
             headers: DefaultRules.buildBrowserHeaders(referer: referer),
             headersForUrl: (url) {
