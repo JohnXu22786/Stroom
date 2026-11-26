@@ -36,7 +36,10 @@ Future<List<StartupIssue>> _validateMalformedConfigParam(
               {'paramName': 'temperature', 'defaultValue': '0.7'},
             ],
             'reasoningParams': [
-              {'paramName': 'effort', 'options': ['low', 'high']},
+              {
+                'paramName': 'effort',
+                'options': ['low', 'high']
+              },
             ],
             'models': [],
           },
