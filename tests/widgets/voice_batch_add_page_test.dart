@@ -66,4 +66,35 @@ void main() {
     expect(find.text('Alice'), findsOneWidget);
     expect(find.text('voice-1'), findsOneWidget);
   });
+
+  testWidgets('empty CSV columns keep their positions when selecting fields', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildTestApp());
+    await tester.enterText(
+      find.byType(TextField).last,
+      ',metadata,,voice-1,Voice Name,',
+    );
+    await tester.pumpAndSettle();
+
+    final thirdColumn = AppLocalizations.of(
+      tester.element(find.byType(VoiceBatchAddPage)),
+    )!
+        .voiceBatchColumn(3, 'voice-1');
+    expect(find.text(thirdColumn), findsOneWidget);
+    await tester.tap(find.text(thirdColumn));
+    await tester.pumpAndSettle();
+
+    expect(find.text('voice-1'), findsOneWidget);
+    expect(find.text('Voice Name'), findsOneWidget);
+    expect(
+      find.text(
+        AppLocalizations.of(
+          tester.element(find.byType(VoiceBatchAddPage)),
+        )!
+            .voiceNew,
+      ),
+      findsOneWidget,
+    );
+  });
 }
