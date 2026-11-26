@@ -142,6 +142,22 @@ def _local_path_packages(root: Path) -> dict[str, Path]:
         if section not in _LOCAL_DEPENDENCY_SECTIONS:
             continue
 
+        inline_dependency = re.match(
+            r"^  ([A-Za-z0-9_-]+):\s*\{(.*)\}\s*(?:#.*)?$", line
+        )
+        if inline_dependency:
+            inline_path = re.search(
+                r"(?:^|,)\s*path:\s*([^,}]+)", inline_dependency.group(2)
+            )
+            if inline_path:
+                _register_local_path_package(
+                    root,
+                    inline_dependency.group(1),
+                    inline_path.group(1),
+                    packages,
+                )
+            continue
+
         dependency = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
         if dependency:
             package_key = dependency.group(1)
@@ -150,25 +166,29 @@ def _local_path_packages(root: Path) -> dict[str, Path]:
         path = re.match(r"^    path:\s*(.+?)\s*(?:#.*)?$", line)
         if not path or not package_key:
             continue
-        package_root = (root / path.group(1).strip(" '\" ")).resolve()
-        if root not in package_root.parents:
-            package_key = None
-            continue
-
-        package_pubspec = package_root / "pubspec.yaml"
-        if not package_pubspec.is_file():
-            package_key = None
-            continue
-        declared_name = re.search(
-            r"^name:\s*['\"]?([A-Za-z0-9_-]+)",
-            package_pubspec.read_text(encoding="utf-8"),
-            re.M,
-        )
-        if declared_name and declared_name.group(1) == package_key:
-            packages[package_key] = package_root
+        _register_local_path_package(root, package_key, path.group(1), packages)
         package_key = None
 
     return packages
+
+
+def _register_local_path_package(
+    root: Path, package_key: str, path: str, packages: dict[str, Path]
+) -> None:
+    package_root = (root / path.strip(" '\" ")).resolve()
+    if root not in package_root.parents:
+        return
+
+    package_pubspec = package_root / "pubspec.yaml"
+    if not package_pubspec.is_file():
+        return
+    declared_name = re.search(
+        r"^name:\s*['\"]?([A-Za-z0-9_-]+)",
+        package_pubspec.read_text(encoding="utf-8"),
+        re.M,
+    )
+    if declared_name and declared_name.group(1) == package_key:
+        packages[package_key] = package_root
 
 
 def _local_dart_dependencies(

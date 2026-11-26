@@ -20,7 +20,8 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         self.entrypoint.write_text(
             "import 'package:stroom/pages/capture_page.dart'; "
             "export 'package:stroom/utils/capture_extra.dart'; "
-            "import 'package:local_capture_package/local_widget.dart';\n",
+            "import 'package:local_capture_package/local_widget.dart'; "
+            "import 'package:inline_capture_package/inline_widget.dart';\n",
             encoding="utf-8",
         )
         self.transitive_input = self.root / "lib/widgets/capture_widget.dart"
@@ -51,11 +52,19 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
             "name: capture_test\n"
             "dependency_overrides:\n"
             "  local_capture_package:\n"
-            "    path: packages/local_capture_package\n",
+            "    path: packages/local_capture_package\n"
+            "  inline_capture_package: {path: packages/inline_capture_package}\n",
             encoding="utf-8",
         )
         self.local_package_input = self.local_package / "lib/local_widget.dart"
         self.local_package_input.write_text("class LocalWidget {}\n", encoding="utf-8")
+        self.inline_package = self.root / "packages/inline_capture_package"
+        (self.inline_package / "lib").mkdir(parents=True)
+        (self.inline_package / "pubspec.yaml").write_text(
+            "name: inline_capture_package\n", encoding="utf-8"
+        )
+        self.inline_package_input = self.inline_package / "lib/inline_widget.dart"
+        self.inline_package_input.write_text("class InlineWidget {}\n", encoding="utf-8")
         self.bundle = self.root / "build/index.html"
         self.bundle.parent.mkdir()
         self.bundle.write_text("built bundle\n", encoding="utf-8")
@@ -84,6 +93,12 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
     def test_newer_import_from_local_path_package_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
         os.utime(self.local_package_input, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_newer_import_from_inline_local_path_package_requires_rebuild(self):
+        newer_mtime = self.bundle.stat().st_mtime + 1
+        os.utime(self.inline_package_input, (newer_mtime, newer_mtime))
 
         self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
 
