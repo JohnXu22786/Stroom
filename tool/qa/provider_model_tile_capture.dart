@@ -41,9 +41,8 @@ void main() {
     _ => const Locale('de', 'DE'),
   };
   final scale = double.tryParse(query['scale'] ?? '') ?? 1.8;
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
   final models = fitting
       ? [ModelConfig(name: 'Model name', modelId: 'model-id')]
       : _models;

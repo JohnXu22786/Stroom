@@ -163,8 +163,7 @@ void main() {
   });
 
   group('provider model tile labels', () {
-    const modelName =
-        'Very long model name for a provider configuration tile';
+    const modelName = 'Very long model name for a provider configuration tile';
     const modelId =
         'provider-model-id-with-a-very-long-unbroken-identifier-123456789';
 
@@ -185,8 +184,8 @@ void main() {
 
       final tile = tester.widget<ListTile>(find.byType(ListTile).last);
       final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
-      final expectedId = AppLocalizations.of(pageContext)!
-          .providerModelId(modelId);
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId(modelId);
       expect(tile.title, isA<ConstrainedText>());
       expect(tile.subtitle, isA<ConstrainedText>());
       final nameFinder = find.byWidgetPredicate(
@@ -232,8 +231,8 @@ void main() {
       expect(tile.subtitle, isA<ConstrainedText>());
       expect(find.text('Model name'), findsOneWidget);
       final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
-      final expectedId = AppLocalizations.of(pageContext)!
-          .providerModelId('model-id');
+      final expectedId =
+          AppLocalizations.of(pageContext)!.providerModelId('model-id');
       expect(find.text(expectedId), findsOneWidget);
       final nameFinder = find.byWidgetPredicate(
         (widget) => widget is ConstrainedText && widget.data == 'Model name',
