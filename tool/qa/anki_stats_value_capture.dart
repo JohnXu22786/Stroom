@@ -57,6 +57,7 @@ class _CaptureRevlogDao implements RevlogDao {
 
 void main() {
   final scale = double.tryParse(Uri.base.queryParameters['scale'] ?? '') ?? 3;
+  final dark = Uri.base.queryParameters['theme'] == 'dark';
   runApp(
     ProviderScope(
       overrides: [
@@ -72,7 +73,13 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
+        themeMode: dark ? ThemeMode.dark : ThemeMode.light,
         theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
+        darkTheme: ThemeData(
+          colorSchemeSeed: Colors.blue,
+          brightness: Brightness.dark,
+          useMaterial3: true,
+        ),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),

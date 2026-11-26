@@ -179,14 +179,17 @@ class _StatCard extends StatelessWidget {
                 (constraints.maxWidth - 44 - 12).clamp(0.0, double.infinity);
             final maximumValueWidth = availableValueWidth * 0.45;
             final valueWidget = valuePainter.width > maximumValueWidth
-                ? SizedBox(
-                    width: maximumValueWidth,
-                    child: ConstrainedText(
-                      value,
-                      style: valueStyle,
-                      textAlign: TextAlign.end,
-                      maxLines: 1,
-                      useNaturalWidthLayout: true,
+                ? Tooltip(
+                    message: value,
+                    child: SizedBox(
+                      width: maximumValueWidth,
+                      child: ConstrainedText(
+                        value,
+                        style: valueStyle,
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        useNaturalWidthLayout: true,
+                      ),
                     ),
                   )
                 : Text(value, style: valueStyle);

@@ -115,6 +115,7 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: const TextScaler.linear(3),
+              disableAnimations: true,
             ),
             child: child!,
           ),
@@ -137,6 +138,15 @@ void main() {
       matching: find.text('9876543'),
     );
     expect(totalValue, findsOneWidget);
+    final valueTooltip = find.ancestor(
+      of: totalValue,
+      matching: find.byType(Tooltip),
+    );
+    expect(tester.widget<Tooltip>(valueTooltip).message, '9876543');
+    await tester.longPress(valueTooltip);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('9876543'), findsWidgets);
 
     await tester.pumpWidget(
       ProviderScope(
