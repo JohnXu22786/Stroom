@@ -57,7 +57,7 @@ class StartupJsonBatchResult {
 
 @visibleForTesting
 Future<List<StartupIssue>> Function(List<StartupIssue> Function() computation)?
-debugStartupIsolateRunnerForTesting;
+    debugStartupIsolateRunnerForTesting;
 
 Future<List<StartupIssue>> _runStartupIsolate(
   List<StartupIssue> Function() computation,
@@ -780,8 +780,7 @@ class StartupCheckService {
       if (!_isKnownProviderType(type)) {
         issues.add(
           StartupIssue(
-            message:
-                'provider_entries[$i]: 未知的供应商类型 "$type"，'
+            message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
                 '应用可能无法正常使用该供应商',
             severity: StartupIssueSeverity.warning,
             dataKey: 'provider_entries',

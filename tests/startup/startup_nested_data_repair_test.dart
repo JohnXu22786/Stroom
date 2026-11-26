@@ -290,7 +290,8 @@ void main() {
       },
     );
 
-    test('validateDataFormats reports malformed saved model field shapes', () async {
+    test('validateDataFormats reports malformed saved model field shapes',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -421,7 +422,9 @@ void main() {
   });
 
   group('StartupCheckService - checkDataIntegrity - non-Map entries', () {
-    test('checkDataIntegrity handles non-Map entry without crash and continues checking valid entries', () async {
+    test(
+        'checkDataIntegrity handles non-Map entry without crash and continues checking valid entries',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -447,7 +450,8 @@ void main() {
       expect(
         issues.any((i) => i.message.contains('unknown_type')),
         isTrue,
-        reason: 'Valid entries should still be checked after skipping non-Map items',
+        reason:
+            'Valid entries should still be checked after skipping non-Map items',
       );
     });
   });
