@@ -162,7 +162,7 @@ class _FenceMatch {
     }
 
     // We assume the info string is trimmed already.
-    final firstSpaceIndex = info.indexOf(' ');
+    final firstSpaceIndex = RegExp(r'[ \t]').firstMatch(info)?.start ?? -1;
     if (firstSpaceIndex == -1) {
       // If there is no space, the whole string is the language.
       return (info, null);
