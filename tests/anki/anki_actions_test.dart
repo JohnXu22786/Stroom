@@ -99,6 +99,26 @@ void main() {
     expect(collectionAfterFailure.single['models'], '{}');
   });
 
+  test('deck statistics refresh after adding a card', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ankiColDaoProvider.overrideWith((ref) async => collection.col),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final initialStats = await container.read(ankiDeckStatsProvider(1).future);
+    expect(initialStats.totalCount, 0);
+    expect(initialStats.newCount, 0);
+
+    await container.read(ankiActionsProvider).addCard(1, 'front', 'back');
+
+    final refreshedStats =
+        await container.read(ankiDeckStatsProvider(1).future);
+    expect(refreshedStats.totalCount, 1);
+    expect(refreshedStats.newCount, 1);
+  });
+
   test(
     'failed queued addCard keeps model state consistent with a later success',
     () async {

@@ -74,6 +74,7 @@ class AnkiRefreshNotifier extends Notifier<int> {
 
 final ankiDeckStatsProvider =
     FutureProvider.family<DeckStats, int>((ref, did) async {
+  ref.watch(ankiRefreshProvider); // trigger rebuild
   final col = await ref.watch(ankiColDaoProvider.future);
   return col.getDeckStats(did);
 });
