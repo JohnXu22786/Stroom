@@ -121,7 +121,11 @@ void main() {
       await TodoToolService.handleTodo({
         'todos': List.generate(
           30,
-          (index) => {'content': 'item-$index ${List.filled(300, 'x').join()}'},
+          (index) => {
+            'content': 'item-$index ${List.filled(300, 'x').join()}',
+            'status': 'pending',
+            'priority': 'medium',
+          },
         ),
       }, locale: expected.locale);
       final longResult = await ConnectivityTestService.runBuiltinTest(
