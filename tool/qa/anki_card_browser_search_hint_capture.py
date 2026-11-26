@@ -54,6 +54,50 @@ server = subprocess.Popen(
     stderr=subprocess.DEVNULL,
 )
 
+
+def record_reveal_preview(page):
+    with tempfile.TemporaryDirectory(
+        prefix="anki-search-hint-frames-", dir=OUTPUT
+    ) as frame_directory:
+        frame_directory = Path(frame_directory)
+        frame_rate = 10
+        preview_duration = 9
+        deadline = time.monotonic() + preview_duration
+        next_frame = time.monotonic()
+        frame_number = 0
+        while time.monotonic() < deadline:
+            (frame_directory / f"frame-{frame_number:04d}.png").write_bytes(
+                page.screenshot()
+            )
+            frame_number += 1
+            next_frame += 1 / frame_rate
+            page.wait_for_timeout(max(0, round((next_frame - time.monotonic()) * 1000)))
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-framerate",
+                str(frame_rate),
+                "-i",
+                str(frame_directory / "frame-%04d.png"),
+                "-c:v",
+                "libvpx-vp9",
+                "-deadline",
+                "good",
+                "-cpu-used",
+                "4",
+                "-b:v",
+                "0",
+                "-crf",
+                "28",
+                str(PREVIEW),
+            ],
+            check=True,
+        )
+
+
 try:
     base_url = f"http://127.0.0.1:{port}/"
     for _ in range(100):
@@ -89,46 +133,36 @@ try:
             raise RuntimeError("Unexpected French screenshot dimensions")
         NARROW.write_bytes(screenshot)
 
-        with tempfile.TemporaryDirectory(
-            prefix="anki-search-hint-frames-", dir=OUTPUT
-        ) as frame_directory:
-            frame_directory = Path(frame_directory)
-            frame_rate = 10
-            preview_duration = 9
-            deadline = time.monotonic() + preview_duration
-            next_frame = time.monotonic()
-            frame_number = 0
-            while time.monotonic() < deadline:
-                (frame_directory / f"frame-{frame_number:04d}.png").write_bytes(
-                    page.screenshot()
-                )
-                frame_number += 1
-                next_frame += 1 / frame_rate
-                page.wait_for_timeout(max(0, round((next_frame - time.monotonic()) * 1000)))
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-loglevel",
-                    "error",
-                    "-framerate",
-                    str(frame_rate),
-                    "-i",
-                    str(frame_directory / "frame-%04d.png"),
-                    "-c:v",
-                    "libvpx-vp9",
-                    "-deadline",
-                    "good",
-                    "-cpu-used",
-                    "4",
-                    "-b:v",
-                    "0",
-                    "-crf",
-                    "28",
-                    str(PREVIEW),
-                ],
-                check=True,
-            )
+        preview_page = browser.new_page(
+            viewport={"width": 320, "height": 640},
+            device_scale_factor=1,
+        )
+        preview_page.on("pageerror", lambda error: errors.append(str(error)))
+        preview_page.add_init_script(
+            """
+            window.__ankiCardBrowserRendered = false;
+            window.addEventListener('anki-card-browser-rendered', () => {
+              window.__ankiCardBrowserRendered = true;
+            }, { once: true });
+            """
+        )
+        preview_page.goto(
+            f"{base_url}?locale=fr&scale=1.8&theme=light",
+            wait_until="load",
+            timeout=120_000,
+        )
+        preview_page.locator("flt-semantics-placeholder").wait_for(
+            timeout=120_000
+        )
+        preview_page.wait_for_function(
+            "window.__ankiCardBrowserRendered === true", timeout=120_000
+        )
+        preview_page.mouse.click(160, 84)
+        preview_active_element = preview_page.evaluate(
+            "document.activeElement?.tagName?.toLowerCase()"
+        )
+        record_reveal_preview(preview_page)
+        preview_page.close()
 
         page.set_viewport_size({"width": 390, "height": 844})
         page.goto(f"{base_url}?locale=en&scale=1&theme=light", wait_until="load", timeout=120_000)
@@ -153,6 +187,8 @@ try:
             "preview": str(PREVIEW.relative_to(ROOT)),
             "narrow_state": "empty search field, focused, French, 320x640, text scale 1.8, light theme, LTR",
             "fitting_state": "empty search field, focused, English, 390x844, text scale 1, light theme, LTR",
+            "preview_active_element": preview_active_element,
+            "preview_start": "immediately after first Flutter frame and search-field focus",
             "device_pixel_ratio": 1,
             "page_errors": errors,
         }
