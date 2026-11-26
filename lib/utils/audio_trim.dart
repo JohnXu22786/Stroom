@@ -3,9 +3,6 @@ import 'dart:typed_data';
 /// 默认采样率
 const int defaultSampleRate = 24000;
 
-/// WAV 标准 PCM 头长度
-const int _wavHeaderSize = 44;
-
 /// 魔数字节
 const _magicWav = [0x52, 0x49, 0x46, 0x46]; // "RIFF"
 const _magicMp3Id3 = [0x49, 0x44, 0x33]; // "ID3"
@@ -44,47 +41,112 @@ String _detectFormat(Uint8List data) {
   return 'pcm';
 }
 
-/// 从 WAV 数据中提取裸 PCM 数据
-///
-/// 解析 RIFF/WAVE 结构找到 "data" chunk，返回 chunk 内的 PCM 字节。
-/// 如果解析失败（非标准结构），则默认跳过前 44 字节。
-Uint8List _extractPcmFromWav(Uint8List wavData) {
-  if (wavData.length < _wavHeaderSize) return wavData;
+class _PcmWav {
+  const _PcmWav({
+    required this.pcmData,
+    required this.sampleRate,
+    required this.channels,
+    required this.bitsPerSample,
+    required this.blockAlign,
+  });
 
-  // 从 byte 12 开始扫描子块
-  int offset = 12;
-  while (offset + 8 <= wavData.length) {
-    final chunkId = String.fromCharCodes(wavData.sublist(offset, offset + 4));
-    final chunkSize = (wavData[offset + 4] & 0xff) |
-        ((wavData[offset + 5] & 0xff) << 8) |
-        ((wavData[offset + 6] & 0xff) << 16) |
-        ((wavData[offset + 7] & 0xff) << 24);
-
-    if (chunkId == 'data') {
-      final dataStart = offset + 8;
-      final dataEnd = dataStart + chunkSize;
-      if (dataEnd > wavData.length) {
-        // 声明的 size 超出实际长度，取剩余全部
-        return wavData.sublist(dataStart);
-      }
-      return wavData.sublist(dataStart, dataEnd);
-    }
-
-    offset += 8 + chunkSize;
-    // 对齐到偶数边界
-    if (offset % 2 != 0) offset++;
-  }
-
-  // 没找到 data chunk，回退：跳过前 44 字节
-  return wavData.length > _wavHeaderSize
-      ? wavData.sublist(_wavHeaderSize)
-      : Uint8List(0);
+  final Uint8List pcmData;
+  final int sampleRate;
+  final int channels;
+  final int bitsPerSample;
+  final int blockAlign;
 }
 
-/// 将 PCM 数据包装为 WAV 格式（小端序 16-bit 单声道）
-Uint8List _pcmToWav(Uint8List pcmData, int sampleRate) {
+/// Parse standard integer PCM WAV files; unsupported or malformed files are
+/// left untouched by the caller.
+_PcmWav? _parsePcmWav(Uint8List wavData) {
+  if (wavData.length < 12 ||
+      String.fromCharCodes(wavData.sublist(0, 4)) != 'RIFF' ||
+      String.fromCharCodes(wavData.sublist(8, 12)) != 'WAVE') {
+    return null;
+  }
+
+  int readU16(int offset) => wavData[offset] | (wavData[offset + 1] << 8);
+  int readU32(int offset) =>
+      wavData[offset] |
+      (wavData[offset + 1] << 8) |
+      (wavData[offset + 2] << 16) |
+      (wavData[offset + 3] << 24);
+
+  final riffEnd = 8 + readU32(4);
+  if (riffEnd < 12 || riffEnd > wavData.length) return null;
+
+  int? format;
+  int? channels;
+  int? sampleRate;
+  int? byteRate;
+  int? blockAlign;
+  int? bitsPerSample;
+  int? dataStart;
+  int? dataSize;
+
+  var offset = 12;
+  while (offset + 8 <= riffEnd) {
+    final chunkId = String.fromCharCodes(wavData.sublist(offset, offset + 4));
+    final chunkSize = readU32(offset + 4);
+    final chunkStart = offset + 8;
+    final chunkEnd = chunkStart + chunkSize;
+    if (chunkEnd > riffEnd) return null;
+
+    if (chunkId == 'fmt ') {
+      if (format != null || chunkSize < 16) return null;
+      format = readU16(chunkStart);
+      channels = readU16(chunkStart + 2);
+      sampleRate = readU32(chunkStart + 4);
+      byteRate = readU32(chunkStart + 8);
+      blockAlign = readU16(chunkStart + 12);
+      bitsPerSample = readU16(chunkStart + 14);
+    } else if (chunkId == 'data') {
+      if (dataStart != null) return null;
+      dataStart = chunkStart;
+      dataSize = chunkSize;
+    }
+
+    offset = chunkEnd + (chunkSize.isOdd ? 1 : 0);
+    if (offset > riffEnd) return null;
+  }
+
+  if (offset != riffEnd ||
+      format != 1 ||
+      channels == null ||
+      channels <= 0 ||
+      sampleRate == null ||
+      sampleRate <= 0 ||
+      byteRate == null ||
+      blockAlign == null ||
+      bitsPerSample == null ||
+      dataStart == null ||
+      dataSize == null ||
+      ![8, 16, 24, 32].contains(bitsPerSample)) {
+    return null;
+  }
+
+  final expectedBlockAlign = channels * (bitsPerSample ~/ 8);
+  if (blockAlign != expectedBlockAlign ||
+      byteRate != sampleRate * blockAlign ||
+      dataSize % blockAlign != 0) {
+    return null;
+  }
+
+  return _PcmWav(
+    pcmData: wavData.sublist(dataStart, dataStart + dataSize),
+    sampleRate: sampleRate,
+    channels: channels,
+    bitsPerSample: bitsPerSample,
+    blockAlign: blockAlign,
+  );
+}
+
+/// 将 PCM 数据包装为 WAV 格式，并保留源文件的 PCM 格式元数据。
+Uint8List _pcmToWav(Uint8List pcmData, _PcmWav format) {
   final dataSize = pcmData.length;
-  final fileSize = 36 + dataSize;
+  final fileSize = 36 + dataSize + (dataSize.isOdd ? 1 : 0);
+  final byteRate = format.sampleRate * format.blockAlign;
 
   final writer = BytesBuilder();
 
@@ -109,16 +171,17 @@ Uint8List _pcmToWav(Uint8List pcmData, int sampleRate) {
   writer.add([0x66, 0x6D, 0x74, 0x20]); // "fmt "
   writeU32(16); // Subchunk1Size (PCM)
   writeU16(1); // AudioFormat (1 = PCM)
-  writeU16(1); // NumChannels (单声道)
-  writeU32(sampleRate);
-  writeU32(sampleRate * 2); // ByteRate
-  writeU16(2); // BlockAlign
-  writeU16(16); // BitsPerSample
+  writeU16(format.channels);
+  writeU32(format.sampleRate);
+  writeU32(byteRate);
+  writeU16(format.blockAlign);
+  writeU16(format.bitsPerSample);
 
   // data 子块
   writer.add([0x64, 0x61, 0x74, 0x61]); // "data"
   writeU32(dataSize);
   writer.add(pcmData);
+  if (dataSize.isOdd) writer.addByte(0);
 
   return writer.toBytes();
 }
@@ -151,16 +214,14 @@ Uint8List trimAudio(
     return audioBytes;
   }
 
-  // 计算需要裁切的字节数 (16位PCM = 2字节/样本)
-  final samplesToDiscard = (durationSeconds * sampleRate).round();
-  final trimBytes = samplesToDiscard * 2;
-
-  if (trimBytes <= 0) return audioBytes;
-
   // ----- 根据格式执行裁切 -----
 
   if (fmt == 'pcm') {
-    // 裸 PCM：直接 sublist
+    // 裸 PCM：直接 sublist (默认每样本 16-bit)
+    final samplesToDiscard = (durationSeconds * sampleRate).round();
+    final trimBytes = samplesToDiscard * 2;
+    if (trimBytes <= 0) return audioBytes;
+
     if (trimBytes >= audioBytes.length) return audioBytes;
     if (direction == 'head') {
       return audioBytes.sublist(trimBytes);
@@ -170,22 +231,27 @@ Uint8List trimAudio(
     }
   }
 
-  // fmt == 'wav'：剥离头 → 裁切 PCM → 重建 WAV 头
-  final pcmData = _extractPcmFromWav(audioBytes);
+  // fmt == 'wav'：按文件中的 PCM 格式裁切并重建匹配的 WAV 头。
+  final wav = _parsePcmWav(audioBytes);
+  if (wav == null) return audioBytes;
 
-  if (trimBytes >= pcmData.length) {
+  final framesToDiscard = (durationSeconds * wav.sampleRate).round();
+  final trimBytes = framesToDiscard * wav.blockAlign;
+  if (trimBytes <= 0) return audioBytes;
+
+  if (trimBytes >= wav.pcmData.length) {
     // PCM 太短，返回原始 WAV
     return audioBytes;
   }
 
   Uint8List trimmedPcm;
   if (direction == 'head') {
-    trimmedPcm = pcmData.sublist(trimBytes);
+    trimmedPcm = wav.pcmData.sublist(trimBytes);
   } else {
-    trimmedPcm = pcmData.sublist(0, pcmData.length - trimBytes);
+    trimmedPcm = wav.pcmData.sublist(0, wav.pcmData.length - trimBytes);
   }
 
-  return _pcmToWav(trimmedPcm, sampleRate);
+  return _pcmToWav(trimmedPcm, wav);
 }
 
 /// 创建包装流并裁切音频头部/尾部的生成器
