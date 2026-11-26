@@ -60,6 +60,47 @@ void main() {
     );
   });
 
+  test('reference definitions unescape punctuation in labels', () {
+    expect(
+      markdown.markdownToHtml(
+        r'[link][*]'
+        '\n\n'
+        r'[\*]: /asterisk',
+      ),
+      '<p><a href="/asterisk">link</a></p>\n',
+    );
+  });
+
+  test('reference definitions unescape escaped backslashes and brackets', () {
+    expect(
+      markdown.markdownToHtml(
+        r'[link][\\]'
+        '\n\n'
+        r'[\\]: /backslash',
+      ),
+      '<p><a href="/backslash">link</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml(
+        r'[link][\]]'
+        '\n\n'
+        r'[\]]: /bracket',
+      ),
+      '<p><a href="/bracket">link</a></p>\n',
+    );
+  });
+
+  test('reference definitions preserve escapes before non-punctuation', () {
+    expect(
+      markdown.markdownToHtml(
+        r'[link][fooq]'
+        '\n\n'
+        r'[foo\q]: /target',
+      ),
+      '<p>[link][fooq]</p>\n',
+    );
+  });
+
   test('reference link labels preserve escaped brackets and backslashes', () {
     expect(markdown.markdownToHtml(r'[\]]'), '<p>[]]</p>\n');
     expect(markdown.markdownToHtml(r'[\\]'), '<p>[\\]</p>\n');
