@@ -90,10 +90,56 @@ class _FailingCardDao implements CardDao {
 
 class _StaticNoteDao implements NoteDao {
   final Note note;
+  int allCalls = 0;
   _StaticNoteDao(this.note);
 
   @override
   Future<Note?> get(int id) async => note.id == id ? note : null;
+
+  @override
+  Future<List<Note>> all() async {
+    allCalls++;
+    return [note];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RetryingNoteDao implements NoteDao {
+  final Note note;
+  int allCalls = 0;
+  _RetryingNoteDao(this.note);
+
+  @override
+  Future<Note?> get(int id) async => note.id == id ? note : null;
+
+  @override
+  Future<List<Note>> all() async {
+    allCalls++;
+    if (allCalls == 1) throw StateError('temporary note query failure');
+    return [note];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DelayedRetryingNoteDao implements NoteDao {
+  final Note note;
+  final Completer<List<Note>> firstLoad = Completer<List<Note>>();
+  int allCalls = 0;
+  _DelayedRetryingNoteDao(this.note);
+
+  @override
+  Future<Note?> get(int id) async => note.id == id ? note : null;
+
+  @override
+  Future<List<Note>> all() {
+    allCalls++;
+    if (allCalls == 1) return firstLoad.future;
+    return Future.value([note]);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -295,6 +341,268 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Card front'), findsOneWidget);
+  });
+
+  testWidgets('searches card note front text', (tester) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(
+            AsyncData(
+              _StaticNoteDao(
+                Note(
+                  id: 1,
+                  notetype_id: 1,
+                  fields: ['Front searchable phrase', 'Back text'],
+                ),
+              ),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'searchable phrase');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('searches card note back text', (tester) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(
+            AsyncData(
+              _StaticNoteDao(
+                Note(
+                  id: 1,
+                  notetype_id: 1,
+                  fields: ['Front text', 'Back searchable phrase'],
+                ),
+              ),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'searchable phrase');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('continues to search card IDs', (tester) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(
+            AsyncData(
+              _StaticNoteDao(
+                Note(id: 1, notetype_id: 1, fields: ['Card front']),
+              ),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '1234');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('retries content search after clearing a failed search', (
+    tester,
+  ) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    final noteDao = _RetryingNoteDao(
+      Note(id: 1, notetype_id: 1, fields: ['Front retryable phrase']),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(AsyncData(noteDao)),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'retryable');
+    await tester.pumpAndSettle();
+    expect(find.byType(ListTile), findsNothing);
+    expect(noteDao.allCalls, 1);
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.enterText(find.byType(TextField), 'retryable');
+    await tester.pumpAndSettle();
+
+    expect(noteDao.allCalls, 2);
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('keeps content matches after reloading cards', (tester) async {
+    final cardDao = _MutableCardDao([
+      anki.Card(id: 1234, note_id: 1, deck_id: 1),
+      anki.Card(id: 5678, note_id: 1, deck_id: 1),
+    ]);
+    late _DelayedRemoveNoteActions actions;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(AsyncData(cardDao)),
+          ankiNoteDaoProvider.overrideWithValue(
+            AsyncData(
+              _StaticNoteDao(
+                Note(id: 1, notetype_id: 1, fields: ['Matching search text']),
+              ),
+            ),
+          ),
+          ankiActionsProvider.overrideWith((ref) {
+            actions = _DelayedRemoveNoteActions(ref, () {
+              cardDao.cards.removeAt(0);
+            });
+            return actions;
+          }),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'matching search text');
+    await tester.pumpAndSettle();
+    expect(find.byType(ListTile), findsNWidgets(2));
+
+    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.pumpAndSettle();
+    actions.deletion.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('reuses searchable notes after clearing the query', (
+    tester,
+  ) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    final noteDao = _StaticNoteDao(
+      Note(id: 1, notetype_id: 1, fields: ['Cached searchable phrase']),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(AsyncData(noteDao)),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'searchable phrase');
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.enterText(find.byType(TextField), 'searchable phrase');
+    await tester.pumpAndSettle();
+
+    expect(noteDao.allCalls, 1);
+    expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('retries after a pending note load fails while search is clear', (
+    tester,
+  ) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+    final noteDao = _DelayedRetryingNoteDao(
+      Note(id: 1, notetype_id: 1, fields: ['Recoverable search phrase']),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(AsyncData(noteDao)),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'recoverable');
+    await tester.pumpAndSettle();
+    expect(noteDao.allCalls, 1);
+
+    await tester.enterText(find.byType(TextField), '');
+    noteDao.firstLoad.completeError(StateError('temporary note query failure'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'recoverable');
+    await tester.pumpAndSettle();
+
+    expect(noteDao.allCalls, 2);
+    expect(find.byType(ListTile), findsOneWidget);
   });
 
   testWidgets('shows a localized error when loading a card note fails', (
