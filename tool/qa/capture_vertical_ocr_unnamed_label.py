@@ -10,6 +10,8 @@ from urllib.request import urlopen
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_build_dependencies import needs_rebuild
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path('/workspace/.cloud-profile-state/vertical_ocr_unnamed_label')
@@ -38,9 +40,9 @@ environment['LD_LIBRARY_PATH'] = str(toolchain / 'lib')
 environment['PATH'] = f'{toolchain}/bin:{environment["PATH"]}'
 
 entrypoint = ROOT / 'tool/qa/vertical_ocr_unnamed_label_capture.dart'
-if not (WEB_BUILD / 'main.dart.js').exists() or entrypoint.stat().st_mtime > (
-    WEB_BUILD / 'index.html'
-).stat().st_mtime:
+if not (WEB_BUILD / 'main.dart.js').exists() or needs_rebuild(
+    ROOT, entrypoint, WEB_BUILD / 'index.html'
+):
     subprocess.run(
         [
             '/workspace/sdks/flutter/bin/flutter',
