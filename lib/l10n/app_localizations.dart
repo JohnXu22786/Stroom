@@ -19883,6 +19883,2772 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.'**
   String get providerResponsesEndpointHelp;
+
+  /// No description provided for @ankiCardBrowserLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load cards: {error}'**
+  String ankiCardBrowserLoadError(String error);
+
+  /// No description provided for @llmAccountAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add account'**
+  String get llmAccountAdd;
+
+  /// No description provided for @llmAccountAuthSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication source: {source}'**
+  String llmAccountAuthSource(Object source);
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Supported'**
+  String get llmAccountCapabilitySupported;
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get llmAccountCapabilityUnknown;
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported'**
+  String get llmAccountCapabilityUnsupported;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Account concurrency: {value}'**
+  String llmAccountConcurrencySummary(String value);
+
+  /// No description provided for @llmAccountDeleteCleanupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Account was deleted, but cleanup of the old configuration failed.'**
+  String get llmAccountDeleteCleanupFailed;
+
+  /// No description provided for @llmAccountDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion failed.'**
+  String get llmAccountDeleteFailed;
+
+  /// No description provided for @llmAccountEditTitleAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add LLM account'**
+  String get llmAccountEditTitleAdd;
+
+  /// No description provided for @llmAccountEditTitleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit LLM account'**
+  String get llmAccountEditTitleEdit;
+
+  /// No description provided for @llmAccountEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No LLM accounts yet.'**
+  String get llmAccountEmpty;
+
+  /// No description provided for @llmAccountForThisRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Account for this request'**
+  String get llmAccountForThisRequest;
+
+  /// No description provided for @llmAccountGroupLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'The account or model group could not be loaded.'**
+  String get llmAccountGroupLoadError;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Local model-group usage: {usage}'**
+  String llmAccountGroupUsageSummary(String usage);
+
+  /// No description provided for @llmAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get llmAccountLabel;
+
+  /// No description provided for @llmAccountManagementTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM accounts and model groups'**
+  String get llmAccountManagementTitle;
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown unit'**
+  String get llmAccountMetricUnitUnknown;
+
+  /// No description provided for @llmAccountName.
+  ///
+  /// In en, this message translates to:
+  /// **'Account name'**
+  String get llmAccountName;
+
+  /// No description provided for @llmAccountPolicies.
+  ///
+  /// In en, this message translates to:
+  /// **'Account policies'**
+  String get llmAccountPolicies;
+
+  /// Quota policy threshold summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining quota reserve for {window}: {threshold}'**
+  String llmAccountQuotaReserveThreshold(String window, String threshold);
+
+  /// No description provided for @llmAccountRecentError.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent error: {error}'**
+  String llmAccountRecentError(Object error);
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining quota:'**
+  String get llmAccountRemainingQuotaLabel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'ACP does not provide a stable model catalog; use the official CLI\'s current default model.'**
+  String get llmAccountUiACPDoes;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Horde uses fixed HTTPS Chat endpoint'**
+  String get llmAccountUiAIHorde;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Horde API Key (optional priority)'**
+  String get llmAccountUiAIHordeAPI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Horde\'s anonymous key or priority API Key is only sent to its fixed chat service endpoint.'**
+  String get llmAccountUiAIHordeS;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'API Keys can be added as multiple independent connections and polled through model groups. Anonymous mode only displays and calls confirmed free models; the account directory is not used.'**
+  String get llmAccountUiAPIKeys;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS Access + Secret Key (Session Token optional)'**
+  String get llmAccountUiAWSAccess;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS Bedrock user-supplied static credentials'**
+  String get llmAccountUiAWSBedrock;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS Builder ID OAuth Credentials JSON'**
+  String get llmAccountUiAWSBuilder;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS Credentials JSON'**
+  String get llmAccountUiAWSCredentials;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS default credential chain'**
+  String get llmAccountUiAWSDefault;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'AWS Region'**
+  String get llmAccountUiAWSRegion;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Ability unknown'**
+  String get llmAccountUiAbilityUnknown;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Ability values can only be true or false.'**
+  String get llmAccountUiAbilityValues;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Account and upstream model'**
+  String get llmAccountUiAccountAnd;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion failed.'**
+  String get llmAccountUiAccountDeletion;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Account has been deleted'**
+  String get llmAccountUiAccountHas;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Account saving failed. Please check your account information and secure storage status.'**
+  String get llmAccountUiAccountSaving;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts can participate in their model group routing.'**
+  String get llmAccountUiAccountsCan;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Add LLM account'**
+  String get llmAccountUiAddLLM;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Add model group'**
+  String get llmAccountUiAddModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Amazon Q Developer Region'**
+  String get llmAccountUiAmazonQ;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymous (free models only)'**
+  String get llmAccountUiAnonymousFree;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymous mode only allows openrouter/free. After connecting the account, you can use the models in the account directory.'**
+  String get llmAccountUiAnonymousMode;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Auggie CLI model list did not return catalog; fixed model catalog retained.'**
+  String get llmAccountUiAuggieCLI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Auggie CLI is installed and running.'**
+  String get llmAccountUiAuggieCLIIs;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication method'**
+  String get llmAccountUiAuthenticationMethod;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Available models depend on Openference account plan; offline model catalog does not imply authorization.'**
+  String get llmAccountUiAvailableModels;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'calendar time zone'**
+  String get llmAccountUiCalendarTime;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'calendar window'**
+  String get llmAccountUiCalendarWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Can be left blank to use the project_id from the service account JSON.'**
+  String get llmAccountUiCanBe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'ChatAdapter does not currently support this connector.'**
+  String get llmAccountUiChatAdapterDoes;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'ChatAdapter does not currently support this connector; after saving, the account\'s model group will not appear in the chat and Task Flow model selectors.'**
+  String get llmAccountUiChatAdapterDoesNot;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Check local Codex CLI login status'**
+  String get llmAccountUiCheckLocal;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Zed Keychain?'**
+  String get llmAccountUiCheckZed;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Cline uses fixed service endpoints'**
+  String get llmAccountUiClineUses;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloudflare Workers AI only provides a catalog of verified fixed models.'**
+  String get llmAccountUiCloudflareWorkers;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'CodeBuddy Domestic Device OAuth'**
+  String get llmAccountUiCodeBuddyDomestic;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'CodeBuddy International Device OAuth'**
+  String get llmAccountUiCodeBuddyInternational;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Code review quota remaining'**
+  String get llmAccountUiCodeReview;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Codex CLI is logged in and ready to run.'**
+  String get llmAccountUiCodexCLI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Command Code model capabilities can only be declared by upstream directories.'**
+  String get llmAccountUiCommandCode;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrency limit'**
+  String get llmAccountUiConcurrencyLimit;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection status unknown'**
+  String get llmAccountUiConnectionStatus;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'connection status'**
+  String get llmAccountUiConnectionStatusText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the full path to the devin executable file from the official Devin installation location.'**
+  String get llmAccountUiCopyThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Credentials not imported. The keychain item might have been changed, access was denied, or secure storage is unavailable.'**
+  String get llmAccountUiCredentialsNot;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Credentials'**
+  String get llmAccountUiCredentialsText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-account fallback scope'**
+  String get llmAccountUiCrossAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Current model group'**
+  String get llmAccountUiCurrentModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom OpenAI compatible endpoint'**
+  String get llmAccountUiCustomOpenAI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily quota remaining'**
+  String get llmAccountUiDailyQuota;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'daily'**
+  String get llmAccountUiDailyText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'day window'**
+  String get llmAccountUiDayWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Default API protocol'**
+  String get llmAccountUiDefaultAPI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete model group'**
+  String get llmAccountUiDeleteModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Each account independently saves credentials, model capabilities, quotas, and concurrency strategies. The unknown amount remains unknown.'**
+  String get llmAccountUiEachAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Each Cline API Key needs to be saved as an independent account. The model catalog is refreshed separately by Cline or ClinePass; the catalog itself does not mean that the account has subscription authorization.'**
+  String get llmAccountUiEachCline;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit LLM account'**
+  String get llmAccountUiEditLLM;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint address (fill in if required by the connector)'**
+  String get llmAccountUiEndpointAddress;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Azure OpenAI resource or Azure AI Foundry host; deployment and version are configured separately.'**
+  String get llmAccountUiEnterAzure;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the Qoder Personal Access Token starting with pt-. Called through native qodercli; only text chat is supported, caller tools are not supported, responses will be buffered and returned, with a maximum of 45 seconds for a single request.'**
+  String get llmAccountUiEnterThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to read the model directory, please check the account authentication and connection settings.'**
+  String get llmAccountUiFailedTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save the account, please check the connection settings and try again.'**
+  String get llmAccountUiFailedToSave;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the Account ID on the right side of the Cloudflare Dashboard.'**
+  String get llmAccountUiFindThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed HTTPS API endpoint using Command Code.'**
+  String get llmAccountUiFixedHTTPS;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed HTTPS Chat Completions endpoint using Cline.'**
+  String get llmAccountUiFixedHTTPSChat;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed HTTPS endpoint using Kilo Code model gateway.'**
+  String get llmAccountUiFixedHTTPSEndpoint;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed service endpoint'**
+  String get llmAccountUiFixedService;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'fixed value'**
+  String get llmAccountUiFixedValue;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'For example Asia/Taipei or UTC'**
+  String get llmAccountUiForExample;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Get the User API Key (crsr_… or grok_…) from cursor.com/dashboard/api. Cursor IDE login will not be read.'**
+  String get llmAccountUiGetThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Enterprise Cloud or Server must have Copilot enabled and allow device OAuth. Use the HTTPS instance address; the OAuth application client ID can be provided by the administrator, or left blank to use the public client ID.'**
+  String get llmAccountUiGitHubEnterprise;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'GitLab User Settings → Applications'**
+  String get llmAccountUiGitLabUser;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Cloud project ID'**
+  String get llmAccountUiGoogleCloud;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Google service account'**
+  String get llmAccountUiGoogleService;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Grok Build only opens catalogs of verified subscription models.'**
+  String get llmAccountUiGrokBuild;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Group members under the same model reference must use the same chat protocol.'**
+  String get llmAccountUiGroupMembers;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'5 hour window'**
+  String get llmAccountUiHourWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'5 hours'**
+  String get llmAccountUiHoursText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'I have installed and trusted this executable from Devin official channels'**
+  String get llmAccountUiIHave;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Import API credentials from Zed'**
+  String get llmAccountUiImportAPI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Import this account'**
+  String get llmAccountUiImportThis;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Inherit account default agreement'**
+  String get llmAccountUiInheritAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient upstream quota'**
+  String get llmAccountUiInsufficientUpstream;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep checking'**
+  String get llmAccountUiKeepChecking;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep old session model group'**
+  String get llmAccountUiKeepOld;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kilo Code authorization failed, please try logging in again.'**
+  String get llmAccountUiKiloCode;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kilo Code Device OAuth'**
+  String get llmAccountUiKiloCodeDevice;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kilo Code uses fixed service endpoints'**
+  String get llmAccountUiKiloCodeUses;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kimi Code authorization failed, please try logging in again.'**
+  String get llmAccountUiKimiCode;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kimi Code accounts can only use verified Coding Plan models.'**
+  String get llmAccountUiKimiCodeAccounts;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Kimi Code CLI only opens the verified Coding Plan model directory.'**
+  String get llmAccountUiKimiCodeCLI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM account and model group'**
+  String get llmAccountUiLLMAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'least used'**
+  String get llmAccountUiLeastUsed;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to use the official model catalog and API endpoints for this account type.'**
+  String get llmAccountUiLeaveBlank;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to retain current security credentials'**
+  String get llmAccountUiLeaveBlankTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to indicate no restriction; account and model group are configured separately.'**
+  String get llmAccountUiLeaveBlankToIndicate;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy AI Studio relay (discontinued)'**
+  String get llmAccountUiLegacyAI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy AI Studio web session connections have been retired, please use API Key or supported OAuth instead.'**
+  String get llmAccountUiLegacyAIStudio;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy OAuth (not supported)'**
+  String get llmAccountUiLegacyOAuth;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Local model reference ID'**
+  String get llmAccountUiLocalModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Local observation usage'**
+  String get llmAccountUiLocalObservation;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Local observation usage is unknown (routing record cannot be read)'**
+  String get llmAccountUiLocalObservationUsage;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Local references are used for compatibility with existing session model IDs; account members will only participate in selection within this stable group.'**
+  String get llmAccountUiLocalReferences;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Local statistics for the last 62 days do not represent account balance.'**
+  String get llmAccountUiLocalStatistics;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Log back into the official Devin CLI'**
+  String get llmAccountUiLogBack;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to Trae SOLO within Stroom'**
+  String get llmAccountUiLogIn;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Login callbacks are only received locally and written to the secure credential store; no callback addresses or browsing history are saved.'**
+  String get llmAccountUiLoginCallbacks;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Login Meta Muse Code'**
+  String get llmAccountUiLoginMeta;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Login to Kimi Code CLI'**
+  String get llmAccountUiLoginTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Login to Kilo Code'**
+  String get llmAccountUiLoginToKilo;
+
+  /// Zed keychain import behavior when macOS denies an item request.
+  ///
+  /// In en, this message translates to:
+  /// **'If macOS denies a keychain request, that entry is skipped.'**
+  String get llmAccountUiMacOSDenied;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'macOS may ask, item by item, whether to allow Stroom to check for matching keychain entries when generating an importable manifest.'**
+  String get llmAccountUiMacOSMay;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Main window balance remaining'**
+  String get llmAccountUiMainWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Meta Muse authorization failed, please try logging in again.'**
+  String get llmAccountUiMetaMuse;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Meta Muse OAuth only opens the model directory obtained by the subscription account from the API.'**
+  String get llmAccountUiMetaMuseOAuth;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model API protocol'**
+  String get llmAccountUiModelAPI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group deletion failed.'**
+  String get llmAccountUiModelGroup;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group local cumulative usage: unknown'**
+  String get llmAccountUiModelGroupLocal;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group local cumulative usage: unknown (routing record cannot be read)'**
+  String get llmAccountUiModelGroupLocalCumulative;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group name'**
+  String get llmAccountUiModelGroupName;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'model group'**
+  String get llmAccountUiModelGroupText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Model ID and context length come from a fixed catalog; other capabilities remain unknown.'**
+  String get llmAccountUiModelID;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'model to configure'**
+  String get llmAccountUiModelTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Models and Capabilities'**
+  String get llmAccountUiModelsAnd;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Models and capabilities come from the upstream directory; above for each model, select the API protocols it declares to support.'**
+  String get llmAccountUiModelsAndCapabilities;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Models come from the Kilo Code directory; API Key and Device OAuth use their own saved credentials.'**
+  String get llmAccountUiModelsCome;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Models come from Cline\'s Chat Completions catalog; availability is determined by corresponding account and subscription.'**
+  String get llmAccountUiModelsComeFrom;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'month window'**
+  String get llmAccountUiMonthWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly quota remaining'**
+  String get llmAccountUiMonthlyQuota;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'monthly'**
+  String get llmAccountUiMonthlyText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Native compatible endpoint, no credentials'**
+  String get llmAccountUiNativeCompatible;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key is required; the optional key is used for identification only.'**
+  String get llmAccountUiNoAPI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'No certification'**
+  String get llmAccountUiNoCertification;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'No local records (last 62 days)'**
+  String get llmAccountUiNoLocal;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'No readable Zed OpenAI, Anthropic, Google, Mistral or xAI credentials found.'**
+  String get llmAccountUiNoReadable;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'No record'**
+  String get llmAccountUiNoRecord;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Official Devin CLI independent login'**
+  String get llmAccountUiOfficialDevin;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Official Devin CLI executable absolute path'**
+  String get llmAccountUiOfficialDevinCLI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Old session reference required member'**
+  String get llmAccountUiOldSession;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'One per line: model ID, streaming, vision, tools'**
+  String get llmAccountUiOnePer;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Only launch the official devin CLI. The login configuration is saved in the Stroom application directory independent of this account; the host Devin login or API key will not be read.'**
+  String get llmAccountUiOnlyLaunch;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Only saved in platform secure storage; can be left blank for public clients.'**
+  String get llmAccountUiOnlySaved;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Only stored in platform secure storage.'**
+  String get llmAccountUiOnlyStored;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Kilo Code'**
+  String get llmAccountUiOpenKilo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Kimi'**
+  String get llmAccountUiOpenKimi;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Meta'**
+  String get llmAccountUiOpenMeta;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Kimi verification page and enter the code below. After the authorization is completed, Stroom will automatically save the account.'**
+  String get llmAccountUiOpenThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Kilo Code verification page and enter the code. After the authorization is completed, Stroom will automatically save the account.'**
+  String get llmAccountUiOpenTheKilo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Meta verification page and enter the code below. After the authorization is completed, Stroom will automatically save the account.'**
+  String get llmAccountUiOpenTheMeta;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Open verification page'**
+  String get llmAccountUiOpenVerification;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste Cloud-IDE-JWT'**
+  String get llmAccountUiPasteCloud;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the JWT itself or the complete “Cloud-IDE-JWT <token>” request header value. Import tokens are not automatically refreshed; credentials for in-app Trae logins are automatically refreshed when they expire.'**
+  String get llmAccountUiPasteThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Percentage'**
+  String get llmAccountUiPercentageText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please add models to your account first, and then create a model group.'**
+  String get llmAccountUiPleaseAdd;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please confirm that this executable file comes from Devin official installation channel.'**
+  String get llmAccountUiPleaseConfirm;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an account name.'**
+  String get llmAccountUiPleaseEnter;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid HTTPS Qoder OAuth admin endpoint.'**
+  String get llmAccountUiPleaseEnterA;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid Azure HTTPS resource host, deployment ID, and API version.'**
+  String get llmAccountUiPleaseEnterAValid;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid Amazon Q OAuth credentials JSON and supported region.'**
+  String get llmAccountUiPleaseEnterAValidAmazon;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid Cloudflare Account ID.'**
+  String get llmAccountUiPleaseEnterAValidCloudflare;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid GitHub Enterprise HTTPS instance address.'**
+  String get llmAccountUiPleaseEnterAValidGitHub;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter QODER_OAUTH_CLIENT_ID and client secret.'**
+  String get llmAccountUiPleaseEnterQODER;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter the Cursor User API Key starting with crsr_.'**
+  String get llmAccountUiPleaseEnterThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter the Amazon Q credentials JSON containing the AWS Builder ID refresh token.'**
+  String get llmAccountUiPleaseEnterTheAmazon;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your GitLab Duo OAuth client ID.'**
+  String get llmAccountUiPleaseEnterYour;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your credentials.'**
+  String get llmAccountUiPleaseEnterYourCredentials;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please fill in the full path to the official Devin CLI executable.'**
+  String get llmAccountUiPleaseFill;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please provide the Google OAuth Desktop client ID and corresponding client secret.'**
+  String get llmAccountUiPleaseProvide;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please refresh the model directory first and select the protocol in its supportedApiProtocols.'**
+  String get llmAccountUiPleaseRefresh;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a supported authentication method before saving this account.'**
+  String get llmAccountUiPleaseSelect;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'polling'**
+  String get llmAccountUiPollingText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Prioritize consumption of lower balances'**
+  String get llmAccountUiPrioritizeConsumption;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Prioritize higher balances'**
+  String get llmAccountUiPrioritizeHigher;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'provider'**
+  String get llmAccountUiProviderText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Qoder administrator configures OAuth'**
+  String get llmAccountUiQoderAdministrator;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Qoder OAuth requires the service administrator to provide the complete OAuth authorize, token, user-info URL, and client credentials. Only the DashScope API key and sensitive OAuth credentials are saved in platform secure storage after authorization; browser cookies are not used. Refresh grant is not defined upstream; please reauthorize if credentials expire.'**
+  String get llmAccountUiQoderOAuth;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota and Concurrency Strategy'**
+  String get llmAccountUiQuotaAnd;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota and fallback strategy'**
+  String get llmAccountUiQuotaAndFallback;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota and usage limit must be non-negative; percentage cannot exceed 100.'**
+  String get llmAccountUiQuotaAndUsage;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Qwen Cloud region ID'**
+  String get llmAccountUiQwenCloud;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-authentication required'**
+  String get llmAccountUiReAuthentication;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'ready'**
+  String get llmAccountUiReadyText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Reauthenticate the standalone CLI login configuration for this account.'**
+  String get llmAccountUiReauthenticateThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh model directory'**
+  String get llmAccountUiRefreshModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining credit line'**
+  String get llmAccountUiRemainingCredit;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove member'**
+  String get llmAccountUiRemoveMember;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Request canceled'**
+  String get llmAccountUiRequestCanceled;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Request'**
+  String get llmAccountUiRequestText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrust current CLI executable and update SHA-256'**
+  String get llmAccountUiRetrustCurrent;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'rolling window'**
+  String get llmAccountUiRollingWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'SOLO uses a fixed Trae service endpoint; only send Cloud-IDE-JWT to that endpoint. Pasted tokens will need to be re-entered approximately 14 days later.'**
+  String get llmAccountUiSOLOUses;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Same connector account'**
+  String get llmAccountUiSameConnector;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Same priority selection'**
+  String get llmAccountUiSamePriority;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved in platform secure storage'**
+  String get llmAccountUiSavedIn;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Service account JSON'**
+  String get llmAccountUiServiceAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Service provider default'**
+  String get llmAccountUiServiceProvider;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'session token'**
+  String get llmAccountUiSessionToken;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable model groups map legacy session model IDs to optional accounts and upstream models. Members can only roll back within this group.'**
+  String get llmAccountUiStableModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom Devin CLI login configuration created separately for this account'**
+  String get llmAccountUiStroomDevin;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom fixes the SHA-256 of the current file; refuses to start if the file is changed.'**
+  String get llmAccountUiStroomFixes;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom will reread and verify the credential after confirmation. The key will not be displayed in the interface.'**
+  String get llmAccountUiStroomWill;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit to platform secure storage only; leave blank to preserve existing OAuth client secret.'**
+  String get llmAccountUiSubmitTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe to OAuth'**
+  String get llmAccountUiSubscribeTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspended'**
+  String get llmAccountUiSuspendedText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Test the local Auggie CLI'**
+  String get llmAccountUiTestThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The ability is explicitly declared; use vision=false to explicitly disable it, and leave it unknown if not filled in.'**
+  String get llmAccountUiTheAbility;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The account has been deleted, but the cleanup of the old configuration failed.'**
+  String get llmAccountUiTheAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The account has been suspended and will not participate in routing.'**
+  String get llmAccountUiTheAccountHas;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The account needs to be re-authenticated before it can participate in routing.'**
+  String get llmAccountUiTheAccountNeeds;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The account or model group cannot be read.'**
+  String get llmAccountUiTheAccountOr;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The account was deleted, but the OAuth revocation failed. Please go to the provider account settings to revoke the authorization.'**
+  String get llmAccountUiTheAccountWas;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The calendar window needs to be filled in with the time zone.'**
+  String get llmAccountUiTheCalendar;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The concurrency upper limit must be a positive integer, or left blank to indicate no limit.'**
+  String get llmAccountUiTheConcurrency;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection status is unknown; the route can still try to request, please update the status according to the request result.'**
+  String get llmAccountUiTheConnection;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The corresponding members and local reference IDs of the old session model references need to be retained.'**
+  String get llmAccountUiTheCorresponding;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The default value is configured according to the Azure model catalog.'**
+  String get llmAccountUiTheDefault;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The deployment ID will be used as the account\'s unique upstream model ID.'**
+  String get llmAccountUiTheDeployment;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The legacy AI Studio relay has been retired; please use API Key or supported OAuth instead.'**
+  String get llmAccountUiTheLegacy;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The legacy AI Studio web session connection has been retired. Please select an API Key or a supported OAuth and reauthorize.'**
+  String get llmAccountUiTheLegacyAI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The model group failed to save. Please confirm that the corresponding upstream model exists in the member account.'**
+  String get llmAccountUiTheModel;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The model directory can be refreshed after saving the account and modifications.'**
+  String get llmAccountUiTheModelDirectory;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The model group currently has no members.'**
+  String get llmAccountUiTheModelGroup;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The optional AI Horde API Key only increases the queuing priority (kudos) and does not increase model permissions. Select \"No authentication\" to use anonymous mode.'**
+  String get llmAccountUiTheOptional;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The partner model requires a project ID; the service account can be automatically read from the JSON\'s project_id.'**
+  String get llmAccountUiThePartner;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The remaining amount of the sub-window'**
+  String get llmAccountUiTheRemaining;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The routing policy failed to be saved.'**
+  String get llmAccountUiTheRouting;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected CLI path is invalid or not executable.'**
+  String get llmAccountUiTheSelected;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no routable account members'**
+  String get llmAccountUiThereAre;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'This account\'s model group will not appear in chat and Task Flow model selectors.'**
+  String get llmAccountUiThisAccount;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'This authentication method does not require entering credentials'**
+  String get llmAccountUiThisAuthentication;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'This step will not save the account; you still need to confirm the accounts you want to import one by one later.'**
+  String get llmAccountUiThisStep;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Trae The login is not completed, please try again or use Cloud-IDE-JWT to import manually.'**
+  String get llmAccountUiTraeThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read system keychain. Please check your system keychain access permissions and try again.'**
+  String get llmAccountUiUnableTo;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'UncloseAI uses fixed OpenAI Chat Completions endpoint'**
+  String get llmAccountUiUncloseAIUses;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'unit'**
+  String get llmAccountUiUnitText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream authentication failed'**
+  String get llmAccountUiUpstreamAuthentication;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream connection failed'**
+  String get llmAccountUiUpstreamConnection;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream models and capabilities'**
+  String get llmAccountUiUpstreamModels;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream rejects request'**
+  String get llmAccountUiUpstreamRejects;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream request failed'**
+  String get llmAccountUiUpstreamRequest;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream requests are limited'**
+  String get llmAccountUiUpstreamRequests;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream service error'**
+  String get llmAccountUiUpstreamService;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the native Codex CLI. Please run codex login in the terminal first; Stroom does not read or save CLI login data.'**
+  String get llmAccountUiUseThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the native ZCode app-server and GLM Coding Plan. Please log in in the official ZCode app first if needed; Stroom does not read or save ZCode login data.'**
+  String get llmAccountUiUseTheNative;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'User-provided upstream API Key'**
+  String get llmAccountUiUserProvided;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Using the AWS default credential chain for the run environment'**
+  String get llmAccountUiUsingThe;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertex AI Partners requires a valid Google Cloud project and a service account with permissions; Express API Key only supports Gemini.'**
+  String get llmAccountUiVertexAI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertex AI Partners requires a valid project ID; the service account can be read from JSON, and the API Key must be bound to the project.'**
+  String get llmAccountUiVertexAIPartners;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertex area'**
+  String get llmAccountUiVertexArea;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly quota remaining'**
+  String get llmAccountUiWeeklyQuota;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'weekly'**
+  String get llmAccountUiWeeklyText;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'weekly window'**
+  String get llmAccountUiWeeklyWindow;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Window usage limit'**
+  String get llmAccountUiWindowUsage;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'WorkBuddy CLI Device OAuth'**
+  String get llmAccountUiWorkBuddyCLI;
+
+  /// Account management UI copy.
+  ///
+  /// In en, this message translates to:
+  /// **'xAI OAuth only opens the model directory obtained by the account from the API.'**
+  String get llmAccountUiXAIOAuth;
+
+  /// No description provided for @llmAccountUnavailableInSelectors.
+  ///
+  /// In en, this message translates to:
+  /// **'Models from this account will not appear in Chat or Task Flow selectors.'**
+  String get llmAccountUnavailableInSelectors;
+
+  /// Quota policy threshold summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage ceiling for {window}: {threshold}'**
+  String llmAccountUsageCeilingThreshold(String window, String threshold);
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining'**
+  String get llmAccountUsageRemainingLabel;
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get llmAccountUsageTotalLabel;
+
+  /// Account usage and capability labels.
+  ///
+  /// In en, this message translates to:
+  /// **'Used'**
+  String get llmAccountUsageUsedLabel;
+
+  /// No description provided for @llmAccountUseModelGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Use model group routing'**
+  String get llmAccountUseModelGroup;
+
+  /// No description provided for @llmAccountsSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Each account stores its own credentials, model capabilities, quota, and concurrency policy. Unknown quota stays unknown.'**
+  String get llmAccountsSummary;
+
+  /// No description provided for @llmAccountsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get llmAccountsTab;
+
+  /// No description provided for @llmAddMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Add member'**
+  String get llmAddMember;
+
+  /// No description provided for @llmAddModelGroupMemberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add model-group member'**
+  String get llmAddModelGroupMemberTitle;
+
+  /// No description provided for @llmAddModelGroupTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add model group'**
+  String get llmAddModelGroupTooltip;
+
+  /// No description provided for @llmAmazonQOAuthPrerequisites.
+  ///
+  /// In en, this message translates to:
+  /// **'Import AWS Builder ID OAuth credential JSON with a refresh_token; access_token, clientId, and clientSecret are optional. If client credentials are missing, Stroom registers a client through AWS OIDC to refresh the token. Tokens go directly to secure storage; browser cookies are not read. Supported regions: us-east-1 and eu-central-1.'**
+  String get llmAmazonQOAuthPrerequisites;
+
+  /// No description provided for @llmAmazonQRegionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amazon Q Developer region'**
+  String get llmAmazonQRegionLabel;
+
+  /// No description provided for @llmAuthenticationMethodLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication method'**
+  String get llmAuthenticationMethodLabel;
+
+  /// No description provided for @llmAuthorizationSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization source: {source}'**
+  String llmAuthorizationSource(Object source);
+
+  /// Azure account API version field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Azure API version'**
+  String get llmAzureApiVersionLabel;
+
+  /// Azure account deployment field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Azure deployment ID'**
+  String get llmAzureDeploymentIdLabel;
+
+  /// No description provided for @llmAzureApiVersionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The default follows the Azure model catalog configuration.'**
+  String get llmAzureApiVersionHelp;
+
+  /// No description provided for @llmAzureDeploymentIdHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The deployment ID is used as this account’s unique upstream model ID.'**
+  String get llmAzureDeploymentIdHelp;
+
+  /// No description provided for @llmCalendarTimezoneLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Calendar time zone'**
+  String get llmCalendarTimezoneLabel;
+
+  /// No description provided for @llmCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get llmCancel;
+
+  /// No description provided for @llmCheckLocalCodexCli.
+  ///
+  /// In en, this message translates to:
+  /// **'Check local Codex CLI sign-in'**
+  String get llmCheckLocalCodexCli;
+
+  /// No description provided for @llmCheckZedKeychain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Zed keychain?'**
+  String get llmCheckZedKeychain;
+
+  /// No description provided for @llmCliReady.
+  ///
+  /// In en, this message translates to:
+  /// **'{cli} CLI is installed and ready.'**
+  String llmCliReady(Object cli);
+
+  /// No description provided for @llmCloudflareAccountIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the Account ID on the right side of the Cloudflare dashboard.'**
+  String get llmCloudflareAccountIdHint;
+
+  /// No description provided for @llmCloudflareAccountIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloudflare account ID'**
+  String get llmCloudflareAccountIdLabel;
+
+  /// No description provided for @llmCodexCliReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Codex CLI is signed in and ready.'**
+  String get llmCodexCliReady;
+
+  /// No description provided for @llmConcurrencyLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrency limit'**
+  String get llmConcurrencyLimitLabel;
+
+  /// No description provided for @llmConfigureModelLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model to configure'**
+  String get llmConfigureModelLabel;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{account}” and remove the account from model groups?'**
+  String llmConfirmDeleteAccount(String account);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{account}”, revoke its OAuth authorization, and remove the account from model groups?'**
+  String llmConfirmDeleteAccountWithOAuth(String account);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete routing for “{group}”? Existing conversation model references will not be changed.'**
+  String llmConfirmDeleteModelGroup(String group);
+
+  /// No description provided for @llmConnectionStatusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection status'**
+  String get llmConnectionStatusLabel;
+
+  /// No description provided for @llmConnectorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Connector'**
+  String get llmConnectorLabel;
+
+  /// No description provided for @llmConnectorUnavailableForChat.
+  ///
+  /// In en, this message translates to:
+  /// **'This connector is not supported by Chat.'**
+  String get llmConnectorUnavailableForChat;
+
+  /// No description provided for @llmContinueKeychainScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue scan'**
+  String get llmContinueKeychainScan;
+
+  /// No description provided for @llmDefaultApiProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default API protocol'**
+  String get llmDefaultApiProtocolLabel;
+
+  /// No description provided for @llmDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get llmDelete;
+
+  /// No description provided for @llmDevinExecutablePathHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the full path to the Devin executable from its official installation location.'**
+  String get llmDevinExecutablePathHelp;
+
+  /// No description provided for @llmDevinExecutablePathLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Official Devin CLI executable path'**
+  String get llmDevinExecutablePathLabel;
+
+  /// No description provided for @llmDevinReauthSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reauthenticate this account’s separate CLI sign-in.'**
+  String get llmDevinReauthSubtitle;
+
+  /// No description provided for @llmDevinReauthTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to the official Devin CLI again'**
+  String get llmDevinReauthTitle;
+
+  /// No description provided for @llmEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get llmEdit;
+
+  /// No description provided for @llmExecutableIntegrityHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom records the SHA-256 of this file and will refuse to start it if the file changes.'**
+  String get llmExecutableIntegrityHint;
+
+  /// No description provided for @llmFallbackScopeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-account fallback scope'**
+  String get llmFallbackScopeLabel;
+
+  /// No description provided for @llmGitlabApplicationsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'GitLab user settings → Applications'**
+  String get llmGitlabApplicationsHint;
+
+  /// No description provided for @llmGitlabOAuthPrerequisites.
+  ///
+  /// In en, this message translates to:
+  /// **'GitLab Duo OAuth requires a registered GitLab application with callback http://localhost:20128/callback and ai_features read_user permission. Enter its client ID and, when required by the app type, its client secret. Tokens are stored securely and refreshed when supported. A PAT can be selected separately.'**
+  String get llmGitlabOAuthPrerequisites;
+
+  /// No description provided for @llmGoogleCloudProjectLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Cloud project ID'**
+  String get llmGoogleCloudProjectLabel;
+
+  /// No description provided for @llmGoogleOAuthPrerequisites.
+  ///
+  /// In en, this message translates to:
+  /// **'This uses Google Generative Language API OAuth. It requires a Google Cloud project you manage, the Generative Language API enabled, and a configured Desktop OAuth client. Requests are billed to that project; this does not use Code Assist or AI Studio web sign-in.'**
+  String get llmGoogleOAuthPrerequisites;
+
+  /// No description provided for @llmGroupFallbackWithinMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'The saved group only permits fallback among its members.'**
+  String get llmGroupFallbackWithinMembers;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'{upstream} · Priority {priority} · Local ID {localId}'**
+  String llmGroupMemberSummary(String upstream, int priority, String localId);
+
+  /// No description provided for @llmGroupUsageSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Group usage: {usage}'**
+  String llmGroupUsageSummary(Object usage);
+
+  /// No description provided for @llmImportCredentialsConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import {provider} credentials?'**
+  String llmImportCredentialsConfirmTitle(Object provider);
+
+  /// LLM account import and route diagnostic text.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count} account(s). Remaining credentials were not imported because the keychain item changed, access was denied, or secure storage is unavailable.'**
+  String llmImportStoppedAfterCredentialFailure(int count);
+
+  /// LLM account import and route diagnostic text.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count} account(s), but syncing the legacy configuration failed.'**
+  String llmImportStoppedAfterLegacySyncFailure(int count);
+
+  /// No description provided for @llmImportThisAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Import this account'**
+  String get llmImportThisAccount;
+
+  /// No description provided for @llmImportZedCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Import API credentials from Zed'**
+  String get llmImportZedCredentials;
+
+  /// No description provided for @llmImportedAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Safely imported {count} provider accounts.'**
+  String llmImportedAccounts(Object count);
+
+  /// No description provided for @llmKeepLegacyGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep model group for older conversations'**
+  String get llmKeepLegacyGroup;
+
+  /// No description provided for @llmKeepOAuthClientSecretHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored only in secure platform storage; leave empty to keep the current OAuth client secret.'**
+  String get llmKeepOAuthClientSecretHelp;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Import “{account}” from the local keychain into a Stroom {provider} API account.'**
+  String llmKeychainImportAccountSource(String account, String provider);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'This updates the Stroom account key and keeps its name, models, and routing settings.'**
+  String get llmKeychainImportExistingAccountNotice;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'After you confirm, Stroom rereads and verifies the credential. The key is never shown in the interface.'**
+  String get llmKeychainImportSecurityNote;
+
+  /// LLM account import and route diagnostic text.
+  ///
+  /// In en, this message translates to:
+  /// **'Last account attempted'**
+  String get llmLastAttemptedAccount;
+
+  /// No description provided for @llmLastRouteHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Last route'**
+  String get llmLastRouteHeading;
+
+  /// No description provided for @llmLegacyMemberRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A member is required to preserve the legacy conversation model reference and local model ID.'**
+  String get llmLegacyMemberRequired;
+
+  /// No description provided for @llmLocalObservedUsageHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Locally observed usage'**
+  String get llmLocalObservedUsageHeading;
+
+  /// No description provided for @llmMembersHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Members'**
+  String get llmMembersHeading;
+
+  /// No description provided for @llmMixedGroupProtocolError.
+  ///
+  /// In en, this message translates to:
+  /// **'All members for one model reference must use the same chat protocol.'**
+  String get llmMixedGroupProtocolError;
+
+  /// No description provided for @llmModelApiProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model API protocol'**
+  String get llmModelApiProtocolLabel;
+
+  /// No description provided for @llmModelCapabilitiesInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'One per line: model ID,streaming,vision,tools'**
+  String get llmModelCapabilitiesInputHint;
+
+  /// No description provided for @llmModelGroupNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group name'**
+  String get llmModelGroupNameLabel;
+
+  /// No description provided for @llmModelGroupSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Model group settings'**
+  String get llmModelGroupSettings;
+
+  /// No description provided for @llmModelGroupsSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable model groups map Stroom model names to accounts and upstream models. Fallback stays within the group.'**
+  String get llmModelGroupsSummary;
+
+  /// No description provided for @llmModelGroupsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Model groups'**
+  String get llmModelGroupsTab;
+
+  /// No description provided for @llmModelsCapabilitiesHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Models and capabilities'**
+  String get llmModelsCapabilitiesHeading;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'No account can handle {model}.'**
+  String llmNoAccountCanProcessModel(String model);
+
+  /// No description provided for @llmNoGroupMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'No members in this model group.'**
+  String get llmNoGroupMembers;
+
+  /// No description provided for @llmNoModelGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'No model groups yet.'**
+  String get llmNoModelGroups;
+
+  /// No description provided for @llmNoModelsConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No models configured'**
+  String get llmNoModelsConfigured;
+
+  /// No description provided for @llmNoRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'No record'**
+  String get llmNoRecord;
+
+  /// No description provided for @llmNoRoutableMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'No routable account members'**
+  String get llmNoRoutableMembers;
+
+  /// No description provided for @llmOAuthInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {provider} authorization and enter the code below. Stroom saves the account after authorization.'**
+  String llmOAuthInstructions(Object provider);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'{limitation}\nSelect a supported authentication method before saving this account.'**
+  String llmOAuthLimitationSaveMessage(String limitation);
+
+  /// No description provided for @llmOcrAccountMigrationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR account migration failed. The original configuration is still available.'**
+  String get llmOcrAccountMigrationFailed;
+
+  /// No description provided for @llmOcrAccountSyncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR account sync failed. Check the settings in account management.'**
+  String get llmOcrAccountSyncFailed;
+
+  /// No description provided for @llmOpenProviderAuthorization.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {provider}'**
+  String llmOpenProviderAuthorization(Object provider);
+
+  /// No description provided for @llmOpenferenceCatalogNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Available models depend on the Openference account plan. An offline catalog does not grant access.'**
+  String get llmOpenferenceCatalogNote;
+
+  /// No description provided for @llmPriorityTierLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority tier'**
+  String get llmPriorityTierLabel;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Tier {tier}'**
+  String llmPriorityTierValue(int tier);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} authorization failed. Please start sign-in again.'**
+  String llmProviderAuthorizationFailed(String provider);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Credentials provided by {provider}'**
+  String llmProviderCredential(String provider);
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Enterprise credentials provided by {provider}'**
+  String llmProviderEnterpriseCredentials(String provider);
+
+  /// No description provided for @llmProviderPresetLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider preset'**
+  String get llmProviderPresetLabel;
+
+  /// LLM account management UI text.
+  ///
+  /// In en, this message translates to:
+  /// **'Session token provided by {provider}'**
+  String llmProviderSessionToken(String provider);
+
+  /// No description provided for @llmPublicOauthClientSecretHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored only in secure platform storage; public clients may leave this empty.'**
+  String get llmPublicOauthClientSecretHelp;
+
+  /// No description provided for @llmQuotaConcurrencyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota and concurrency policy'**
+  String get llmQuotaConcurrencyPolicy;
+
+  /// No description provided for @llmQuotaLimitsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota limits'**
+  String get llmQuotaLimitsHeading;
+
+  /// No description provided for @llmQuotaUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota unknown'**
+  String get llmQuotaUnknown;
+
+  /// No description provided for @llmQwenCloudRegionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The API key is tied to a region. Supported: ap-southeast-1, cn-beijing, eu-central-1, cn-hongkong, ap-northeast-1, us-east-1.'**
+  String get llmQwenCloudRegionHelp;
+
+  /// No description provided for @llmQwenCloudRegionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Qwen Cloud region ID'**
+  String get llmQwenCloudRegionLabel;
+
+  /// No description provided for @llmReauthorize.
+  ///
+  /// In en, this message translates to:
+  /// **'Reauthorize'**
+  String get llmReauthorize;
+
+  /// No description provided for @llmRefreshModelCatalog.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh model catalog'**
+  String get llmRefreshModelCatalog;
+
+  /// No description provided for @llmRemainingQuotaFloorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum remaining quota'**
+  String get llmRemainingQuotaFloorLabel;
+
+  /// LLM account import and route diagnostic text.
+  ///
+  /// In en, this message translates to:
+  /// **'This request used account'**
+  String get llmRequestUsedAccount;
+
+  /// No description provided for @llmRetryLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get llmRetryLoad;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid account ID'**
+  String get llmRouteDecisionAccountIdInvalid;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deleted'**
+  String get llmRouteDecisionAccountMissing;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Account has been suspended or needs to be re-authenticated'**
+  String get llmRouteDecisionAccountUnavailable;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The balance has reached or fallen below the reserve line'**
+  String get llmRouteDecisionBalanceAtOrBelowReserve;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota unknown or units of measurement not comparable'**
+  String get llmRouteDecisionBalanceUnknownOrIncomparable;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The account model does not support the capabilities required for this request'**
+  String get llmRouteDecisionCapabilityMismatch;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The account or model group has reached the concurrency limit'**
+  String get llmRouteDecisionConcurrencyLimit;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection status unknown'**
+  String get llmRouteDecisionConnectionUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The connector protocol does not apply to this chat model'**
+  String get llmRouteDecisionConnectorProtocolIncompatible;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid conversation ID; session affinity not used'**
+  String get llmRouteDecisionConversationIdInvalid;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The account is still in the fault cooldown period'**
+  String get llmRouteDecisionCooldown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Route according to the account selected by the user'**
+  String get llmRouteDecisionExplicitAccountSelection;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The fallback range does not allow switching to this connector'**
+  String get llmRouteDecisionFallbackScope;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid quota window time zone configuration'**
+  String get llmRouteDecisionInvalidWindowTimezone;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'This model is associated with multiple model groups at the same time'**
+  String get llmRouteDecisionModelGroupAmbiguous;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'No stable model group found for this model'**
+  String get llmRouteDecisionModelGroupMissing;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The account is not mapped to the selected model'**
+  String get llmRouteDecisionModelMappingMismatch;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The corresponding upstream model cannot be found in the account'**
+  String get llmRouteDecisionModelNotMapped;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream rejected the authentication'**
+  String get llmRouteDecisionRequestAuthentication;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Request canceled'**
+  String get llmRouteDecisionRequestCancelled;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to upstream'**
+  String get llmRouteDecisionRequestConnection;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream rejected the request parameters'**
+  String get llmRouteDecisionRequestInvalidRequest;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream request failed'**
+  String get llmRouteDecisionRequestOther;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream reports that the quota has been exhausted'**
+  String get llmRouteDecisionRequestQuotaExhausted;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream flow control'**
+  String get llmRouteDecisionRequestRateLimited;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream service error'**
+  String get llmRouteDecisionRequestServer;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The remaining limit is unknown, so the reserve line cannot be determined'**
+  String get llmRouteDecisionReserveBalanceUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The remaining quota is below the reserve line'**
+  String get llmRouteDecisionReserveFloor;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The remaining credit limit is below the reserve line'**
+  String get llmRouteDecisionReserveFloorReached;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The usage of requests in progress is unknown, so the reserve line cannot be determined.'**
+  String get llmRouteDecisionReserveInFlightUsageUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The total quota amount is unknown, so the reserve line cannot be calculated'**
+  String get llmRouteDecisionReserveTotalUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Total limit amount is unknown or not comparable'**
+  String get llmRouteDecisionReserveTotalUnknownOrIncomparable;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The unit of measurement for the reserve line is unknown or not comparable'**
+  String get llmRouteDecisionReserveUnitUnknownOrIncomparable;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The estimated request usage is unknown, so the reserve line cannot be determined.'**
+  String get llmRouteDecisionReserveUsageEstimateUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected account does not belong to the current model group'**
+  String get llmRouteDecisionSelectedAccountOutsideGroup;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the most recent successful account from this conversation'**
+  String get llmRouteDecisionSessionAffinity;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Account continuity could not be saved this time'**
+  String get llmRouteDecisionSessionAffinityPersistenceFailed;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage limit reached'**
+  String get llmRouteDecisionUsageCeiling;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage limit reached'**
+  String get llmRouteDecisionUsageCeilingReached;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The total amount used is unknown, so the upper limit cannot be determined'**
+  String get llmRouteDecisionUsageCeilingTotalUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The estimated usage of the request is unknown, and the upper limit cannot be determined'**
+  String get llmRouteDecisionUsageEstimateUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The usage of the request in progress is unknown, and the upper limit cannot be determined'**
+  String get llmRouteDecisionUsageInFlightUnknown;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'The usage amount does not match the data source of the quota'**
+  String get llmRouteDecisionUsageSourceMismatch;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage measurement units do not match'**
+  String get llmRouteDecisionUsageUnitMismatch;
+
+  /// Route diagnostic reason shown on account/model-group cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage unknown, unable to determine limit'**
+  String get llmRouteDecisionUsageUnknown;
+
+  /// No description provided for @llmRoutingPolicyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Routing policy for {target}'**
+  String llmRoutingPolicyTitle(Object target);
+
+  /// No description provided for @llmSamePrioritySelectionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Selection among same-priority accounts'**
+  String get llmSamePrioritySelectionLabel;
+
+  /// No description provided for @llmSamePriorityStrategySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Same-priority policy: {strategy}'**
+  String llmSamePriorityStrategySummary(Object strategy);
+
+  /// No description provided for @llmSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get llmSave;
+
+  /// No description provided for @llmSaveBeforeModelRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Save the account and its changes before refreshing the model catalog.'**
+  String get llmSaveBeforeModelRefresh;
+
+  /// No description provided for @llmSavePolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Save policy'**
+  String get llmSavePolicy;
+
+  /// No description provided for @llmSignInProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to {provider}'**
+  String llmSignInProvider(Object provider);
+
+  /// No description provided for @llmStableModelGroupHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The local model ID preserves compatibility with existing conversations. Fallback stays within this stable group.'**
+  String get llmStableModelGroupHelp;
+
+  /// No description provided for @llmStableModelIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable Stroom model ID'**
+  String get llmStableModelIdLabel;
+
+  /// No description provided for @llmSupportedAuthRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a supported authentication method before saving this account.'**
+  String get llmSupportedAuthRequired;
+
+  /// No description provided for @llmTestLocalCli.
+  ///
+  /// In en, this message translates to:
+  /// **'Test local {cli} CLI'**
+  String llmTestLocalCli(Object cli);
+
+  /// No description provided for @llmTraeCallbackPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'The sign-in callback is received only on this device and saved to secure credential storage. The callback URL and browsing history are not saved.'**
+  String get llmTraeCallbackPrivacy;
+
+  /// No description provided for @llmTraeTokenSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Trae SOLO uses its fixed service endpoint and sends only the Cloud-IDE-JWT token to that endpoint. Imported tokens expire after about 14 days and must be entered again.'**
+  String get llmTraeTokenSecurity;
+
+  /// No description provided for @llmTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get llmTypeLabel;
+
+  /// No description provided for @llmUpstreamModelLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream model'**
+  String get llmUpstreamModelLabel;
+
+  /// No description provided for @llmUpstreamModelsCapabilitiesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream models and capabilities'**
+  String get llmUpstreamModelsCapabilitiesLabel;
+
+  /// No description provided for @llmUsageHistoryDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Local statistics for the last 62 days; these do not represent the provider balance.'**
+  String get llmUsageHistoryDisclaimer;
+
+  /// No description provided for @llmUsageQuotaHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage and quota'**
+  String get llmUsageQuotaHeading;
+
+  /// No description provided for @llmValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get llmValueLabel;
+
+  /// No description provided for @llmWindowModeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Window mode'**
+  String get llmWindowModeLabel;
+
+  /// No description provided for @llmWindowUsageCeilingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Window usage ceiling'**
+  String get llmWindowUsageCeilingLabel;
+
+  /// No description provided for @traeAuthorizationLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the sign-in page. Cancel and try again.'**
+  String get traeAuthorizationLoadError;
+
+  /// No description provided for @traeAuthorizationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Trae SOLO'**
+  String get traeAuthorizationTitle;
+
+  /// No description provided for @unifiedTaskListBulkRetryResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk retry finished: {succeeded} started, {failed} failed.'**
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed);
+
+  /// No description provided for @unifiedTaskListClearCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cancelled Task Flow runs'**
+  String get unifiedTaskListClearCancelled;
+
+  /// No description provided for @unifiedTaskListConfirmClearCancelledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all {count} cancelled Task Flow runs and their generated tasks? This action cannot be undone.'**
+  String unifiedTaskListConfirmClearCancelledMessage(int count);
+
+  /// No description provided for @unifiedTaskListConfirmRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Task Flow retry'**
+  String get unifiedTaskListConfirmRetry;
+
+  /// No description provided for @unifiedTaskListConfirmRetryCancelledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all {count} cancelled Task Flow runs? Original runs will be kept.'**
+  String unifiedTaskListConfirmRetryCancelledMessage(int count);
+
+  /// No description provided for @unifiedTaskListConfirmRetryFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all {count} failed Task Flow runs? Original runs will be kept.'**
+  String unifiedTaskListConfirmRetryFailedMessage(int count);
+
+  /// No description provided for @unifiedTaskListRetryCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry cancelled Task Flow runs'**
+  String get unifiedTaskListRetryCancelled;
+
+  /// No description provided for @unifiedTaskListRetryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry failed Task Flow runs'**
+  String get unifiedTaskListRetryFailed;
 }
 
 class _AppLocalizationsDelegate
