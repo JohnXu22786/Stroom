@@ -3044,6 +3044,7 @@
   "reasoningDisableEffort": "تعطيل جهد الاستدلال",
   "reasoningEnableEffort": "تفعيل جهد الاستدلال",
   "ocrJsonSizePositive": "يجب أن يكون حجم طلب JSON قيمة موجبة بوحدة ميبي بايت.",
+  "ttsRangeInvalid": "أدخل قيمتين رقميتين لكل نطاق، على ألا تتجاوز القيمة الدنيا القيمة العليا.",
   "ttsRangePair": "أدخل الحد الأدنى والأقصى لـ {kind} معًا، أو اتركهما فارغين.",
   "@ttsRangePair": {
     "placeholders": {

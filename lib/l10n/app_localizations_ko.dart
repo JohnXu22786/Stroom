@@ -6081,6 +6081,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get ocrJsonSizePositive => '요청 JSON 크기는 양의 MiB 값이어야 합니다.';
 
   @override
+  String get ttsRangeInvalid =>
+      "각 범위의 최소값과 최대값을 숫자로 입력하세요. 최소값은 최대값보다 클 수 없습니다.";
+
+  @override
   String ttsRangePair(String kind) {
     return '최솟값과 최댓값 $kind을(를) 모두 입력하거나 둘 다 비워 두세요.';
   }
@@ -17908,6 +17912,10 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get ocrJsonSizePositive => '요청 JSON 크기는 양의 MiB 값이어야 합니다.';
+
+  @override
+  String get ttsRangeInvalid =>
+      "각 범위의 최소값과 최대값을 숫자로 입력하세요. 최소값은 최대값보다 클 수 없습니다.";
 
   @override
   String ttsRangePair(String kind) {

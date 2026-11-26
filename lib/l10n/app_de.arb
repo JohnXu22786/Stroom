@@ -3042,6 +3042,7 @@
   "reasoningDisableEffort": "Denkaufwand deaktivieren",
   "reasoningEnableEffort": "Denkaufwand aktivieren",
   "ocrJsonSizePositive": "Die Größe des Anfrage-JSON muss ein positiver MiB-Wert sein.",
+  "ttsRangeInvalid": "Gib für jeden Bereich zwei Zahlen ein. Der Mindestwert darf nicht größer als der Höchstwert sein.",
   "ttsRangePair": "Gib sowohl die minimale als auch die maximale {kind} ein oder lass beide Felder leer.",
   "@ttsRangePair": {
     "placeholders": {

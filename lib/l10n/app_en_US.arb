@@ -3042,6 +3042,7 @@
   "reasoningDisableEffort": "Disable reasoning effort",
   "reasoningEnableEffort": "Enable reasoning effort",
   "ocrJsonSizePositive": "Request JSON size must be a positive MiB value.",
+  "ttsRangeInvalid": "Enter numeric minimum and maximum values for each range; the minimum must not exceed the maximum.",
   "ttsRangePair": "Enter both the minimum and maximum {kind}, or leave both empty.",
   "@ttsRangePair": {
     "placeholders": {

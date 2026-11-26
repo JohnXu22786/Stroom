@@ -6082,6 +6082,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ocrJsonSizePositive => 'リクエストの JSON サイズは正の MiB 値である必要があります。';
 
   @override
+  String get ttsRangeInvalid =>
+      "各範囲に数値の最小値と最大値を入力してください。最小値は最大値を超えられません。";
+
+  @override
   String ttsRangePair(String kind) {
     return '$kind の最小値と最大値の両方を入力するか、両方を空のままにします。';
   }
@@ -17918,6 +17922,10 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get ocrJsonSizePositive => 'リクエストの JSON サイズは正の MiB 値である必要があります。';
+
+  @override
+  String get ttsRangeInvalid =>
+      "各範囲に数値の最小値と最大値を入力してください。最小値は最大値を超えられません。";
 
   @override
   String ttsRangePair(String kind) {

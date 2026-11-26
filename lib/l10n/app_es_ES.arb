@@ -1773,6 +1773,7 @@
   "reasoningDisableEffort": "Deshabilitar el esfuerzo de razonamiento",
   "reasoningEnableEffort": "Habilitar el esfuerzo de razonamiento",
   "ocrJsonSizePositive": "El tamaño JSON de la solicitud debe ser un valor MiB positivo.",
+  "ttsRangeInvalid": "Introduce valores numéricos mínimo y máximo para cada rango; el mínimo no puede superar el máximo.",
   "ttsRangePair": "Ingrese el {kind} mínimo y máximo, o déjelos vacíos.",
   "ttsEditTrimTitle": "Editar recorte personalizado",
   "ttsVoicesCount": "Voces ({count})",

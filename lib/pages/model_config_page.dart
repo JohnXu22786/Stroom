@@ -909,6 +909,30 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       return;
     }
 
+    final volumeMin = volMinText.isEmpty ? null : double.tryParse(volMinText);
+    final volumeMax = volMaxText.isEmpty ? null : double.tryParse(volMaxText);
+    final speedMin = spdMinText.isEmpty ? null : double.tryParse(spdMinText);
+    final speedMax = spdMaxText.isEmpty ? null : double.tryParse(spdMaxText);
+    final hasInvalidRange = (volMinText.isNotEmpty && volumeMin == null) ||
+        (volMaxText.isNotEmpty && volumeMax == null) ||
+        (spdMinText.isNotEmpty && speedMin == null) ||
+        (spdMaxText.isNotEmpty && speedMax == null) ||
+        (volumeMin != null && !volumeMin.isFinite) ||
+        (volumeMax != null && !volumeMax.isFinite) ||
+        (volumeMin != null && volumeMax != null && volumeMin > volumeMax) ||
+        (speedMin != null && !speedMin.isFinite) ||
+        (speedMax != null && !speedMax.isFinite) ||
+        (speedMin != null && speedMax != null && speedMin > speedMax);
+    if (hasInvalidRange) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.ttsRangeInvalid),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     // 自动填充：如果模型名称为空，使用模型ID
@@ -927,10 +951,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       name: name,
       modelId: modelId,
       voices: _voices.map((v) => v.copy()).toList(),
-      volumeMin: double.tryParse(_volumeMinController.text) ?? 0.1,
-      volumeMax: double.tryParse(_volumeMaxController.text) ?? 2.0,
-      speedMin: double.tryParse(_speedMinController.text) ?? 0.5,
-      speedMax: double.tryParse(_speedMaxController.text) ?? 2.0,
+      volumeMin: volumeMin ?? 0.1,
+      volumeMax: volumeMax ?? 2.0,
+      speedMin: speedMin ?? 0.5,
+      speedMax: speedMax ?? 2.0,
       hasVolume: hasVolume,
       hasSpeed: hasSpeed,
       maxWordsPerRequest: maxWords,

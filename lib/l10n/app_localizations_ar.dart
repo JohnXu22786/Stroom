@@ -6280,6 +6280,10 @@ class AppLocalizationsAr extends AppLocalizations {
       'يجب أن يكون حجم طلب JSON قيمة موجبة بوحدة ميبي بايت.';
 
   @override
+  String get ttsRangeInvalid =>
+      "أدخل قيمتين رقميتين لكل نطاق، على ألا تتجاوز القيمة الدنيا القيمة العليا.";
+
+  @override
   String ttsRangePair(String kind) {
     return 'أدخل الحد الأدنى والأقصى لـ $kind معًا، أو اتركهما فارغين.';
   }
@@ -18544,6 +18548,10 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get ocrJsonSizePositive =>
       'يجب أن يكون حجم طلب JSON قيمة موجبة بوحدة ميبي بايت.';
+
+  @override
+  String get ttsRangeInvalid =>
+      "أدخل قيمتين رقميتين لكل نطاق، على ألا تتجاوز القيمة الدنيا القيمة العليا.";
 
   @override
   String ttsRangePair(String kind) {
