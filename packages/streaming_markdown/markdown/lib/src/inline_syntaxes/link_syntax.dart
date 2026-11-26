@@ -6,6 +6,7 @@ import '../ast.dart';
 import '../charcode.dart';
 import '../document.dart';
 import '../inline_parser.dart';
+import '../patterns.dart';
 import '../util.dart';
 import 'delimiter_syntax.dart';
 import 'footnote_ref_syntax.dart';
@@ -32,8 +33,8 @@ class LinkSyntax extends DelimiterSyntax {
     Resolver? linkResolver,
     String pattern = r'\[',
     int startCharacter = $lbracket,
-  })  : linkResolver = (linkResolver ?? ((String _, [String? _]) => null)),
-        super(pattern, startCharacter: startCharacter);
+  }) : linkResolver = (linkResolver ?? ((String _, [String? _]) => null)),
+       super(pattern, startCharacter: startCharacter);
 
   @override
   Iterable<Node>? close(
@@ -177,8 +178,11 @@ class LinkSyntax extends DelimiterSyntax {
   }) {
     final parser = context.parser;
     final getChildren = context.getChildren;
+    // Secondary labels are unescaped while they are parsed. Shortcut and
+    // collapsed labels come from the link text and still need unescaping.
+    final referenceLabel = secondary == true ? label : escapePunctuation(label);
     final link = _resolveReferenceLink(
-      label,
+      referenceLabel,
       parser.document.linkReferences,
       getChildren: getChildren,
       encodeHtml: parser.encodeHtml,
@@ -227,7 +231,7 @@ class LinkSyntax extends DelimiterSyntax {
         parser.advanceBy(1);
         if (parser.isDone) return null;
         final next = parser.charAt(parser.pos);
-        if (next != $backslash && next != $rbracket) {
+        if (!asciiPunctuationCharacters.contains(String.fromCharCode(next))) {
           buffer.writeCharCode(char);
         }
         buffer.writeCharCode(next);
