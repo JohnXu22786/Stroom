@@ -24,6 +24,10 @@ void main() {
       markdown.markdownToHtml('before ``code`` after'),
       '<p>before <code>code</code> after</p>\n',
     );
+    expect(
+      markdown.markdownToHtml('before ````code after'),
+      '<p>before ````code after</p>\n',
+    );
   });
 
   test('tabs separate fenced code language from metadata', () {

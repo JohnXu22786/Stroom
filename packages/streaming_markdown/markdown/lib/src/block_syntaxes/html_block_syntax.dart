@@ -59,8 +59,8 @@ class HtmlBlockSyntax extends BlockSyntax {
         lines.add(parser.current);
         parser.advance();
 
-        while (!parser.isDone &&
-            !endCondition.hasMatch(parser.current.content)) {
+        while (
+            !parser.isDone && !endCondition.hasMatch(parser.current.content)) {
           lines.add(parser.current);
           parser.advance();
         }

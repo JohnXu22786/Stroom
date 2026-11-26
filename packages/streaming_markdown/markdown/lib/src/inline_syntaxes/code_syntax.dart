@@ -49,7 +49,13 @@ class CodeSyntax extends InlineSyntax {
         end++;
       }
       final runLength = end - parser.pos;
-      if (!runLength.isEven) return false;
+      final hasWhitespaceBefore =
+          parser.pos == 0 || parser.source[parser.pos - 1].trim().isEmpty;
+      final hasWhitespaceAfter =
+          end == parser.source.length || parser.source[end].trim().isEmpty;
+      if (!runLength.isEven || !hasWhitespaceBefore || !hasWhitespaceAfter) {
+        return false;
+      }
 
       parser.writeText();
       parser.addNode(Element.text('code', ''));
