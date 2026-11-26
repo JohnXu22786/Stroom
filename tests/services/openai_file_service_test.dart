@@ -415,6 +415,37 @@ void main() {
   });
 
   group('OpenAiFileService large file upload (multipart)', () {
+    test('rejects invalid multipart part sizes before creating an upload',
+        () async {
+      for (final partSize in [0, -1, kDefaultPartSizeBytes + 1]) {
+        final adapter = _MockAdapter();
+        final service = OpenAiFileService(
+          config: OpenAiFileUploadConfig(
+            apiKey: 'test-key',
+            baseUrl: 'https://api.test.com',
+            multipartThresholdBytes: 1,
+            partSizeBytes: partSize,
+          ),
+          dio: _mockDio(adapter),
+        );
+
+        await expectLater(
+          service.uploadFile(
+            bytes: Uint8List(2),
+            filename: 'invalid.bin',
+            mimeType: 'application/octet-stream',
+            purpose: 'user_data',
+          ),
+          throwsA(isA<Exception>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Multipart part size'),
+          )),
+        );
+        expect(adapter.capturedRequests, isEmpty);
+      }
+    });
+
     test('uses multipart upload flow for files above threshold', () async {
       // Use a low threshold so even a small file triggers multipart
       final config = OpenAiFileUploadConfig(
