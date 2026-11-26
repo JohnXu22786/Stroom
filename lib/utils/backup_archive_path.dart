@@ -14,13 +14,13 @@ bool isSafeBackupArchivePath(String path) {
 bool isSafeBackupArchivePathForTesting(
   String path, {
   required bool isWindows,
-}) => _isSafeBackupArchivePath(path, isWindows: isWindows);
+}) =>
+    _isSafeBackupArchivePath(path, isWindows: isWindows);
 
 bool _isSafeBackupArchivePath(String path, {required bool isWindows}) {
   if (path.codeUnits.contains(0) || path.contains(r'\')) return false;
   final segments = path.split(RegExp(r'[/\\]'));
-  final hasInvalidWindowsSegment =
-      isWindows &&
+  final hasInvalidWindowsSegment = isWindows &&
       segments.any((segment) => !_isSafeWindowsPathSegment(segment));
   return !hasInvalidWindowsSegment &&
       !segments.any(
