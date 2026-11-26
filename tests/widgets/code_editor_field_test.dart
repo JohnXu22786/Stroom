@@ -571,6 +571,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('controller replacement rebinds line-number updates', (
+    tester,
+  ) async {
+    final oldController = TextEditingController(text: 'old\ncontroller');
+    final newController = TextEditingController(
+      text: 'new\ncontroller\nthree',
+    );
+    addTearDown(oldController.dispose);
+    addTearDown(newController.dispose);
+
+    late StateSetter updateEditor;
+    var controller = oldController;
+    await tester.pumpWidget(
+      localizedApp(
+        StatefulBuilder(
+          builder: (context, setState) {
+            updateEditor = setState;
+            return Scaffold(
+              body: SizedBox(
+                width: 320,
+                height: 160,
+                child: CodeEditorField(controller: controller),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2'), findsOneWidget);
+
+    updateEditor(() => controller = newController);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller,
+        same(newController));
+    expect(oldController.hasListeners, isFalse);
+    expect(find.text('3'), findsOneWidget);
+
+    newController.text = 'new\ncontroller\nthree\nfour';
+    await tester.pumpAndSettle();
+    expect(find.text('4'), findsOneWidget);
+
+    oldController.text = 'old\ncontroller\nshould not update';
+    await tester.pumpAndSettle();
+    expect(find.text('4'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('JSON editor title stays bounded beside dialog controls', (
     tester,
   ) async {

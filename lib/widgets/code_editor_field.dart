@@ -347,6 +347,17 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
   }
 
   @override
+  void didUpdateWidget(covariant CodeEditorField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTextChanged);
+      widget.controller.addListener(_onTextChanged);
+      _measuredLineHeights = const [];
+      _lastMeasurementFingerprint = null;
+    }
+  }
+
+  @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
     _scrollController.removeListener(_onScrolled);
