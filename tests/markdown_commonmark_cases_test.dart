@@ -64,4 +64,37 @@ void main() {
 
     expect(renderer.render([markdown.Text('  leading')]), '  leading');
   });
+
+  test('GitHub heading anchors preserve Unicode-only headings', () {
+    expect(
+      markdown.markdownToHtml(
+        '## 你好世界',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="你好世界">你好世界</h2>\n',
+    );
+  });
+
+  test('GitHub heading anchors preserve Unicode in mixed-script headings', () {
+    expect(
+      markdown.markdownToHtml(
+        '## Hello 世界 123',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="hello-世界-123">Hello 世界 123</h2>\n',
+    );
+  });
+
+  test(
+    'GitHub heading anchors keep ASCII punctuation and spacing behavior',
+    () {
+      expect(
+        markdown.markdownToHtml(
+          '## Hello, WORLD!',
+          extensionSet: markdown.ExtensionSet.gitHubWeb,
+        ),
+        '<h2 id="hello-world">Hello, WORLD!</h2>\n',
+      );
+    },
+  );
 }
