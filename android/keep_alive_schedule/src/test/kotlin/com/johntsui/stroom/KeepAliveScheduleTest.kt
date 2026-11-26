@@ -8,6 +8,29 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
+    fun activeWatchdogRearmsWithRunningServiceButManualStopSuppressesRearm() {
+        val runningServicePlan = keepAliveAlarmDeliveryPlan(
+            serviceRunning = true,
+            keepAliveActive = true,
+            serviceEnabled = true,
+            watchdogEnabled = true,
+        )
+
+        assertFalse(runningServicePlan.shouldStartService)
+        assertTrue(runningServicePlan.shouldScheduleNextAlarm)
+
+        val manuallyStoppedPlan = keepAliveAlarmDeliveryPlan(
+            serviceRunning = true,
+            keepAliveActive = false,
+            serviceEnabled = false,
+            watchdogEnabled = true,
+        )
+
+        assertFalse(manuallyStoppedPlan.shouldStartService)
+        assertFalse(manuallyStoppedPlan.shouldScheduleNextAlarm)
+    }
+
+    @Test
     fun synchronousStartFailureIncrementsFailuresWithoutLeavingAStartPending() {
         val state = keepAliveStartStateAfterAlarm(
             serviceRunning = false,

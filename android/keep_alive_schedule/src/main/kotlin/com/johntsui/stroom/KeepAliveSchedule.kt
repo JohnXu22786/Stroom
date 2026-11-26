@@ -11,6 +11,24 @@ internal data class KeepAliveStartState(
     val nextIntervalMs: Long,
 )
 
+internal data class KeepAliveAlarmDeliveryPlan(
+    val shouldStartService: Boolean,
+    val shouldScheduleNextAlarm: Boolean,
+)
+
+internal fun keepAliveAlarmDeliveryPlan(
+    serviceRunning: Boolean,
+    keepAliveActive: Boolean,
+    serviceEnabled: Boolean,
+    watchdogEnabled: Boolean,
+): KeepAliveAlarmDeliveryPlan {
+    val shouldScheduleNextAlarm = keepAliveActive && serviceEnabled && watchdogEnabled
+    return KeepAliveAlarmDeliveryPlan(
+        shouldStartService = shouldScheduleNextAlarm && !serviceRunning,
+        shouldScheduleNextAlarm = shouldScheduleNextAlarm,
+    )
+}
+
 internal fun keepAliveStartStateAfterAlarm(
     serviceRunning: Boolean,
     startWasPending: Boolean,
