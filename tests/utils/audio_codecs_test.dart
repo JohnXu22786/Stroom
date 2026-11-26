@@ -251,6 +251,96 @@ void main() {
       expect(bytes.getUint32(4, Endian.little), wav.length - 8);
     });
 
+    test('encodes stereo channel headers and interleaves channel groups',
+        () async {
+      const framesPerBlock = 256;
+      const encodedFramesPerBlock = 257;
+      final interleaved = Int16List(framesPerBlock * 2);
+      final left = Int16List(framesPerBlock);
+      final right = Int16List(framesPerBlock);
+      for (var frame = 0; frame < framesPerBlock; frame++) {
+        left[frame] = 12000 - frame * 17;
+        right[frame] = -9000 + frame * 29;
+        interleaved[frame * 2] = left[frame];
+        interleaved[frame * 2 + 1] = right[frame];
+      }
+
+      final stereo = encodeAdpcm(interleaved, const AdpcmConfig(channels: 2));
+      final yielded = await encodeAdpcmWithEventLoopYield(
+        interleaved,
+        const AdpcmConfig(channels: 2),
+        yieldEveryBlocks: 1,
+      );
+      final monoLeft = encodeAdpcm(
+        left,
+        const AdpcmConfig(blockSize: encodedFramesPerBlock),
+      );
+      final monoRight = encodeAdpcm(
+        right,
+        const AdpcmConfig(blockSize: encodedFramesPerBlock),
+      );
+
+      // The default 256 source frames are rounded to a complete 8-frame
+      // channel group, so each WAV block describes 257 encoded frames.
+      expect(stereo.length, 264);
+      expect(yielded, orderedEquals(stereo));
+      final bytes = ByteData.sublistView(stereo);
+      expect(bytes.getInt16(0, Endian.little), left.first);
+      expect(bytes.getInt16(4, Endian.little), right.first);
+      for (var group = 0; group < 32; group++) {
+        final offset = 8 + group * 8;
+        expect(
+          stereo.sublist(offset, offset + 4),
+          monoLeft.sublist(4 + group * 4, 8 + group * 4),
+          reason: 'left channel group $group',
+        );
+        expect(
+          stereo.sublist(offset + 4, offset + 8),
+          monoRight.sublist(4 + group * 4, 8 + group * 4),
+          reason: 'right channel group $group',
+        );
+      }
+
+      final longerInput = Int16List(512 * 2);
+      for (var frame = 0; frame < 512; frame++) {
+        longerInput[frame * 2] = frame * 11;
+        longerInput[frame * 2 + 1] = -frame * 13;
+      }
+      final multipleBlocks =
+          encodeAdpcm(longerInput, const AdpcmConfig(channels: 2));
+      final yieldedMultipleBlocks = await encodeAdpcmWithEventLoopYield(
+        longerInput,
+        const AdpcmConfig(channels: 2),
+        yieldEveryBlocks: 1,
+      );
+      expect(multipleBlocks.length, 2 * 264);
+      expect(yieldedMultipleBlocks, orderedEquals(multipleBlocks));
+      expect(
+        ByteData.sublistView(multipleBlocks).getInt16(264, Endian.little),
+        longerInput[257 * 2],
+        reason: 'the second block starts at the next encoded frame',
+      );
+    });
+
+    test('wraps stereo ADPCM with matching WAV channel and block metadata', () {
+      final raw = Uint8List(2 * 264);
+      final wav = adpcmToWav(
+        raw,
+        sampleRate: 16000,
+        channels: 2,
+        sampleCount: 512,
+      );
+      final bytes = ByteData.sublistView(wav);
+
+      expect(bytes.getUint16(22, Endian.little), 2);
+      expect(bytes.getUint32(28, Endian.little), 16000 * 264 ~/ 257);
+      expect(bytes.getUint16(32, Endian.little), 264);
+      expect(bytes.getUint16(38, Endian.little), 257);
+      expect(bytes.getUint32(48, Endian.little), 512);
+      expect(bytes.getUint32(56, Endian.little), 2 * 264);
+      expect(bytes.getUint32(4, Endian.little), wav.length - 8);
+    });
+
     test('yielding encoder includes a trailing partial block', () async {
       final pcm = _sineWave(256 * 2 + 17);
       final yielded = await encodeAdpcmWithEventLoopYield(
