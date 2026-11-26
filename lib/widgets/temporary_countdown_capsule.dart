@@ -39,9 +39,60 @@ class TemporaryCountdownCapsule extends ConsumerStatefulWidget {
   final bool animateOnMount;
   final bool animateOnChange;
 
+  /// Measures the unchanged capsule at the current text scale. Callers use
+  /// this to decide whether the timer can remain beside its title.
+  static double measuredWidth(BuildContext context, String text) {
+    const timerStyle = TextStyle(
+      fontSize: 11,
+      height: 1.2,
+      fontWeight: FontWeight.w600,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: DefaultTextStyle.of(context).style.merge(timerStyle),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    // Horizontal capsule padding, timer icon, icon/text gap, and trailing
+    // margin. These are the same fixed dimensions used below.
+    return painter.width + 14 + 12 + 4 + 6;
+  }
+
   @override
   ConsumerState<TemporaryCountdownCapsule> createState() =>
       _TemporaryCountdownCapsuleState();
+}
+
+/// Keeps a temporary countdown beside the title when it fits, otherwise gives
+/// it a dedicated line below the existing header row.
+class ResponsiveTemporaryCountdownHeader extends StatelessWidget {
+  const ResponsiveTemporaryCountdownHeader({
+    super.key,
+    required this.row,
+    required this.countdown,
+    required this.stackCountdown,
+  });
+
+  final Widget row;
+  final Widget countdown;
+  final bool stackCountdown;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!stackCountdown) return row;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        row,
+        const SizedBox(height: 4),
+        countdown,
+      ],
+    );
+  }
 }
 
 class _TemporaryCountdownCapsuleState
@@ -104,7 +155,7 @@ class _TemporaryCountdownCapsuleState
           ].join(', '),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width * 0.45,
+              maxWidth: MediaQuery.sizeOf(context).width * 0.9,
             ),
             child: Container(
               margin: const EdgeInsets.only(right: 6),

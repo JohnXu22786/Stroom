@@ -1,13 +1,14 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/topic_item.dart';
+import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 Widget _app({
   bool isRunning = false,
@@ -20,26 +21,43 @@ Widget _app({
   Locale? locale,
   TextScaler? textScaler,
   double? topicWidth,
+  bool selectionMode = false,
+  bool isSelected = false,
   bool scrollableTopic = false,
   Key? captureKey,
 }) {
-  return MaterialApp(
-    locale: locale,
-    theme: ThemeData(
-      colorSchemeSeed: Colors.deepPurple,
-      brightness: brightness,
-    ),
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-      child: RepaintBoundary(key: captureKey, child: child!),
-    ),
-    home: Scaffold(
-      body: scrollableTopic
-          ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
+  return ProviderScope(
+    child: MaterialApp(
+      locale: locale,
+      theme: ThemeData(
+        colorSchemeSeed: Colors.deepPurple,
+        brightness: brightness,
+      ),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: RepaintBoundary(key: captureKey, child: child!),
+      ),
+      home: Scaffold(
+        body: scrollableTopic
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: topicWidth,
+                  child: _topicItem(
+                    isTemporary: isTemporary,
+                    isRunning: isRunning,
+                    isUnread: isUnread,
+                    isFailed: isFailed,
+                    onReadStateToggle: onReadStateToggle,
+                    onTemporaryToggle: onTemporaryToggle,
+                    selectionMode: selectionMode,
+                    isSelected: isSelected,
+                  ),
+                ),
+              )
+            : SizedBox(
                 width: topicWidth,
                 child: _topicItem(
                   isTemporary: isTemporary,
@@ -48,20 +66,11 @@ Widget _app({
                   isFailed: isFailed,
                   onReadStateToggle: onReadStateToggle,
                   onTemporaryToggle: onTemporaryToggle,
+                  selectionMode: selectionMode,
+                  isSelected: isSelected,
                 ),
               ),
-            )
-          : SizedBox(
-              width: topicWidth,
-              child: _topicItem(
-                isTemporary: isTemporary,
-                isRunning: isRunning,
-                isUnread: isUnread,
-                isFailed: isFailed,
-                onReadStateToggle: onReadStateToggle,
-                onTemporaryToggle: onTemporaryToggle,
-              ),
-            ),
+      ),
     ),
   );
 }
@@ -73,6 +82,8 @@ Widget _topicItem({
   bool isFailed = false,
   VoidCallback? onReadStateToggle,
   VoidCallback? onTemporaryToggle,
+  bool selectionMode = false,
+  bool isSelected = false,
 }) {
   return TopicItem(
     topic: Conversation(
@@ -80,9 +91,11 @@ Widget _topicItem({
       title: 'Topic',
       updatedAt: DateTime(2024, 1, 2, 3, 4),
       isTemporary: isTemporary,
+      temporaryExpiresAt:
+          isTemporary ? DateTime.now().add(const Duration(minutes: 20)) : null,
     ),
-    selectionMode: false,
-    isSelected: false,
+    selectionMode: selectionMode,
+    isSelected: isSelected,
     isActive: false,
     isRunning: isRunning,
     isUnread: isUnread,
@@ -99,6 +112,50 @@ Widget _topicItem({
 }
 
 void main() {
+  testWidgets('large temporary topic timer reflows below its title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(
+        isTemporary: true,
+        locale: const Locale('fr'),
+        textScaler: const TextScaler.linear(4),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final timerFinder = find.byType(TemporaryCountdownCapsule);
+    final timer = tester.widget<Text>(
+      find.descendant(of: timerFinder, matching: find.byType(Text)),
+    );
+    expect(timer.data, matches(RegExp(r'^\d{2}:\d{2}$')));
+    final timerRect = tester.getRect(timerFinder);
+    final titleRect = tester.getRect(find.text('Topic'));
+    expect(timerRect.overlaps(titleRect), isFalse);
+    expect(timerRect.top, greaterThanOrEqualTo(titleRect.bottom));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('fitting temporary topic keeps the title row inline', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(isTemporary: true));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getRect(find.byType(TemporaryCountdownCapsule)).center.dy,
+      closeTo(tester.getRect(find.text('Topic')).center.dy, 1),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
   setUpAll(() async {
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     if (flutterRoot == null) return;
@@ -222,6 +279,32 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets("selection controls use the topic item's local width", (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(
+        isTemporary: true,
+        locale: const Locale('fr'),
+        topicWidth: 220,
+        selectionMode: true,
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final timerRect = tester.getRect(find.byType(TemporaryCountdownCapsule));
+    final titleRect = tester.getRect(find.text('Topic'));
+    expect(timerRect.top, greaterThanOrEqualTo(titleRect.bottom));
+    expect(timerRect.overlaps(titleRect), isFalse);
+    expect(find.byType(Checkbox), findsOneWidget);
   });
 
   testWidgets(

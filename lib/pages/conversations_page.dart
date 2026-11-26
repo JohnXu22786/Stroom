@@ -564,182 +564,234 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     int index,
     String? activeId,
   ) {
-    return ListTile(
-      key: ValueKey('tile_${conv.id}'),
-      selected: isActive,
-      selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
-      leading: _selectionMode
-          ? Checkbox(
-              value: _selectedIds.contains(conv.id),
-              onChanged: (_) => _toggleSelection(conv.id),
-            )
-          : conv.isTemporary
-              // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
-              // 不是按钮；拖拽把手让位于该图标）。
-              ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
-              : ReorderableDragStartListener(
-                  index: index,
-                  child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+    final leading = _selectionMode
+        ? Checkbox(
+            value: _selectedIds.contains(conv.id),
+            onChanged: (_) => _toggleSelection(conv.id),
+          )
+        : conv.isTemporary
+            ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
+            : ReorderableDragStartListener(
+                index: index,
+                child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+              );
+    final trailing = _selectionMode
+        ? null
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  conv.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 18,
+                  color: conv.isPinned
+                      ? cs.primary
+                      : cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
-      title: Row(
-        children: [
-          if (conv.isPinned)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.push_pin, size: 14, color: cs.primary),
-            ),
-          // 临时对话倒计时胶囊（标题前）
-          if (conv.isTemporary && conv.temporaryExpiresAt != null)
-            TemporaryCountdownCapsule(
-              expiresAt: conv.temporaryExpiresAt!,
-              pausedRemainingMilliseconds:
-                  conv.temporaryPausedRemainingMilliseconds,
-            ),
-          Expanded(
-            child: ConstrainedText(
-              conv.title.isEmpty
-                  ? AppLocalizations.of(context)!.conversationNew
-                  : conv.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: cs.onSurface,
+                tooltip: conv.isPinned
+                    ? AppLocalizations.of(context)!.conversationUnpin
+                    : AppLocalizations.of(context)!.conversationPin,
+                onPressed: () {
+                  ref.read(conversationsProvider.notifier).togglePin(conv.id);
+                },
               ),
-            ),
-          ),
-          // Match count badge when searching globally
-          if (_searchQuery.isNotEmpty) _buildMatchBadge(conv, cs),
-        ],
-      ),
-      subtitle: Text(
-        _formatDate(conv.updatedAt),
-        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-      ),
-      trailing: _selectionMode
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+                onSelected: (value) async {
+                  switch (value) {
+                    case 'rename':
+                      _renameConversation(conv.id, conv.title);
+                      break;
+                    case 'auto_rename':
+                      ref
+                          .read(conversationsProvider.notifier)
+                          .autoRenameConversation(conv.id);
+                      break;
+                    case 'toggle_temporary':
+                      if (conv.isTemporary ||
+                          await showTemporaryConversationEnableDialog(
+                            context,
+                          )) {
+                        if (!mounted) return;
+                        ref
+                            .read(conversationsProvider.notifier)
+                            .toggleTemporary(conv.id);
+                      }
+                      break;
+                    case 'pin':
+                      ref
+                          .read(conversationsProvider.notifier)
+                          .togglePin(conv.id);
+                      break;
+                    case 'delete':
+                      _deleteConversation(conv.id);
+                      break;
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  PopupMenuItem(
+                    value: 'rename',
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.actionRename,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'auto_rename',
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.conversationAutoRename,
+                      style: TextStyle(color: cs.onSurface),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'toggle_temporary',
+                    child: ConstrainedText(
+                      conv.isTemporary
+                          ? AppLocalizations.of(context)!.conversationKeep
+                          : AppLocalizations.of(context)!
+                              .conversationSetTemporary,
+                      style: TextStyle(color: cs.onSurface),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'pin',
+                    child: ConstrainedText(
+                      conv.isPinned
+                          ? AppLocalizations.of(context)!.conversationUnpin
+                          : AppLocalizations.of(context)!.conversationPin,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.actionDelete,
+                      style: TextStyle(color: cs.error),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+    final countdownText = conv.temporaryPausedRemainingMilliseconds == null
+        ? formatTemporaryCountdown(
+            conv.temporaryExpiresAt?.difference(DateTime.now()) ??
+                Duration.zero,
+          )
+        : formatTemporaryCountdown(
+            Duration(milliseconds: conv.temporaryPausedRemainingMilliseconds!),
+          );
+    return LayoutBuilder(
+      key: ValueKey('tile_${conv.id}'),
+      builder: (context, constraints) {
+        final leadingWidth = _selectionMode ? 48.0 : 40.0;
+        final trailingWidth = trailing == null ? 0.0 : 96.0;
+        final inlineWidth = constraints.maxWidth -
+            32 -
+            leadingWidth -
+            16 -
+            (trailing == null ? 0 : trailingWidth + 16);
+        final stackCountdown = conv.isTemporary &&
+            conv.temporaryExpiresAt != null &&
+            TemporaryCountdownCapsule.measuredWidth(context, countdownText) +
+                    48 >
+                inlineWidth;
+
+        Widget conversationTitle({bool includeCountdown = true}) => Row(
               children: [
-                IconButton(
-                  icon: Icon(
-                    conv.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-                    size: 18,
-                    color: conv.isPinned
-                        ? cs.primary
-                        : cs.onSurfaceVariant.withValues(alpha: 0.7),
+                if (conv.isPinned)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(Icons.push_pin, size: 14, color: cs.primary),
                   ),
-                  tooltip: conv.isPinned
-                      ? AppLocalizations.of(context)!.conversationUnpin
-                      : AppLocalizations.of(context)!.conversationPin,
-                  onPressed: () {
-                    ref.read(conversationsProvider.notifier).togglePin(conv.id);
-                  },
-                ),
-                PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert,
-                    size: 18,
-                    color: cs.onSurfaceVariant,
+                if (includeCountdown &&
+                    conv.isTemporary &&
+                    conv.temporaryExpiresAt != null)
+                  TemporaryCountdownCapsule(
+                    expiresAt: conv.temporaryExpiresAt!,
+                    pausedRemainingMilliseconds:
+                        conv.temporaryPausedRemainingMilliseconds,
                   ),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'rename':
-                        _renameConversation(conv.id, conv.title);
-                        break;
-                      case 'auto_rename':
-                        ref
-                            .read(conversationsProvider.notifier)
-                            .autoRenameConversation(conv.id);
-                        break;
-                      case 'toggle_temporary':
-                        if (conv.isTemporary ||
-                            await showTemporaryConversationEnableDialog(
-                              context,
-                            )) {
-                          if (!mounted) return;
-                          ref
-                              .read(conversationsProvider.notifier)
-                              .toggleTemporary(conv.id);
-                        }
-                        break;
-                      case 'pin':
-                        ref
-                            .read(conversationsProvider.notifier)
-                            .togglePin(conv.id);
-                        break;
-                      case 'delete':
-                        _deleteConversation(conv.id);
-                        break;
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    PopupMenuItem(
-                      value: 'rename',
-                      child: ConstrainedText(
-                        AppLocalizations.of(context)!.actionRename,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                Expanded(
+                  child: ConstrainedText(
+                    conv.title.isEmpty
+                        ? AppLocalizations.of(context)!.conversationNew
+                        : conv.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          isActive ? FontWeight.w600 : FontWeight.normal,
+                      color: cs.onSurface,
                     ),
-                    PopupMenuItem(
-                      value: 'auto_rename',
-                      child: ConstrainedText(
-                        AppLocalizations.of(context)!.conversationAutoRename,
-                        style: TextStyle(color: cs.onSurface),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'toggle_temporary',
-                      child: ConstrainedText(
-                        conv.isTemporary
-                            ? AppLocalizations.of(context)!.conversationKeep
-                            : AppLocalizations.of(context)!
-                                .conversationSetTemporary,
-                        style: TextStyle(color: cs.onSurface),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'pin',
-                      child: ConstrainedText(
-                        conv.isPinned
-                            ? AppLocalizations.of(context)!.conversationUnpin
-                            : AppLocalizations.of(context)!.conversationPin,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: ConstrainedText(
-                        AppLocalizations.of(context)!.actionDelete,
-                        style: TextStyle(color: cs.error),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
+                if (_searchQuery.isNotEmpty) _buildMatchBadge(conv, cs),
               ],
-            ),
-      onTap: () {
-        if (_selectionMode) {
-          _toggleSelection(conv.id);
-        } else {
-          _navigateToConversation(conv, activeId);
-        }
-      },
-      onLongPress: () {
-        if (!_selectionMode) {
-          _toggleSelectionMode();
-          _selectedIds.add(conv.id);
-        }
+            );
+
+        final subtitle = Text(
+          _formatDate(conv.updatedAt),
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+        );
+        return ListTile(
+          selected: isActive,
+          selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
+          leading: stackCountdown ? null : leading,
+          title: stackCountdown
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        leading,
+                        Expanded(
+                            child: conversationTitle(includeCountdown: false)),
+                        if (trailing case final Widget trailingWidget)
+                          trailingWidget,
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (conv.isTemporary && conv.temporaryExpiresAt != null)
+                      TemporaryCountdownCapsule(
+                        expiresAt: conv.temporaryExpiresAt!,
+                        pausedRemainingMilliseconds:
+                            conv.temporaryPausedRemainingMilliseconds,
+                      ),
+                  ],
+                )
+              : conversationTitle(),
+          subtitle: subtitle,
+          trailing: stackCountdown ? null : trailing,
+          onTap: () {
+            if (_selectionMode) {
+              _toggleSelection(conv.id);
+            } else {
+              _navigateToConversation(conv, activeId);
+            }
+          },
+          onLongPress: () {
+            if (!_selectionMode) {
+              _toggleSelectionMode();
+              _selectedIds.add(conv.id);
+            }
+          },
+        );
       },
     );
   }
