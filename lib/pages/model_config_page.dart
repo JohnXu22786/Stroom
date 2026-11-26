@@ -1014,7 +1014,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       configs: configs,
     );
 
-    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    try {
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(entry.id, updated);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.taskFlowUiSaveFailed),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _isSaving = false);
