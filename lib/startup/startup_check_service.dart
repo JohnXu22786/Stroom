@@ -475,6 +475,17 @@ class StartupCheckService {
           if (configs[ci] is! Map<String, dynamic>) continue;
           final config = configs[ci] as Map<String, dynamic>;
           final rawModels = config['models'];
+          final configTypeConfig = config['typeConfig'];
+          if (configTypeConfig != null && configTypeConfig is! Map) {
+            issues.add(
+              StartupIssue(
+                message: 'provider_entries[$i].configs[$ci].typeConfig: '
+                    '字段不是合法对象',
+                severity: StartupIssueSeverity.error,
+                dataKey: 'provider_entries',
+              ),
+            );
+          }
           _validateNestedListSync(
             config,
             'customParams',

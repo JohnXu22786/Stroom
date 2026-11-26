@@ -301,6 +301,7 @@ void main() {
             'name': 'Broken Provider',
             'configs': [
               {
+                'typeConfig': ['not', 'a', 'map'],
                 'models': [
                   {
                     'voices': 'not a list',
@@ -354,6 +355,7 @@ void main() {
           'provider_entries[0].configs[0].models[0].customParams: 字段不是合法列表',
           'provider_entries[0].configs[0].models[0].reasoningParams: 字段不是合法列表',
           'provider_entries[0].configs[0].models[0].typeConfig: 字段不是合法对象',
+          'provider_entries[0].configs[0].typeConfig: 字段不是合法对象',
           'provider_entries[1]: id 字段缺失或为空',
           'provider_entries[1].configs: 字段不是合法列表',
           'provider_entries[2].configs[0].models: 字段不是合法列表',

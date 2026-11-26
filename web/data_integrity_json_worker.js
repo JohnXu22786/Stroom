@@ -1016,6 +1016,14 @@ function validateProviderEntriesValue(list, parseFailed, issues) {
       rawConfigs.forEach(function (config, ci) {
         if (!isRecord(config)) return;
         const rawModels = config.models;
+        if (config.typeConfig != null && !isRecord(config.typeConfig)) {
+          issues.push(issue(
+            `provider_entries[${i}].configs[${ci}].typeConfig: ` +
+              '字段不是合法对象',
+            'error',
+            'provider_entries',
+          ));
+        }
         validateNestedList(
           config,
           'models',

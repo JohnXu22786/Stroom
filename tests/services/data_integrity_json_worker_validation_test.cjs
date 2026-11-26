@@ -33,6 +33,7 @@ test('web startup validation reports malformed saved model field shapes', () => 
       type: 'tts',
       name: 'Broken Provider',
       configs: [{
+        typeConfig: ['not', 'a', 'map'],
         models: [{
           voices: 'not a list',
           customParams: {paramName: 'temperature'},
@@ -58,6 +59,7 @@ test('web startup validation reports malformed saved model field shapes', () => 
   const messages = issues.map((issue) => issue.message);
 
   assert.deepEqual(messages, [
+    'provider_entries[0].configs[0].typeConfig: 字段不是合法对象',
     'provider_entries[0].configs[0].models[0].customParams: 字段不是合法列表',
     'provider_entries[0].configs[0].models[0].voices: 字段不是合法列表',
     'provider_entries[0].configs[0].models[0].reasoningParams: 字段不是合法列表',
