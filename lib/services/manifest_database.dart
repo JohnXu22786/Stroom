@@ -1405,8 +1405,7 @@ class ManifestDatabase {
       if (_useJsonStore) {
         return await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list =
-              data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
           return list.cast<Map<String, dynamic>>().toList();
         });
       }
@@ -1427,8 +1426,7 @@ class ManifestDatabase {
       if (_useJsonStore) {
         await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list =
-              data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
           beforeCommit?.call();
           final jsonRecord = _jsonRecordWithTextId(record);
           final id = jsonRecord['id'] as String?;
