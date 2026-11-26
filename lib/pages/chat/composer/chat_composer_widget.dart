@@ -56,8 +56,10 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final Set<String> enabledTools;
   final ValueChanged<Set<String>> onEnabledToolsChanged;
   final List<String> modelNames;
+  final List<String>? modelIdentities;
   final int selectedModelIndex;
   final ValueChanged<int> onModelSelected;
+  final ValueChanged<String>? onModelIdentitySelected;
   final String? conversationId;
   final String initialDraftText;
 
@@ -115,8 +117,10 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.enabledTools = const {},
     required this.onEnabledToolsChanged,
     this.modelNames = const [],
+    this.modelIdentities,
     this.selectedModelIndex = 0,
     required this.onModelSelected,
+    this.onModelIdentitySelected,
     this.conversationId,
     this.initialDraftText = '',
     this.initialDraftAttachments = const [],
