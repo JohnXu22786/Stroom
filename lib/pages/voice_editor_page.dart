@@ -404,7 +404,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
               child: TextField(
                 controller: _nameCtrls[index],
                 decoration: InputDecoration(
-                  hintText: l10n.voiceName,
+                  hint: ConstrainedText(l10n.voiceName, maxLines: 1),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -418,7 +418,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 controller: _idCtrls[index],
                 focusNode: _idFocusNodes[index],
                 decoration: InputDecoration(
-                  hintText: l10n.voiceId,
+                  hint: ConstrainedText(l10n.voiceId, maxLines: 1),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
