@@ -111,6 +111,13 @@ void main() {
       ),
       '<h2 id="你好世界">你好世界</h2>\n',
     );
+    expect(
+      markdown.markdownToHtml(
+        '## कि',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="कि">कि</h2>\n',
+    );
   });
 
   test('GitHub heading anchors preserve Unicode in mixed-script headings', () {

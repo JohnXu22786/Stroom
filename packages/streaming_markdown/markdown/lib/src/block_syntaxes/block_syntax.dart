@@ -62,6 +62,6 @@ abstract class BlockSyntax {
       .textContent
       .toLowerCase()
       .trim()
-      .replaceAll(RegExp(r'[^\p{L}\p{N} _-]', unicode: true), '')
+      .replaceAll(RegExp(r'[^\p{L}\p{M}\p{N} _-]', unicode: true), '')
       .replaceAll(RegExp(r'\s'), '-');
 }
