@@ -476,6 +476,48 @@ void main() {
     });
   });
 
+  group('ProviderEntriesNotifier - corrupt provider recovery', () {
+    test('load keeps a valid sibling after skipping a malformed config',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'broken_provider',
+            'type': 'llm',
+            'name': 'Broken Provider',
+            'configs': [
+              {
+                'providerName': 'Broken Config',
+                'customParams': [null],
+                'models': [],
+              },
+            ],
+          },
+          {
+            'id': 'valid_provider',
+            'type': 'llm',
+            'name': 'Valid Provider',
+            'configs': [],
+          },
+        ]),
+      });
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      addTearDown(() => container.dispose());
+
+      await container.read(providerEntriesProvider.notifier).load();
+
+      final entries = container.read(providerEntriesProvider).entries;
+      expect(entries.any((entry) => entry.id == 'broken_provider'), isFalse);
+      expect(entries.any((entry) => entry.id == 'valid_provider'), isTrue);
+    });
+  });
+
   // =================================================================
   // 6. ProviderEntriesNotifier - OCR entry loading
   // =================================================================
