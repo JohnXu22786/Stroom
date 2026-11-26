@@ -270,7 +270,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
         ? theme.textTheme.bodyLarge!
         : theme.textTheme.titleMedium!;
     final themedHintStyle = WidgetStateProperty.resolveAs(
-      theme.inputDecorationTheme.hintStyle,
+      InputDecorationTheme.of(context).hintStyle,
       states,
     );
     return baseStyle.merge(defaultHintStyle).merge(themedHintStyle);

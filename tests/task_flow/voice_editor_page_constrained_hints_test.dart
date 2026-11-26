@@ -13,6 +13,7 @@ void main() {
     required Locale locale,
     required Size size,
     ThemeData? theme,
+    InputDecorationThemeData? decorationTheme,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -21,15 +22,19 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
+    Widget home = VoiceEditorPage(
+      initialVoices: [VoiceEntry(name: '', id: '')],
+    );
+    if (decorationTheme != null) {
+      home = InputDecorationTheme(data: decorationTheme, child: home);
+    }
     await tester.pumpWidget(
       MaterialApp(
         locale: locale,
         theme: theme ?? ThemeData(useMaterial3: true),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: VoiceEditorPage(
-          initialVoices: [VoiceEntry(name: '', id: '')],
-        ),
+        home: home,
       ),
     );
     await tester.pumpAndSettle();
@@ -96,13 +101,13 @@ void main() {
     final statefulHintTheme = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      inputDecorationTheme: InputDecorationThemeData(
-        hintStyle: WidgetStateTextStyle.resolveWith(
-          (states) => TextStyle(
-            color: states.contains(WidgetState.focused)
-                ? Colors.purple
-                : Colors.green,
-          ),
+    );
+    final localHintTheme = InputDecorationThemeData(
+      hintStyle: WidgetStateTextStyle.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.focused)
+              ? Colors.purple
+              : Colors.green,
         ),
       ),
     );
@@ -113,6 +118,7 @@ void main() {
       // complete Spanish hints room to fit in this fixture.
       size: const Size(1000, 640),
       theme: statefulHintTheme,
+      decorationTheme: localHintTheme,
     );
 
     final l10n = await AppLocalizations.delegate.load(const Locale('es', 'ES'));
