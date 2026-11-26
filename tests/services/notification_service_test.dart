@@ -13,6 +13,7 @@ import 'package:stroom/widgets/constrained_text.dart';
 /// 记录插件 show 调用时使用的通知 ID。
 final shownIds = <int>[];
 final shownNotifications = <Map>[];
+Map? initializationSettings;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,7 @@ void main() {
   setUp(() async {
     shownIds.clear();
     shownNotifications.clear();
+    initializationSettings = null;
     NotificationService().updateLocaleOverride(null);
     SharedPreferences.setMockInitialValues({
       'notifications_enabled': true,
@@ -31,7 +33,10 @@ void main() {
         .setMockMethodCallHandler(
       const MethodChannel('dexterous.com/flutter/local_notifications'),
       (MethodCall call) async {
-        if (call.method == 'initialize') return true;
+        if (call.method == 'initialize') {
+          initializationSettings = call.arguments as Map;
+          return true;
+        }
         if (call.method == 'show') {
           final args = call.arguments as Map;
           shownIds.add(args['id'] as int);
@@ -53,6 +58,16 @@ void main() {
     const channel = MethodChannel('flutter.baseflow.com/permissions/methods');
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    FlutterLocalNotificationsPlatform.instance =
+        IOSFlutterLocalNotificationsPlugin();
+
+    final service = NotificationService();
+    await service.initialize();
+
+    expect(initializationSettings?['requestAlertPermission'], isFalse);
+    expect(initializationSettings?['requestBadgePermission'], isFalse);
+    expect(initializationSettings?['requestSoundPermission'], isFalse);
+
     var requestResult = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -67,7 +82,6 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    final service = NotificationService();
     expect(
       await service.requestPermission(usageReason: 'test'),
       isFalse,
