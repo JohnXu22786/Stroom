@@ -13,12 +13,12 @@ void main() {
 
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-          MacOSMenuService.channelName,
-          const StandardMethodCodec().encodeMethodCall(
-            const MethodCall('openSettings'),
-          ),
-          null,
-        );
+      MacOSMenuService.channelName,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('openSettings'),
+      ),
+      null,
+    );
 
     final navigatorKey = GlobalKey<NavigatorState>();
     final service = MacOSMenuService(navigatorKey);
