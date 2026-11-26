@@ -1475,85 +1475,83 @@ class MainActivity : FlutterActivity() {
                 }
 
             val file = backupDir.findFile(oldName)
-            if (file != null) {
-                val renamed = synchronized(backupSafWriteLock) {
-                    backupDir.findFile(newName) == null && file.renameTo(newName)
-                }
-                if (renamed) {
-                    result.success(null)
-                } else {
-                    // SAF 不支持直接重命名时，先完整写入并发布副本，再删除旧文件。
-                    val inputStream = contentResolver.openInputStream(file.uri)
-                    val bytes = inputStream?.use { stream -> stream.readBytes() }
-                    if (bytes != null) {
-                        val stagedName = "$newName.tmp_${java.util.UUID.randomUUID()}"
-                        var stagedFile: DocumentFile? = null
-                        val renameOutcome = synchronized(backupSafWriteLock) {
-                            SafFallbackRename.publishAndRemoveSource(
-                                publish = {
-                                    SafStagedWrite.writeAndPublish(
-                                        createStagedDocument = {
-                                            if (backupDir.findFile(newName) != null) {
-                                                false
-                                            } else {
-                                                backupDir.createFile("application/zip", stagedName)?.also {
-                                                    stagedFile = it
-                                                } != null
-                                            }
-                                        },
-                                        openOutputStream = {
-                                            stagedFile?.let { contentResolver.openOutputStream(it.uri) }
-                                        },
-                                        writePayload = { stream ->
-                                            stream.write(bytes)
-                                            stream.flush()
-                                        },
-                                        publish = {
-                                            backupDir.findFile(newName) == null &&
-                                                (stagedFile?.renameTo(newName) == true)
-                                        },
-                                        deleteStagedDocument = {
-                                            stagedFile?.let {
-                                                if (!it.delete()) {
-                                                    throw java.io.IOException("无法清理临时备份文件")
-                                                }
-                                                stagedFile = null
-                                            }
-                                        },
-                                    )
-                                },
-                                deleteSource = {
-                                    file.delete() && backupDir.findFile(oldName) == null
-                                },
-                            )
-                        }
-                        when (renameOutcome) {
-                            SafFallbackRename.Outcome.COMPLETE -> result.success(null)
-                            SafFallbackRename.Outcome.SOURCE_DELETE_FAILED -> result.error(
-                                "RENAME_PARTIAL",
-                                "新备份已保存为 $newName，但无法确认原文件 $oldName 已删除；" +
-                                    "请检查备份目录，并在确认新文件完整后手动删除旧文件。",
-                                null,
-                            )
-                            SafFallbackRename.Outcome.PUBLISH_FAILED -> result.error(
-                                "RENAME_FAILED",
-                                "无法安全发布新文件，原有备份已保留",
-                                null,
-                            )
-                        }
-                    } else {
-                        result.error("RENAME_FAILED", "无法读取原文件", null)
+            SafRenameSource.withSource(
+                source = file,
+                onMissingSource = {
+                    result.error("RENAME_FAILED", "原文件不存在，无法重命名", null)
+                },
+                renameSource = { sourceFile ->
+                    val renamed = synchronized(backupSafWriteLock) {
+                        backupDir.findFile(newName) == null && sourceFile.renameTo(newName)
                     }
-                }
-            } else {
-                // 原文件不存在，尝试直接创建
-                val newFile = backupDir.createFile("application/zip", newName)
-                if (newFile != null) {
-                    result.success(null)
-                } else {
-                    result.error("RENAME_FAILED", "原文件不存在且无法创建新文件", null)
-                }
-            }
+                    if (renamed) {
+                        result.success(null)
+                    } else {
+                        // SAF 不支持直接重命名时，先完整写入并发布副本，再删除旧文件。
+                        val inputStream = contentResolver.openInputStream(sourceFile.uri)
+                        val bytes = inputStream?.use { stream -> stream.readBytes() }
+                        if (bytes != null) {
+                            val stagedName = "$newName.tmp_${java.util.UUID.randomUUID()}"
+                            var stagedFile: DocumentFile? = null
+                            val renameOutcome = synchronized(backupSafWriteLock) {
+                                SafFallbackRename.publishAndRemoveSource(
+                                    publish = {
+                                        SafStagedWrite.writeAndPublish(
+                                            createStagedDocument = {
+                                                if (backupDir.findFile(newName) != null) {
+                                                    false
+                                                } else {
+                                                    backupDir.createFile("application/zip", stagedName)?.also {
+                                                        stagedFile = it
+                                                    } != null
+                                                }
+                                            },
+                                            openOutputStream = {
+                                                stagedFile?.let { contentResolver.openOutputStream(it.uri) }
+                                            },
+                                            writePayload = { stream ->
+                                                stream.write(bytes)
+                                                stream.flush()
+                                            },
+                                            publish = {
+                                                backupDir.findFile(newName) == null &&
+                                                    (stagedFile?.renameTo(newName) == true)
+                                            },
+                                            deleteStagedDocument = {
+                                                stagedFile?.let {
+                                                    if (!it.delete()) {
+                                                        throw java.io.IOException("无法清理临时备份文件")
+                                                    }
+                                                    stagedFile = null
+                                                }
+                                            },
+                                        )
+                                    },
+                                    deleteSource = {
+                                        sourceFile.delete() && backupDir.findFile(oldName) == null
+                                    },
+                                )
+                            }
+                            when (renameOutcome) {
+                                SafFallbackRename.Outcome.COMPLETE -> result.success(null)
+                                SafFallbackRename.Outcome.SOURCE_DELETE_FAILED -> result.error(
+                                    "RENAME_PARTIAL",
+                                    "新备份已保存为 $newName，但无法确认原文件 $oldName 已删除；" +
+                                        "请检查备份目录，并在确认新文件完整后手动删除旧文件。",
+                                    null,
+                                )
+                                SafFallbackRename.Outcome.PUBLISH_FAILED -> result.error(
+                                    "RENAME_FAILED",
+                                    "无法安全发布新文件，原有备份已保留",
+                                    null,
+                                )
+                            }
+                        } else {
+                            result.error("RENAME_FAILED", "无法读取原文件", null)
+                        }
+                    }
+                },
+            )
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 重命名文件失败", e)
             result.error("RENAME_FAILED", "重命名失败: ${e.message}", null)
