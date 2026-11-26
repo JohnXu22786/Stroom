@@ -110,6 +110,9 @@ Future<void> _pumpTaskCard(
   Locale locale = const Locale('en'),
   double textScale = 1,
   bool darkMode = false,
+  ThemeData? themeOverride,
+  FlowExecutionRestoreStatus restoreStatus =
+      FlowExecutionRestoreStatus.restoring,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -123,14 +126,14 @@ Future<void> _pumpTaskCard(
         taskListProvider.overrideWith((ref) => _RecordingTasks(ref, [task])),
         taskFlowExecutionsProvider.overrideWith((ref) => executions),
         taskFlowExecutionRestoreStatusProvider.overrideWith(
-          (ref) => FlowExecutionRestoreStatus.restoring,
+          (ref) => restoreStatus,
         ),
       ],
       child: MaterialApp(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData.light(useMaterial3: true),
+        theme: themeOverride ?? ThemeData.light(useMaterial3: true),
         darkTheme: ThemeData.dark(useMaterial3: true),
         themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
         builder: (context, child) => MediaQuery(
@@ -139,7 +142,11 @@ Future<void> _pumpTaskCard(
           ),
           child: child!,
         ),
-        home: Scaffold(body: ListView(children: [TaskCard(task: task)])),
+        home: Scaffold(
+          body: ListView(
+            children: [TaskCard(task: task)],
+          ),
+        ),
       ),
     ),
   );
@@ -224,6 +231,95 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('failed task detail label constrains only when it clips', (
+    tester,
+  ) async {
+    final task = SynthesisTask(
+      id: 'failed-detail-label',
+      title: 'Failed task',
+      status: TaskStatus.failed,
+      error: 'The synthesis request failed after the server timed out.',
+      text: 'Request text',
+      providerConfig: ProviderConfigItem(providerName: 'Example'),
+      modelConfig: ModelConfig(name: 'Voice', modelId: 'voice'),
+      originalRequest: '{"model":"voice"}',
+      originalResponse: '{"error":"timeout"}',
+    );
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(240, 640),
+      locale: const Locale('de', 'DE'),
+      textScale: 2.5,
+      restoreStatus: FlowExecutionRestoreStatus.restoring,
+    );
+
+    expect(find.text('Details'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == 'Details',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(700, 640),
+      locale: const Locale('en'),
+      restoreStatus: FlowExecutionRestoreStatus.ready,
+    );
+    expect(find.text('Details'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == 'Details',
+      ),
+      findsNothing,
+    );
+    final fittingLabelPosition = tester.getTopLeft(find.text('Details'));
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.takeException(), isNull);
+    expect(tester.getTopLeft(find.text('Details')), fittingLabelPosition);
+  });
+
+  testWidgets('detail measurement inherits letter spacing', (
+    tester,
+  ) async {
+    final baseTheme = ThemeData.light(useMaterial3: true);
+    final themeWithLetterSpacing = baseTheme.copyWith(
+      textTheme: baseTheme.textTheme.copyWith(
+        bodyMedium: baseTheme.textTheme.bodyMedium!.copyWith(letterSpacing: 6),
+      ),
+    );
+    final task = SynthesisTask(
+      id: 'failed-detail-letter-spacing',
+      title: 'Failed task',
+      status: TaskStatus.failed,
+      error: 'Timeout',
+      text: 'Request text',
+      providerConfig: ProviderConfigItem(providerName: 'Example'),
+      modelConfig: ModelConfig(name: 'Voice', modelId: 'voice'),
+      originalRequest: '{"model":"voice"}',
+    );
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(390, 640),
+      locale: const Locale('de', 'DE'),
+      textScale: 2.5,
+      themeOverride: themeWithLetterSpacing,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == 'Details',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('fitting task dialog title remains stationary', (tester) async {
