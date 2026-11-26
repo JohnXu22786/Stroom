@@ -2727,10 +2727,12 @@ class _Mp4Demuxer {
         final isInMdatPayload = _mdatPayloadRanges.any(
           (range) => fileOffset >= range.$1 && sampleEnd <= range.$2,
         );
-        if (sampleEnd <= _data.length &&
-            isInMdatPayload &&
-            (includedSampleIndices == null ||
-                includedSampleIndices.contains(sampleIdx))) {
+        final isSelected = includedSampleIndices == null ||
+            includedSampleIndices.contains(sampleIdx);
+        if (isSelected) {
+          if (sampleEnd > _data.length || !isInMdatPayload) {
+            throw Exception('Invalid selected audio sample');
+          }
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, sampleEnd),
           ));
@@ -2772,10 +2774,12 @@ class _Mp4Demuxer {
         final isInMdatPayload = _mdatPayloadRanges.any(
           (range) => fileOffset >= range.$1 && sampleEnd <= range.$2,
         );
-        if (sampleEnd <= _data.length &&
-            isInMdatPayload &&
-            (includedSampleIndices == null ||
-                includedSampleIndices.contains(sampleIdx))) {
+        final isSelected = includedSampleIndices == null ||
+            includedSampleIndices.contains(sampleIdx);
+        if (isSelected) {
+          if (sampleEnd > _data.length || !isInMdatPayload) {
+            throw Exception('Invalid selected audio sample');
+          }
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, sampleEnd),
           ));
