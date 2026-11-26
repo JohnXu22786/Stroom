@@ -102,7 +102,7 @@ void main() {
       expect(codeBtn.onPressed, isNotNull);
     });
 
-    testWidgets('German generating status fits a narrow scaled card',
+    testWidgets('German generating status keeps its clipped group centered',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 640));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -133,6 +133,15 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.bySemanticsLabel('Wird generiert …'), findsOneWidget);
+      final statusRow = find
+          .ancestor(
+            of: find.byType(CircularProgressIndicator),
+            matching: find.byType(Row),
+          )
+          .first;
+      final statusRect = tester.getRect(statusRow);
+      expect(statusRect.center.dx, closeTo(160, 0.1));
+      expect(statusRect.width, lessThan(155));
     });
 
     testWidgets('finished card shows no 正在生成中 and enables 全屏查看',

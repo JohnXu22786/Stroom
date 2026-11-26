@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -216,25 +218,64 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
             // "正在生成中" indicator while the block is still streaming.
             if (widget.isStreaming) ...[
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 8),
-                  Flexible(
-                    child: ConstrainedText(
-                      AppLocalizations.of(context)!.htmlGenerating,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const spinnerSize = 16.0;
+                  const spacing = 8.0;
+                  const statusStyle = TextStyle(fontSize: 12);
+                  final status = AppLocalizations.of(context)!.htmlGenerating;
+                  var statusMaxWidth = constraints.maxWidth.isFinite
+                      ? math.max(
+                          0.0,
+                          constraints.maxWidth - spinnerSize - spacing,
+                        )
+                      : double.infinity;
+                  if (statusMaxWidth.isFinite) {
+                    final textWidth = TextPainter(
+                      text: TextSpan(
+                        text: status,
+                        style: DefaultTextStyle.of(context)
+                            .style
+                            .merge(statusStyle),
+                      ),
+                      textDirection: Directionality.of(context),
+                      textScaler: MediaQuery.textScalerOf(context),
+                      locale: Localizations.localeOf(context),
                       maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12),
+                    )..layout();
+                    final overflow = textWidth.width - statusMaxWidth;
+                    if (overflow > 0.01) {
+                      // When clipped, retain a small responsive inset so the
+                      // spinner and its measured label slot stay centered as
+                      // one group instead of stretching to the card edges.
+                      final inset = math.min(8.0, overflow / 2);
+                      statusMaxWidth = math.max(0, statusMaxWidth - inset * 2);
+                    }
+                  }
+                  return Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: spinnerSize,
+                          height: spinnerSize,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: spacing),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: statusMaxWidth),
+                          child: ConstrainedText(
+                            status,
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            textAlign: TextAlign.center,
+                            style: statusStyle,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ],
             const SizedBox(height: 12),
