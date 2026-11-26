@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/llm/jumping_dots.dart';
 
@@ -7,19 +8,23 @@ Widget _indicator({
   int numberOfDots = 3,
   double fontSize = 10,
   double dotSpacing = 0,
+  double textScale = 1,
   Color color = Colors.black,
   int milliseconds = 250,
 }) =>
     MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: JumpingDotsProgressIndicator(
-            key: key,
-            numberOfDots: numberOfDots,
-            fontSize: fontSize,
-            dotSpacing: dotSpacing,
-            color: color,
-            milliseconds: milliseconds,
+      home: MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+        child: Scaffold(
+          body: Center(
+            child: JumpingDotsProgressIndicator(
+              key: key,
+              numberOfDots: numberOfDots,
+              fontSize: fontSize,
+              dotSpacing: dotSpacing,
+              color: color,
+              milliseconds: milliseconds,
+            ),
           ),
         ),
       ),
@@ -101,5 +106,54 @@ void main() {
 
     expect(heightAfterUpdate - heightBeforeUpdate, lessThan(1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps the existing indicator geometry at normal text scale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _indicator(key: const ValueKey('dots'), fontSize: 14),
+    );
+
+    expect(
+      tester.getSize(find.byType(JumpingDotsProgressIndicator)).height,
+      21,
+    );
+    expect(tester.getSize(find.byType(JumpingDot).first).height, 14);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fits scaled paragraph metrics at enlarged text scales', (
+    tester,
+  ) async {
+    for (final scale in [2.0, 3.0]) {
+      await tester.pumpWidget(
+        _indicator(
+          key: const ValueKey('dots'),
+          fontSize: 14,
+          textScale: scale,
+        ),
+      );
+
+      final paragraph =
+          tester.renderObject<RenderParagraph>(find.text('.').first);
+      final dotSize = tester.getSize(find.byType(JumpingDot).first);
+      final naturalParagraph = TextPainter(
+        text: paragraph.text,
+        textDirection: paragraph.textDirection,
+        textScaler: paragraph.textScaler,
+      )..layout();
+      expect(
+        dotSize.height,
+        greaterThanOrEqualTo(naturalParagraph.height),
+        reason: 'the dot slot must fit the natural line height at ${scale}x',
+      );
+      naturalParagraph.dispose();
+      expect(
+        tester.getSize(find.byType(JumpingDotsProgressIndicator)).height,
+        21 * scale,
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 }

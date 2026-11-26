@@ -15,13 +15,17 @@ class JumpingDot extends AnimatedWidget {
   Animation<double> get _animation => listenable as Animation<double>;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: _animation.value + fontSize,
-        child: Text(
-          '.',
-          style: TextStyle(color: color, fontSize: fontSize, height: 1),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final scaledFontSize = MediaQuery.textScalerOf(context).scale(fontSize);
+
+    return SizedBox(
+      height: _animation.value + scaledFontSize,
+      child: Text(
+        '.',
+        style: TextStyle(color: color, fontSize: fontSize, height: 1),
+      ),
+    );
+  }
 }
 
 @immutable
@@ -140,23 +144,28 @@ class _JumpingDotsProgressIndicatorState
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: widget.fontSize + (widget.fontSize * 0.5),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List<Widget>.generate(
-            _controllers.length,
-            (dot) => Padding(
-              padding: EdgeInsets.only(right: widget.dotSpacing),
-              child: JumpingDot(
-                animation: _animations[dot],
-                fontSize: widget.fontSize,
-                color: widget.color,
-              ),
+  Widget build(BuildContext context) {
+    final scaledFontSize =
+        MediaQuery.textScalerOf(context).scale(widget.fontSize);
+
+    return SizedBox(
+      height: scaledFontSize + (scaledFontSize * 0.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List<Widget>.generate(
+          _controllers.length,
+          (dot) => Padding(
+            padding: EdgeInsets.only(right: widget.dotSpacing),
+            child: JumpingDot(
+              animation: _animations[dot],
+              fontSize: widget.fontSize,
+              color: widget.color,
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 
   @override
   void dispose() {
