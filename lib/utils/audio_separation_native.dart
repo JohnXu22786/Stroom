@@ -135,29 +135,45 @@ class AudioSeparationEngine {
     }
 
     onProgress?.call(0);
+    bool isCancelled() => cancelToken?.isCancelled ?? false;
+    void throwIfCancelled() {
+      if (isCancelled()) {
+        throw Exception('Audio extraction was cancelled');
+      }
+    }
+
+    await Future<void>.delayed(Duration.zero);
+    throwIfCancelled();
 
     // Step 1: Parse MP4 container and find audio track
-    final mp4 = _Mp4Demuxer(videoBytes);
-    final audioTrack = mp4.findAudioTrack();
+    final mp4 = _Mp4Demuxer(videoBytes, isCancelled: isCancelled);
+    final audioTrack = await mp4.findAudioTrackYielding();
     if (audioTrack == null) {
       throw Exception('No audio track found in video');
     }
 
     onProgress?.call(30);
+    throwIfCancelled();
 
     // Step 2: Extract audio sample data as individual frames with their sizes
-    final frames = mp4.extractAudioFrames(audioTrack);
+    final frames = await mp4.extractAudioFramesYielding(
+      audioTrack,
+      isCancelled: isCancelled,
+    );
     if (frames.isEmpty) {
       throw Exception('No audio data extracted');
     }
 
     onProgress?.call(60);
+    throwIfCancelled();
 
     // Step 3: Package into playable format
-    final result = _packageFrames(frames, audioTrack);
-    if (cancelToken?.isCancelled ?? false) {
-      throw Exception('Audio extraction was cancelled');
-    }
+    final result = await _packageFramesYielding(
+      frames,
+      audioTrack,
+      isCancelled: isCancelled,
+    );
+    throwIfCancelled();
 
     onProgress?.call(100);
     return result;
@@ -1523,7 +1539,7 @@ class _Mp4Demuxer {
 
       if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
 
-      _movieTimescale = _readMovieTimescale(moovOffset);
+      _movieTimescale = await _readMovieTimescaleYielding(moovOffset);
       _offset = moovOffset + 8;
       final moovEnd = moovOffset + _boxSizeAt(moovOffset);
 
@@ -2204,6 +2220,24 @@ class _Mp4Demuxer {
     final moovEnd = moovOffset + _boxSizeAt(moovOffset);
     var childOffset = moovOffset + 8;
     while (childOffset + 8 <= moovEnd) {
+      final childSize = _uint32At(childOffset);
+      if (childSize < 8 || childOffset + childSize > moovEnd) return null;
+      final childType = String.fromCharCodes(
+        _data.sublist(childOffset + 4, childOffset + 8),
+      );
+      if (childType == 'mvhd') {
+        return _readTimescale(childOffset, childSize);
+      }
+      childOffset += childSize;
+    }
+    return null;
+  }
+
+  Future<int?> _readMovieTimescaleYielding(int moovOffset) async {
+    final moovEnd = moovOffset + _boxSizeAt(moovOffset);
+    var childOffset = moovOffset + 8;
+    while (childOffset + 8 <= moovEnd) {
+      await _yieldIfNeeded();
       final childSize = _uint32At(childOffset);
       if (childSize < 8 || childOffset + childSize > moovEnd) return null;
       final childType = String.fromCharCodes(

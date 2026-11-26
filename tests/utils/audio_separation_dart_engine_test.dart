@@ -3,6 +3,7 @@ import 'dart:isolate' show Isolate, ReceivePort, SendPort;
 import 'dart:math' show pi, sin;
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_separation_native.dart'
     show AudioSeparationEngine, extractAudioSync;
@@ -1998,6 +1999,95 @@ void main() {
       expect(progressValues.last, equals(100));
       // Output should still be valid
       expect(result.length, greaterThan(0));
+    });
+
+    test('extractAudio observes cancellation while extracting large audio',
+        () async {
+      final mp4Bytes = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 20 * 1024,
+        dataPattern: Uint8List.fromList([0x12, 0x34]),
+      );
+      final cancelToken = CancelToken();
+      final progressValues = <int>[];
+
+      await expectLater(
+        engine.extractAudio(
+          videoBytes: mp4Bytes,
+          videoFormat: 'mp4',
+          cancelToken: cancelToken,
+          onProgress: (progress) {
+            progressValues.add(progress);
+            if (progress == 30) {
+              Timer.run(() => cancelToken.cancel('test cancellation'));
+            }
+          },
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(progressValues, contains(30));
+      expect(progressValues, isNot(contains(60)));
+      expect(progressValues, isNot(contains(100)));
+    });
+
+    test('extractAudio observes cancellation while scanning MP4 movie boxes',
+        () async {
+      final source = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+      );
+      final moovStart = _findFourCc(source, 'moov') - 4;
+      final mvhdStart = _findFourCc(source, 'mvhd') - 4;
+      final padding = Uint8List(10 * 1024 * 8);
+      for (var offset = 0; offset < padding.length; offset += 8) {
+        padding.setRange(offset, offset + 8, _buildBoxHeader(8, 'free'));
+      }
+
+      final mp4Bytes = Uint8List(source.length + padding.length)
+        ..setRange(0, mvhdStart, source)
+        ..setRange(mvhdStart, mvhdStart + padding.length, padding)
+        ..setRange(
+          mvhdStart + padding.length,
+          source.length + padding.length,
+          source,
+          mvhdStart,
+        );
+      final data = ByteData.sublistView(mp4Bytes);
+      data.setUint32(
+        moovStart,
+        _readUint32BE(source, moovStart) + padding.length,
+        Endian.big,
+      );
+      final stcoTypeOffset = _findFourCc(mp4Bytes, 'stco');
+      data.setUint32(
+        stcoTypeOffset + 12,
+        _readUint32BE(mp4Bytes, stcoTypeOffset + 12) + padding.length,
+        Endian.big,
+      );
+
+      final cancelToken = CancelToken();
+      final progressValues = <int>[];
+
+      await expectLater(
+        engine.extractAudio(
+          videoBytes: mp4Bytes,
+          videoFormat: 'mp4',
+          cancelToken: cancelToken,
+          onProgress: (progress) {
+            progressValues.add(progress);
+            if (progress == 0) {
+              Timer(
+                const Duration(milliseconds: 1),
+                () => cancelToken.cancel('test cancellation'),
+              );
+            }
+          },
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(progressValues, contains(0));
+      expect(progressValues, isNot(contains(30)));
     });
   });
 }
