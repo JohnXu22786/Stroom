@@ -126,9 +126,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
 
-    final fieldsByLine = lines
-        .map((line) => _extractFields(line, separator))
-        .toList();
+    final fieldsByLine =
+        lines.map((line) => _extractFields(line, separator)).toList();
     final maxColumns = fieldsByLine.fold<int>(
       0,
       (max, fields) => fields.length > max ? fields.length : max,
@@ -385,8 +384,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 final textScaler = MediaQuery.textScalerOf(context);
                 final textDirection = Directionality.of(context);
                 final locale = Localizations.localeOf(context);
-                final dropdownStyle =
-                    Theme.of(context).textTheme.titleMedium ??
+                final dropdownStyle = Theme.of(context).textTheme.titleMedium ??
                     const TextStyle();
                 double textWidth(String text, TextStyle style) {
                   final painter = TextPainter(
@@ -411,8 +409,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   l10n.voiceBatchSeparator,
                   DefaultTextStyle.of(context).style,
                 );
-                final isNarrow =
-                    constraints.maxWidth < 420 ||
+                final isNarrow = constraints.maxWidth < 420 ||
                     labelWidth + 8 + widestOption + 40 > constraints.maxWidth;
                 final dropdown = DropdownButton<String>(
                   dropdownColor: StroomMenuStyle.surface(context),
@@ -561,9 +558,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                         l10n.voiceBatchSingleColumn,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimaryContainer,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -663,9 +659,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   // 表头
                   TableRow(
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     children: [
                       VbTableCell(l10n.voiceName, isHeader: true),
@@ -697,13 +692,13 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       LineStatus.newVoice => (l10n.voiceNew, Colors.green.shade700),
       LineStatus.duplicate => (l10n.voiceIdExists, Colors.orange.shade700),
       LineStatus.formatError => (
-        l10n.voiceFormatError(
-          line.errorMsg != null
-              ? ': ${line.errorMsg}'
-              : ': ${l10n.voiceInsufficientColumnData}',
+          l10n.voiceFormatError(
+            line.errorMsg != null
+                ? ': ${line.errorMsg}'
+                : ': ${l10n.voiceInsufficientColumnData}',
+          ),
+          Colors.red.shade700,
         ),
-        Colors.red.shade700,
-      ),
     };
 
     return Padding(
