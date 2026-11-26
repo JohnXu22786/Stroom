@@ -1181,7 +1181,7 @@ void main() {
   });
 
   testWidgets(
-    'speech-content section label stays within its row at narrow large text',
+    'speech-content section label stays bounded when clipped and aligned when fitting',
     (tester) async {
       const size = Size(320, 640);
       tester.view.physicalSize = size;
@@ -1226,6 +1226,35 @@ void main() {
         expect(label.textAlign, TextAlign.end);
         expect(tester.takeException(), isNull, reason: locale.toString());
       }
+
+      tester.view.physicalSize = const Size(600, 640);
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createTtsEntry()],
+          locale: const Locale('pt', 'BR'),
+          textScaler: TextScaler.linear(1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final speechContent = AppLocalizations.of(
+        tester.element(find.byType(TTSCreatePage)),
+      )!
+          .ttsSpeechContent;
+      final speechLabel = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == speechContent,
+      );
+      final speechRow = find
+          .ancestor(
+            of: speechLabel,
+            matching: find.byType(Row),
+          )
+          .first;
+      expect(
+        tester.getRect(speechLabel).right,
+        closeTo(tester.getRect(speechRow).right, 1),
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 }

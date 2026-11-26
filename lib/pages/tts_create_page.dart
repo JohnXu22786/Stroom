@@ -849,7 +849,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                   ),
                 ),
                 const Spacer(),
-                Flexible(
+                Expanded(
                   child: ConstrainedText(
                     l10n.ttsSpeechContent,
                     style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
