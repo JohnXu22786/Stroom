@@ -268,7 +268,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                             status,
                             maxLines: 1,
                             overflow: TextOverflow.clip,
-                            textAlign: TextAlign.center,
+                            textAlign: TextAlign.start,
                             style: statusStyle,
                           ),
                         ),

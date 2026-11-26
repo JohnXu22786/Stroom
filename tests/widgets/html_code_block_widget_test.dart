@@ -133,6 +133,14 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.bySemanticsLabel('Wird generiert …'), findsOneWidget);
+      final statusText = find
+          .ancestor(
+            of: find.text('Wird generiert …'),
+            matching: find.byType(ConstrainedText),
+          )
+          .first;
+      expect(tester.widget<ConstrainedText>(statusText).textAlign,
+          TextAlign.start);
       final statusRow = find
           .ancestor(
             of: find.byType(CircularProgressIndicator),
