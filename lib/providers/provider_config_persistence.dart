@@ -69,6 +69,19 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       // 兜底：使用 whereType 安全过滤，避免非 Map 条目导致的闪退
       final oldList = decoded.whereType<Map<String, dynamic>>().toList();
+      final hasUnmigratableRows = oldList.length != decoded.length ||
+          oldList.any((config) {
+            final models = config['models'];
+            return (models != null && models is! List) ||
+                (models is List &&
+                    models.any((model) => model is! Map<String, dynamic>));
+          });
+      if (hasUnmigratableRows &&
+          !await _backupCorruptProviderEntries(prefs, oldJson)) {
+        // Keep the legacy value available for another attempt if its
+        // unrecoverable rows could not be backed up.
+        return;
+      }
       if (oldList.isEmpty) {
         await prefs.remove('chat_configs');
         await prefs.remove('chat_selected_config_id');
@@ -734,8 +747,14 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   Future<bool> _backupCorruptProviderEntries(
       SharedPreferences prefs, String corruptJson) async {
     try {
-      final backupKey =
+      final baseKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
+      var backupKey = baseKey;
+      var suffix = 1;
+      while (prefs.containsKey(backupKey)) {
+        backupKey = '$baseKey.$suffix';
+        suffix++;
+      }
       final saved = await prefs.setString(backupKey, corruptJson);
       if (!saved) return false;
       // 只保留最近的 N 份

@@ -271,6 +271,14 @@ class OpenAiFileService {
     void Function(double progress)? onProgress,
     CancelToken? cancelToken,
   }) async {
+    if (config.partSizeBytes <= 0 ||
+        config.partSizeBytes > kDefaultPartSizeBytes) {
+      throw Exception(
+        'Multipart part size must be between 1 and '
+        '$kDefaultPartSizeBytes bytes.',
+      );
+    }
+
     // Step 1: Create the upload
     final uploadId = await _createUpload(
       bytes.length,
