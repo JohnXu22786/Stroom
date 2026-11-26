@@ -994,13 +994,15 @@ class ManifestDatabase {
       String id, Map<String, dynamic> updates) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        final index = list.indexWhere((r) => (r as Map)['id'] == id);
-        if (index != -1) {
-          (list[index] as Map<String, dynamic>).addAll(updates);
-          await _saveWebData();
-        }
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((r) => (r as Map)['id'] == id);
+          if (index != -1) {
+            (list[index] as Map<String, dynamic>).addAll(updates);
+            await _saveWebData();
+          }
+        });
         return;
       }
       final db = await database;
@@ -1306,13 +1308,15 @@ class ManifestDatabase {
       String id, Map<String, dynamic> updates) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        final index = list.indexWhere((r) => (r as Map)['id'] == id);
-        if (index != -1) {
-          (list[index] as Map<String, dynamic>).addAll(updates);
-          await _saveWebData();
-        }
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((r) => (r as Map)['id'] == id);
+          if (index != -1) {
+            (list[index] as Map<String, dynamic>).addAll(updates);
+            await _saveWebData();
+          }
+        });
         return;
       }
       final db = await database;
@@ -1473,13 +1477,15 @@ class ManifestDatabase {
       String id, Map<String, dynamic> updates) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        final index = list.indexWhere((r) => (r as Map)['id'] == id);
-        if (index != -1) {
-          (list[index] as Map<String, dynamic>).addAll(updates);
-          await _saveWebData();
-        }
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((r) => (r as Map)['id'] == id);
+          if (index != -1) {
+            (list[index] as Map<String, dynamic>).addAll(updates);
+            await _saveWebData();
+          }
+        });
         return;
       }
       final db = await database;
