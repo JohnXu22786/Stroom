@@ -373,6 +373,21 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   Widget _buildRow(int index) {
     final l10n = AppLocalizations.of(context)!;
     final isDuplicate = _findDuplicateIndices(index).isNotEmpty;
+    final theme = Theme.of(context);
+    final hintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge!
+            : theme.textTheme.titleMedium!)
+        .copyWith(
+          color: theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+        )
+        .merge(
+          WidgetStateProperty.resolveAs(
+            theme.inputDecorationTheme.hintStyle,
+            const <WidgetState>{},
+          ),
+        );
 
     return Card(
       key: ValueKey('voice_row_$index'),
@@ -404,7 +419,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
               child: TextField(
                 controller: _nameCtrls[index],
                 decoration: InputDecoration(
-                  hint: ConstrainedText(l10n.voiceName, maxLines: 1),
+                  hint: ConstrainedText(
+                    l10n.voiceName,
+                    style: hintStyle,
+                    maxLines: 1,
+                  ),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -418,7 +437,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 controller: _idCtrls[index],
                 focusNode: _idFocusNodes[index],
                 decoration: InputDecoration(
-                  hint: ConstrainedText(l10n.voiceId, maxLines: 1),
+                  hint: ConstrainedText(
+                    l10n.voiceId,
+                    style: hintStyle,
+                    maxLines: 1,
+                  ),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),

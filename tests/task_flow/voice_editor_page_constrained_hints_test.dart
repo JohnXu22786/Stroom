@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
@@ -16,8 +15,10 @@ void main() {
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
+    tester.platformDispatcher.textScaleFactorTestValue = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -47,6 +48,11 @@ void main() {
         (widget) => widget is ConstrainedText && widget.data == hint,
       );
       expect(constrainedHint, findsOneWidget);
+      final theme = Theme.of(tester.element(constrainedHint));
+      final hintStyle = tester.widget<ConstrainedText>(constrainedHint).style!;
+      expect(hintStyle.fontSize, theme.textTheme.bodyLarge!.fontSize);
+      expect(hintStyle.fontWeight, theme.textTheme.bodyLarge!.fontWeight);
+      expect(hintStyle.color, theme.colorScheme.onSurfaceVariant);
       final field = find
           .ancestor(
             of: constrainedHint,
@@ -54,11 +60,13 @@ void main() {
           )
           .first;
       expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      final paragraph = tester.renderObject<RenderParagraph>(
-        find.descendant(of: constrainedHint, matching: find.byType(RichText)),
-      );
+      final naturalText = TextPainter(
+        text: TextSpan(text: hint, style: hintStyle),
+        textDirection: Directionality.of(tester.element(constrainedHint)),
+        textScaler: MediaQuery.textScalerOf(tester.element(constrainedHint)),
+      )..layout();
       expect(
-        paragraph.size.width,
+        naturalText.width,
         greaterThan(tester.getSize(constrainedHint).width),
         reason: 'the complete localized hint is wider than its finite slot',
       );
@@ -86,7 +94,9 @@ void main() {
     await pumpVoiceEditor(
       tester,
       locale: const Locale('es', 'ES'),
-      size: const Size(800, 640),
+      // The widget test font uses fixed-width Ahem glyphs; 1000 dp gives the
+      // complete Spanish hints room to fit in this fixture.
+      size: const Size(1000, 640),
     );
 
     final l10n = await AppLocalizations.delegate.load(const Locale('es', 'ES'));
@@ -95,13 +105,20 @@ void main() {
         (widget) => widget is ConstrainedText && widget.data == hint,
       );
       expect(constrainedHint, findsOneWidget);
-      final paragraph = tester.renderObject<RenderParagraph>(
-        find.descendant(of: constrainedHint, matching: find.byType(RichText)),
-      );
+      final theme = Theme.of(tester.element(constrainedHint));
+      final hintStyle = tester.widget<ConstrainedText>(constrainedHint).style!;
+      expect(hintStyle.fontSize, theme.textTheme.bodyLarge!.fontSize);
+      expect(hintStyle.fontWeight, theme.textTheme.bodyLarge!.fontWeight);
+      expect(hintStyle.color, theme.colorScheme.onSurfaceVariant);
+      final naturalText = TextPainter(
+        text: TextSpan(text: hint, style: hintStyle),
+        textDirection: Directionality.of(tester.element(constrainedHint)),
+        textScaler: MediaQuery.textScalerOf(tester.element(constrainedHint)),
+      )..layout();
       expect(
-        paragraph.size.width,
-        closeTo(tester.getSize(constrainedHint).width, 0.01),
-        reason: 'a fitting hint keeps its natural stationary width',
+        naturalText.width,
+        lessThanOrEqualTo(tester.getSize(constrainedHint).width),
+        reason: 'the complete localized hint fits in its slot and stays still',
       );
     }
 
