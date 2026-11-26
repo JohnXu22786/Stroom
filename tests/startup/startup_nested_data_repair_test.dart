@@ -6,6 +6,49 @@ import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/startup/startup_check_service.dart';
 
+Future<List<StartupIssue>> _validateMalformedConfigParam(
+  String fieldName,
+  Object? malformedValue,
+) async {
+  SharedPreferences.setMockInitialValues({
+    'data_format_version': DataMigrationService.currentFormatVersion,
+    'provider_entries': jsonEncode([
+      {
+        'id': 'broken_provider',
+        'type': 'llm',
+        'name': 'Broken Provider',
+        'configs': [
+          {
+            'providerName': 'Broken Config',
+            fieldName: [malformedValue],
+            'models': [],
+          },
+        ],
+      },
+      {
+        'id': 'valid_provider',
+        'type': 'llm',
+        'name': 'Valid Provider',
+        'configs': [
+          {
+            'providerName': 'Valid Config',
+            'customParams': [
+              {'paramName': 'temperature', 'defaultValue': '0.7'},
+            ],
+            'reasoningParams': [
+              {'paramName': 'effort', 'options': ['low', 'high']},
+            ],
+            'models': [],
+          },
+        ],
+      },
+    ]),
+  });
+  AppStorage.resetCache();
+
+  return StartupCheckService.validateDataFormats();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -201,6 +244,37 @@ void main() {
         (i) => i.message.contains('reasoningParams'),
       );
       expect(reasoningParamsIssues, isNotEmpty);
+    });
+
+    test('validateDataFormats detects config-level malformed customParams',
+        () async {
+      final issues = await _validateMalformedConfigParam('customParams', null);
+
+      final customParamsIssues = issues
+          .where((issue) => issue.message.contains('customParams'))
+          .toList();
+      expect(customParamsIssues, hasLength(1));
+      expect(
+        customParamsIssues.single.message,
+        contains('provider_entries[0].configs[0].customParams[0]'),
+      );
+    });
+
+    test('validateDataFormats detects config-level malformed reasoningParams',
+        () async {
+      final issues = await _validateMalformedConfigParam(
+        'reasoningParams',
+        'invalid',
+      );
+
+      final reasoningParamsIssues = issues
+          .where((issue) => issue.message.contains('reasoningParams'))
+          .toList();
+      expect(reasoningParamsIssues, hasLength(1));
+      expect(
+        reasoningParamsIssues.single.message,
+        contains('provider_entries[0].configs[0].reasoningParams[0]'),
+      );
     });
   });
 
