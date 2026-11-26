@@ -17,6 +17,67 @@ import 'package:stroom/services/http_tool_service.dart';
 /// (HTTP 401) instead of reporting "API Key 未配置".
 void main() {
   group('built-in HTTP tool API key collection', () {
+    test('ignores disabled duplicate configs when collecting API keys',
+        () async {
+      final adapter = ChatAdapter();
+      addTearDown(() {
+        adapter.initializeBuiltinTools(const ProviderEntriesState());
+        adapter.dispose();
+      });
+
+      ProviderConfigItem searxngConfig(String apiKey, {bool enabled = true}) =>
+          ProviderConfigItem(
+            providerName: 'Searxng',
+            host: 'https://example.com',
+            key: '',
+            enabled: enabled,
+            models: [
+              ModelConfig(
+                name: 'Searxng',
+                modelId: 'http',
+                typeConfig: {
+                  'isHttpTool': true,
+                  'url': 'https://example.com',
+                  'apiKey': apiKey,
+                },
+              ),
+            ],
+          );
+
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      final authorizationHeaders = <String?>[];
+      server.listen((request) async {
+        authorizationHeaders.add(
+          request.headers.value(HttpHeaders.authorizationHeader),
+        );
+        request.response.headers.contentType = ContentType.json;
+        request.response.write('{"results":[]}');
+        await request.response.close();
+      });
+
+      adapter.initializeBuiltinTools(ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              searxngConfig('disabled-key', enabled: false),
+              searxngConfig('enabled-key'),
+            ],
+          ),
+        ],
+      ));
+
+      await HttpToolService.handleSearxngSearch(
+        {'query': 'configured'},
+        url: 'http://${server.address.address}:${server.port}',
+      );
+
+      expect(authorizationHeaders, ['Bearer enabled-key']);
+    });
+
     test('config refresh clears removed keys and preserves configured keys',
         () async {
       final adapter = ChatAdapter();

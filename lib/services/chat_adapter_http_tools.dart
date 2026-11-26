@@ -20,6 +20,9 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
 
     if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
       for (final config in mcpEntry.configs) {
+        if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) {
+          continue;
+        }
         final typeConfig =
             config.models.isNotEmpty ? config.models[0].typeConfig : null;
 
