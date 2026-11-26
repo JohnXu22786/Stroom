@@ -829,9 +829,8 @@ class TaskExecutor {
               : resource,
         );
       }
-      final selectedPlaylistResources = pl.isM3U8
-          ? playlistResources
-          : <M3U8PlaylistResource>[];
+      final selectedPlaylistResources =
+          pl.isM3U8 ? playlistResources : <M3U8PlaylistResource>[];
       final segmentMedia = selectedPlaylistResources.map((resource) {
         final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
@@ -850,10 +849,10 @@ class TaskExecutor {
           final representation = dashRepresentations[index];
           final dimensions =
               representation.width != null && representation.height != null
-              ? '${representation.width}x${representation.height}'
-              : representation.id.isNotEmpty
-              ? representation.id
-              : 'representation-${index + 1}';
+                  ? '${representation.width}x${representation.height}'
+                  : representation.id.isNotEmpty
+                      ? representation.id
+                      : 'representation-${index + 1}';
           final groupId =
               'dash:${Uri.encodeComponent(pl.url)}:${representation.key}';
           final (baseName, _) = SniffingEngine.parseFileName(pl.url);

@@ -198,9 +198,8 @@ fragment.m4s
           task: task,
           fromStep: StepType.parsingPlaylist,
           cancelToken: cancelToken,
-          playlistDioFactory: () =>
-              Dio()
-                ..httpClientAdapter = _PlaylistAdapter({manifestUrl: manifest}),
+          playlistDioFactory: () => Dio()
+            ..httpClientAdapter = _PlaylistAdapter({manifestUrl: manifest}),
           onUpdate: (updated) {
             final parsing = updated.steps.firstWhere(
               (step) => step.type == StepType.parsingPlaylist,

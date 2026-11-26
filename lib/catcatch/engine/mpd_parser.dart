@@ -67,16 +67,13 @@ class MPDParser {
     );
     var segmentCount = 0;
 
-    for (
-      var periodIndex = 0;
-      periodIndex < (periods.isEmpty ? 1 : periods.length);
-      periodIndex++
-    ) {
+    for (var periodIndex = 0;
+        periodIndex < (periods.isEmpty ? 1 : periods.length);
+        periodIndex++) {
       final period = periods.isEmpty ? root : periods[periodIndex];
       final ancestors = periods.isEmpty ? [root] : [root, period];
-      final periodBase = periods.isEmpty
-          ? mpdBase
-          : _applyBaseUrl(period, mpdBase);
+      final periodBase =
+          periods.isEmpty ? mpdBase : _applyBaseUrl(period, mpdBase);
       final periodDuration = periods.isEmpty
           ? totalDuration
           : _getPeriodDuration(periods, periodIndex, totalDuration);
@@ -123,11 +120,9 @@ class MPDParser {
           final height = int.tryParse(
             representation.attributes['height'] ?? '',
           );
-          final mimeType =
-              representation.attributes['mimeType'] ??
+          final mimeType = representation.attributes['mimeType'] ??
               adaptationSet.attributes['mimeType'];
-          final codecs =
-              representation.attributes['codecs'] ??
+          final codecs = representation.attributes['codecs'] ??
               adaptationSet.attributes['codecs'];
           final identity = id.isNotEmpty
               ? 'id:$id'
@@ -185,16 +180,14 @@ class MPDParser {
       'audioSamplingRate',
       'par',
     ].map((name) => '$name=${adaptationSet.attributes[name] ?? ''}').join('|');
-    final roles =
-        adaptationSet.children
-            .where((node) => _isDash(node, 'Role'))
-            .map(
-              (node) =>
-                  '${node.attributes['schemeIdUri'] ?? ''}='
-                  '${node.attributes['value'] ?? ''}',
-            )
-            .toList()
-          ..sort();
+    final roles = adaptationSet.children
+        .where((node) => _isDash(node, 'Role'))
+        .map(
+          (node) => '${node.attributes['schemeIdUri'] ?? ''}='
+              '${node.attributes['value'] ?? ''}',
+        )
+        .toList()
+      ..sort();
     return 'attributes:$attributes|roles:${roles.join(',')}';
   }
 
