@@ -87,22 +87,15 @@ def _parse_directive(source: str, index: int, keyword: str):
 
 def _dart_directive_uris(source: str):
     index = 0
-    statement_start = True
     while index < len(source):
         if source.startswith(("//", "/*"), index):
-            end = _skip_comment(source, index)
-            if "\n" in source[index:end]:
-                statement_start = True
-            index = end
+            index = _skip_comment(source, index)
             continue
         if source[index].isspace():
-            if source[index] == "\n":
-                statement_start = True
             index += 1
             continue
         if source[index] in "'\"":
             _, index = _read_string(source, index)
-            statement_start = False
             continue
         if source[index].isalpha() or source[index] in "_$":
             start = index
@@ -112,16 +105,13 @@ def _dart_directive_uris(source: str):
             ):
                 index += 1
             keyword = source[start:index]
-            if keyword in _DART_DIRECTIVES and statement_start:
+            if keyword in _DART_DIRECTIVES:
                 parsed = _parse_directive(source, index, keyword)
                 if parsed is not None:
                     uris, index = parsed
                     yield from uris
-                    statement_start = True
                     continue
-            statement_start = False
             continue
-        statement_start = source[index] == ";"
         index += 1
 
 

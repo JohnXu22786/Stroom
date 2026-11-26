@@ -18,6 +18,7 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         self.entrypoint = self.root / "tool/qa/capture.dart"
         self.entrypoint.parent.mkdir(parents=True)
         self.entrypoint.write_text(
+            "@Deprecated('old') import 'package:stroom/utils/annotated_input.dart';\n"
             "import 'package:stroom/pages/capture_page.dart'; "
             "export 'package:stroom/utils/capture_extra.dart'; "
             "import 'package:local_capture_package/local_widget.dart'; "
@@ -43,6 +44,8 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         self.web_implementation.write_text("class CapturePlatform {}\n", encoding="utf-8")
         self.same_line_input = self.root / "lib/utils/capture_extra.dart"
         self.same_line_input.write_text("class CaptureExtra {}\n", encoding="utf-8")
+        self.annotated_input = self.root / "lib/utils/annotated_input.dart"
+        self.annotated_input.write_text("class AnnotatedInput {}\n", encoding="utf-8")
         self.local_package = self.root / "packages/local_capture_package"
         (self.local_package / "lib").mkdir(parents=True)
         (self.local_package / "pubspec.yaml").write_text(
@@ -87,6 +90,12 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
     def test_newer_transitive_production_import_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
         os.utime(self.transitive_input, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_newer_metadata_annotated_import_requires_rebuild(self):
+        newer_mtime = self.bundle.stat().st_mtime + 1
+        os.utime(self.annotated_input, (newer_mtime, newer_mtime))
 
         self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
 
