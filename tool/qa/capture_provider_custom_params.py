@@ -9,6 +9,8 @@ from urllib.request import urlopen
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_build_dependencies import needs_rebuild
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path('/workspace/.cloud-profile-state/vertical_provider_custom_params')
@@ -32,9 +34,7 @@ environment['LD_LIBRARY_PATH'] = str(env / 'lib')
 environment['PATH'] = f"{env}/bin:{environment['PATH']}"
 
 entrypoint = ROOT / 'tool/qa/provider_custom_params_capture.dart'
-if not (WEB_BUILD / 'index.html').exists() or entrypoint.stat().st_mtime > (
-    WEB_BUILD / 'index.html'
-).stat().st_mtime:
+if needs_rebuild(ROOT, entrypoint, WEB_BUILD / 'index.html'):
     subprocess.run(
         [
             '/workspace/sdks/flutter/bin/flutter',

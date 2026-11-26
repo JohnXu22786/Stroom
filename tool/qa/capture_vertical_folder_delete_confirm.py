@@ -10,6 +10,8 @@ from urllib.request import urlopen
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_build_dependencies import needs_rebuild
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path("/workspace/.cloud-profile-state/vertical_folder_delete_confirm")
@@ -28,10 +30,7 @@ environment = os.environ.copy()
 environment["TMPDIR"] = str(TMP)
 environment["PUB_CACHE"] = str(PUB_CACHE)
 capture_entrypoint = ROOT / "tool/qa/vertical_folder_delete_confirm_capture.dart"
-if (
-    not (WEB_BUILD / "index.html").exists()
-    or capture_entrypoint.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-):
+if needs_rebuild(ROOT, capture_entrypoint, WEB_BUILD / "index.html"):
     subprocess.run(
         [
             "/workspace/sdks/flutter/bin/flutter",
