@@ -193,11 +193,12 @@ class MarkdownConfig {
     List<WidgetConfig> configs = const [],
     Object? incrementalConfigKey,
   }) {
+    final copiedConfigs = Map<String, WidgetConfig>.of(_tag2Config);
     for (final config in configs) {
-      _tag2Config[config.tag] = config;
+      copiedConfigs[config.tag] = config;
     }
     return MarkdownConfig(
-      configs: _tag2Config.values.toList(),
+      configs: copiedConfigs.values.toList(),
       incrementalConfigKey: incrementalConfigKey ?? this.incrementalConfigKey,
     );
   }
