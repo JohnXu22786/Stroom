@@ -8,6 +8,33 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
+    fun cancelAlarmWithAbsentPendingIntentDoesNothing() {
+        val operations = mutableListOf<String>()
+
+        cancelExistingAlarm(
+            pendingIntent = null,
+            cancelAlarm = { operations += "alarm" },
+            cancelPendingIntent = { operations += "pending-intent" },
+        )
+
+        assertTrue(operations.isEmpty())
+    }
+
+    @Test
+    fun cancelAlarmWithPresentPendingIntentCancelsBothAlarmAndIntent() {
+        val operations = mutableListOf<String>()
+        val pendingIntent = Any()
+
+        cancelExistingAlarm(
+            pendingIntent = pendingIntent,
+            cancelAlarm = { assertEquals(pendingIntent, it); operations += "alarm" },
+            cancelPendingIntent = { assertEquals(pendingIntent, it); operations += "pending-intent" },
+        )
+
+        assertEquals(listOf("alarm", "pending-intent"), operations)
+    }
+
+    @Test
     fun activeWatchdogRearmsWithRunningServiceButManualStopSuppressesRearm() {
         val runningServicePlan = keepAliveAlarmDeliveryPlan(
             serviceRunning = true,
