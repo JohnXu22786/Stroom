@@ -45,10 +45,19 @@ class MainActivity : FlutterActivity() {
                 val uri = data.data!!
                 // 立即固化权限 — 必须成功才能持久化 URI
                 try {
+                    val grantedFlags = data.flags and (
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            )
+                    if (grantedFlags == 0) {
+                        Log.w(TAG, "SAF: 提供方未授予读写权限: $uri")
+                        pendingSafResult?.success(null)
+                        pendingSafResult = null
+                        return
+                    }
                     contentResolver.takePersistableUriPermission(
                         uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        grantedFlags
                     )
                     Log.i(TAG, "SAF: 权限已固化: $uri")
                     pendingSafResult?.success(uri.toString())
@@ -432,6 +441,11 @@ class MainActivity : FlutterActivity() {
         pendingSafResult = result
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
 
             // Android 8.0+ 支持初始目录定位到 Documents 文件夹
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
