@@ -194,6 +194,50 @@ void main() {
     expect(await File(outputPaths.single).readAsString(), 'new photo');
   });
 
+  test('backslash export paths resolve to nested filesystem paths', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'backslash_export_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final checkedPaths = <String>[];
+
+    final outputPaths = await resolveNonClobberingExportPaths(
+      files: const ['photos\\nested\\scene.jpg'],
+      directory: directory.path,
+      folders: const ['photos\\nested'],
+      pathExists: (path) async {
+        checkedPaths.add(path);
+        return false;
+      },
+    );
+
+    final expectedFile = p.join(
+      directory.path,
+      'photos',
+      'nested',
+      'scene.jpg',
+    );
+    expect(outputPaths, [expectedFile]);
+    expect(checkedPaths, [expectedFile]);
+
+    await createUserVisibleExportDirectory(
+      directory.path,
+      'photos\\nested',
+    );
+    expect(
+      await Directory(p.join(directory.path, 'photos', 'nested')).exists(),
+      isTrue,
+    );
+    expect(
+      await Directory(p.join(directory.path, r'photos\nested')).exists(),
+      isFalse,
+    );
+    await expectLater(
+      createUserVisibleExportDirectory(directory.path, r'photos\..\outside'),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test('folder export directories reject symlinked path components', () async {
     final destination = await Directory.systemTemp.createTemp('export_root_');
     final outside = await Directory.systemTemp.createTemp('export_outside_');
