@@ -41,6 +41,44 @@ void main() {
     );
   });
 
+  test('reference link labels unescape ASCII punctuation', () {
+    expect(
+      markdown.markdownToHtml(
+        r'[\*]'
+        '\n\n'
+        r'[*]: /asterisk',
+      ),
+      '<p><a href="/asterisk">*</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml(
+        r'[\*][]'
+        '\n\n'
+        r'[*]: /asterisk',
+      ),
+      '<p><a href="/asterisk">*</a></p>\n',
+    );
+  });
+
+  test('reference link labels preserve escaped brackets and backslashes', () {
+    expect(markdown.markdownToHtml(r'[\]]'), '<p>[]]</p>\n');
+    expect(markdown.markdownToHtml(r'[\\]'), '<p>[\\]</p>\n');
+  });
+
+  test(
+    'reference link labels do not unescape punctuation after escaped slash',
+    () {
+      expect(
+        markdown.markdownToHtml(
+          r'[link][\\*]'
+          '\n\n'
+          r'[*]: /asterisk',
+        ),
+        '<p>[link][\\*]</p>\n',
+      );
+    },
+  );
+
   test('tabs separate fenced code language from metadata', () {
     expect(
       markdown.markdownToHtml('```dart\tmeta\ncode\n```'),
@@ -64,4 +102,44 @@ void main() {
 
     expect(renderer.render([markdown.Text('  leading')]), '  leading');
   });
+
+  test('GitHub heading anchors preserve Unicode-only headings', () {
+    expect(
+      markdown.markdownToHtml(
+        '## 你好世界',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="你好世界">你好世界</h2>\n',
+    );
+    expect(
+      markdown.markdownToHtml(
+        '## कि',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="कि">कि</h2>\n',
+    );
+  });
+
+  test('GitHub heading anchors preserve Unicode in mixed-script headings', () {
+    expect(
+      markdown.markdownToHtml(
+        '## Hello 世界 123',
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      '<h2 id="hello-世界-123">Hello 世界 123</h2>\n',
+    );
+  });
+
+  test(
+    'GitHub heading anchors keep ASCII punctuation and spacing behavior',
+    () {
+      expect(
+        markdown.markdownToHtml(
+          '## Hello, WORLD!',
+          extensionSet: markdown.ExtensionSet.gitHubWeb,
+        ),
+        '<h2 id="hello-world">Hello, WORLD!</h2>\n',
+      );
+    },
+  );
 }

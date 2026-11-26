@@ -60,6 +60,6 @@ abstract class BlockSyntax {
       element.children!.first.textContent
           .toLowerCase()
           .trim()
-          .replaceAll(RegExp('[^a-z0-9 _-]'), '')
+          .replaceAll(RegExp(r'[^\p{L}\p{M}\p{N} _-]', unicode: true), '')
           .replaceAll(RegExp(r'\s'), '-');
 }
