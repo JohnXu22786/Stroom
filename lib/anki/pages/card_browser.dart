@@ -82,7 +82,15 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final searchHintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge!
+            : theme.textTheme.titleMedium!)
+        .copyWith(
+          color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
+        )
+        .merge(theme.inputDecorationTheme.hintStyle);
     return Scaffold(
       appBar: AppBar(
         title: ConstrainedText(
@@ -99,7 +107,12 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
             child: TextField(
               controller: _searchCtl,
               decoration: InputDecoration(
-                hintText: l10n.ankiBrowserSearchHint,
+                hint: ConstrainedText(
+                  l10n.ankiBrowserSearchHint,
+                  style: searchHintStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),

@@ -1,6 +1,6 @@
 path,latest_main_text_hits,latest_main_limit_hits,latest_main_layout_hits,stage2_text_hits,stage2_limit_hits,stage2_layout_hits,existing_constrained_text_hits,disposition
 lib/anki/pages/anki_stats_page.dart,6,0,12,6,2,12,1,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
-lib/anki/pages/card_browser.dart,5,2,1,5,4,1,2,"Search and card-front labels remain constrained; note-load error diagnostics wrap naturally in the scrollable card list and retain the full exception. Verified with long French error at 320x640, 1x, and Chinese at 2x."
+lib/anki/pages/card_browser.dart,5,2,1,5,4,1,2,"The search hint uses a measured one-line widget inside the native TextField hint slot; French at 320×640/1.8× reveals clipped text, while English at 390×844/1× stays stationary. Card-front labels remain constrained and note-load error diagnostics wrap naturally in the scrollable card list. See docs/qa/anki_card_browser_search_hint/."
 lib/anki/sync/generated/anki/collection.pb.dart,0,0,0,3,0,0,0,Generated source or model/layout signal; no hand edit. User-facing bounded labels belong at their consuming UI call site.
 lib/anki/sync/generated/anki/config.pb.dart,0,0,0,3,0,0,0,Generated source or model/layout signal; no hand edit. User-facing bounded labels belong at their consuming UI call site.
 lib/anki/sync/generated/anki/decks.pb.dart,0,0,0,0,0,1,0,Generated source or model/layout signal; no hand edit. User-facing bounded labels belong at their consuming UI call site.
