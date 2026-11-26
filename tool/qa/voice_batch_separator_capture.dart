@@ -6,6 +6,8 @@ import 'package:stroom/pages/voice_batch_add_page.dart';
 
 void main() {
   final dark = Uri.base.queryParameters['theme'] == 'dark';
+  final textScale =
+      double.tryParse(Uri.base.queryParameters['textScale'] ?? '') ?? 1;
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -23,6 +25,11 @@ void main() {
         colorSchemeSeed: Colors.blue,
         brightness: Brightness.dark,
         useMaterial3: true,
+      ),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
       ),
       home: const VoiceBatchAddPage(existingVoices: <VoiceEntry>[]),
     ),

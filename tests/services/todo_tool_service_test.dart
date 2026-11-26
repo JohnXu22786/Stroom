@@ -161,16 +161,19 @@ void main() {
         ],
       }, locale: const Locale('en', 'US'));
 
-      await expectLater(
-        TodoToolService.handleTodoWrite({
-          'todos': [
-            {'content': 'Partial replacement'},
-            {'content': 'Invalid task', 'status': 42},
-          ],
-        }, locale: const Locale('en', 'US')),
-        throwsA(isA<TypeError>()),
-      );
+      final result = await TodoToolService.handleTodoWrite({
+        'todos': [
+          {
+            'content': 'Partial replacement',
+            'status': 'pending',
+            'priority': 'medium',
+          },
+          {'content': 'Invalid task', 'status': 42, 'priority': 'low'},
+        ],
+      }, locale: const Locale('en', 'US'));
 
+      expect(result, contains('todos[1].status'));
+      expect(result, contains('pending, in_progress, completed, cancelled'));
       final readResult = await TodoToolService.handleTodoRead(
         {},
         locale: const Locale('en', 'US'),
@@ -179,17 +182,112 @@ void main() {
       expect(readResult, isNot(contains('Partial replacement')));
     });
 
-    test('replaces the previous list after validating a valid replacement',
+    test('rejects each missing required field without replacing the list',
         () async {
       await TodoToolService.handleTodoWrite({
         'todos': [
-          {'content': 'Existing task'},
+          {'content': 'Existing task', 'status': 'pending', 'priority': 'high'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      for (final testCase in [
+        (field: 'content', item: {'status': 'pending', 'priority': 'high'}),
+        (field: 'status', item: {'content': 'No status', 'priority': 'high'}),
+        (
+          field: 'priority',
+          item: {'content': 'No priority', 'status': 'pending'}
+        ),
+      ]) {
+        final result = await TodoToolService.handleTodoWrite(
+          {
+            'todos': [testCase.item]
+          },
+          locale: const Locale('en', 'US'),
+        );
+        expect(result, contains('todos[0].${testCase.field} is required'));
+
+        final readResult = await TodoToolService.handleTodoRead(
+          {},
+          locale: const Locale('en', 'US'),
+        );
+        expect(readResult, contains('Existing task'));
+        expect(readResult, isNot(contains('No status')));
+        expect(readResult, isNot(contains('No priority')));
+      }
+    });
+
+    test('rejects wrong field types without replacing the list', () async {
+      await TodoToolService.handleTodoWrite({
+        'todos': [
+          {'content': 'Existing task', 'status': 'pending', 'priority': 'high'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      for (final field in ['content', 'status', 'priority']) {
+        final item = <String, dynamic>{
+          'content': 'Replacement',
+          'status': 'pending',
+          'priority': 'high',
+        };
+        item[field] = 7;
+        final result = await TodoToolService.handleTodoWrite({
+          'todos': [item],
+        }, locale: const Locale('en', 'US'));
+
+        expect(result, contains('todos[0].$field'));
+        expect(result,
+            anyOf(contains('must be a string'), contains('must be one of')));
+        final readResult = await TodoToolService.handleTodoRead(
+          {},
+          locale: const Locale('en', 'US'),
+        );
+        expect(readResult, contains('Existing task'));
+        expect(readResult, isNot(contains('Replacement')));
+      }
+    });
+
+    test('rejects unsupported priority without replacing the list', () async {
+      await TodoToolService.handleTodoWrite({
+        'todos': [
+          {'content': 'Existing task', 'status': 'pending', 'priority': 'high'},
         ],
       }, locale: const Locale('en', 'US'));
 
       final result = await TodoToolService.handleTodoWrite({
         'todos': [
-          {'content': 'Replacement task', 'status': 'in_progress'},
+          {'content': 'Replacement', 'status': 'pending', 'priority': 'urgent'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      expect(result, contains('todos[0].priority'));
+      expect(result, contains('high, medium, low'));
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(readResult, contains('Existing task'));
+      expect(readResult, isNot(contains('Replacement')));
+    });
+
+    test('replaces the previous list after validating a valid replacement',
+        () async {
+      await TodoToolService.handleTodoWrite({
+        'todos': [
+          {
+            'content': 'Existing task',
+            'status': 'pending',
+            'priority': 'medium',
+          },
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      final result = await TodoToolService.handleTodoWrite({
+        'todos': [
+          {
+            'content': 'Replacement task',
+            'status': 'in_progress',
+            'priority': 'medium',
+          },
         ],
       }, locale: const Locale('en', 'US'));
 
@@ -232,13 +330,14 @@ void main() {
       expect(result, contains('Cancelled task')); // still in the list
     });
 
-    test('handles missing optional fields gracefully', () async {
-      // Missing required fields should not crash
+    test('accepts an empty content string when all fields are present',
+        () async {
       final result = await TodoToolService.handleTodoWrite({
         'todos': [
           {
-            'content': 'Task with defaults',
-            // status and priority missing
+            'content': '',
+            'status': 'pending',
+            'priority': 'medium',
           },
         ],
       }, locale: const Locale('en', 'US'));
@@ -248,7 +347,7 @@ void main() {
         {},
         locale: const Locale('en', 'US'),
       );
-      expect(readResult, contains('Task with defaults'));
+      expect(readResult, contains('"content":""'));
     });
   });
 
@@ -283,7 +382,11 @@ void main() {
       final englishWrite = await TodoToolService.handleTodoWrite(
         {
           'todos': [
-            {'content': 'Keep this text', 'status': 'pending'},
+            {
+              'content': 'Keep this text',
+              'status': 'pending',
+              'priority': 'medium',
+            },
           ],
         },
         locale: const Locale('en', 'US'),

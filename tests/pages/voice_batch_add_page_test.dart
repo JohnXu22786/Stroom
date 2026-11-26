@@ -35,86 +35,86 @@ class _LongOrderLocalizationsDelegate
 void main() {
   // Unit owner: vertical_separator_hint.
   // Functional suite mapping: feature-ui.
-  testWidgets('custom separator hint reveals clipping without animating input',
-      (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'custom separator hint reveals clipping without animating input',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      const MaterialApp(
-        locale: Locale('de', 'DE'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: VoiceBatchAddPage(existingVoices: []),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Ignore the page title's pre-existing narrow German app-bar overflow.
-    tester.takeException();
+      await tester.pumpWidget(
+        const MaterialApp(
+          locale: Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: VoiceBatchAddPage(existingVoices: []),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Ignore the page title's pre-existing narrow German app-bar overflow.
+      tester.takeException();
 
-    final dropdown = find.byType(DropdownButton<String>);
-    await tester.tap(dropdown);
-    await tester.pumpAndSettle();
-    final l10n = AppLocalizations.of(tester.element(dropdown))!;
-    await tester.tap(find.text(l10n.voiceCustomSeparator).last);
-    await tester.pumpAndSettle();
+      final dropdown = find.byType(DropdownButton<String>);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(tester.element(dropdown))!;
+      await tester.tap(find.text(l10n.voiceCustomSeparator).last);
+      await tester.pumpAndSettle();
 
-    final field = find.byType(TextField).first;
-    final textField = tester.widget<TextField>(field);
-    final hint = textField.decoration!.hint! as ConstrainedText;
-    final hintFinder = find.byWidget(hint);
-    expect(hint.data, l10n.voiceBatchCustomSeparatorHint);
-    expect(tester.getSemantics(hintFinder).label, hint.data);
-    final hintContext = tester.element(hintFinder);
-    final hintPainter = TextPainter(
-      text: TextSpan(
-        text: hint.data,
-        style: DefaultTextStyle.of(hintContext).style.merge(hint.style),
-      ),
-      textDirection: Directionality.of(hintContext),
-      textScaler: MediaQuery.textScalerOf(hintContext),
-      locale: Localizations.localeOf(hintContext),
-      maxLines: 1,
-      ellipsis: '…',
-    )..layout(maxWidth: tester.getSize(hintFinder).width);
-    expect(hintPainter.didExceedMaxLines, isTrue);
-    expect(tester.takeException(), isNull);
+      final field = find.byType(TextField).first;
+      final textField = tester.widget<TextField>(field);
+      final hint = textField.decoration!.hint! as ConstrainedText;
+      final hintFinder = find.byWidget(hint);
+      expect(hint.data, l10n.voiceBatchCustomSeparatorHint);
+      expect(tester.getSemantics(hintFinder).label, hint.data);
+      final hintContext = tester.element(hintFinder);
+      final hintPainter = TextPainter(
+        text: TextSpan(
+          text: hint.data,
+          style: DefaultTextStyle.of(hintContext).style.merge(hint.style),
+        ),
+        textDirection: Directionality.of(hintContext),
+        textScaler: MediaQuery.textScalerOf(hintContext),
+        locale: Localizations.localeOf(hintContext),
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: tester.getSize(hintFinder).width);
+      expect(hintPainter.didExceedMaxLines, isTrue);
+      expect(tester.takeException(), isNull);
 
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await tester.pumpAndSettle();
-    expect(tester.getSemantics(hintFinder).label, hint.data);
-    expect(tester.takeException(), isNull);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(tester.getSemantics(hintFinder).label, hint.data);
+      expect(tester.takeException(), isNull);
 
-    await tester.showKeyboard(field);
-    final editableText = find.descendant(
-      of: field,
-      matching: find.byType(EditableText),
-    );
-    expect(
-      tester.widget<EditableText>(editableText).focusNode.hasFocus,
-      isTrue,
-    );
-    expect(tester.testTextInput.isVisible, isTrue);
-    await tester.enterText(field, '::');
-    await tester.pumpAndSettle();
-    final editable = tester.widget<EditableText>(editableText);
-    expect(editable.controller.text, '::');
-    expect(editable.controller.selection.extentOffset, 2);
-    expect(
-      tester.widget<TextField>(field).decoration!.hint,
-      isA<ConstrainedText>(),
-    );
+      await tester.showKeyboard(field);
+      final editableText = find.descendant(
+        of: field,
+        matching: find.byType(EditableText),
+      );
+      expect(
+        tester.widget<EditableText>(editableText).focusNode.hasFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.enterText(field, '::');
+      await tester.pumpAndSettle();
+      final editable = tester.widget<EditableText>(editableText);
+      expect(editable.controller.text, '::');
+      expect(editable.controller.selection.extentOffset, 2);
+      expect(
+        tester.widget<TextField>(field).decoration!.hint,
+        isA<ConstrainedText>(),
+      );
 
-    tester.platformDispatcher.clearTextScaleFactorTestValue();
-    await tester.enterText(field, '');
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-  });
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      await tester.enterText(field, '');
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('long German separator stays within a narrow card', (
     tester,
@@ -150,10 +150,7 @@ void main() {
       tester.getRect(dropdown).right,
       lessThanOrEqualTo(tester.getRect(card).right),
     );
-    expect(
-      find.bySemanticsLabel('Senkrechter Strich (|)'),
-      findsOneWidget,
-    );
+    expect(find.bySemanticsLabel('Senkrechter Strich (|)'), findsOneWidget);
   });
 
   testWidgets('wide separator control stays inline after selection', (
@@ -184,6 +181,104 @@ void main() {
     expect(tester.getRect(dropdown).center.dy, tester.getRect(label).center.dy);
     expect(tester.takeException(), isNull);
     expect(find.text('Senkrechter Strich (|)'), findsOneWidget);
+  });
+
+  testWidgets('scaled long separator stays within the wide card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(500, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Clear the page AppBar's separate large-scale overflow; this regression
+    // covers the separator card below.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    final pipeOption = find.text('Senkrechter Strich (|)').last;
+    await tester.tapAt(Offset(80, tester.getRect(pipeOption).center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final card = find.byType(Card).first;
+    expect(tester.widget<DropdownButton<String>>(dropdown).value, '竖线 (|)');
+    expect(
+      tester.getRect(dropdown).top,
+      greaterThan(tester.getRect(find.text('Trennzeichen:')).bottom),
+    );
+    expect(
+      tester.getRect(dropdown).right,
+      lessThanOrEqualTo(tester.getRect(card).right),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('scaled separator label clips within slot but keeps full value', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Clear the page AppBar's separate large-scale overflow.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    final pipeOption = find.text('Senkrechter Strich (|)').last;
+    await tester.tapAt(Offset(80, tester.getRect(pipeOption).center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final selectedLabel = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == 'Senkrechter Strich (|)',
+    );
+    expect(selectedLabel, findsOneWidget);
+    final label = tester.widget<ConstrainedText>(selectedLabel);
+    final context = tester.element(selectedLabel);
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label.data,
+        style: DefaultTextStyle.of(context).style.merge(label.style),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: tester.getSize(selectedLabel).width);
+
+    expect(painter.didExceedMaxLines, isTrue);
+    expect(tester.getSemantics(selectedLabel).label, label.data);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('separator dropdown uses the shared rounded surface', (
