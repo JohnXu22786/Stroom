@@ -17,6 +17,7 @@ import 'package:stroom/providers/update_provider.dart';
 /// Uses a large screen size to avoid needing to scroll.
 Widget _buildTestApp({
   Future<void>? updateGate,
+  bool failUpdate = false,
   Widget? home,
   Locale locale = const Locale('zh', 'CN'),
 }) {
@@ -24,9 +25,11 @@ Widget _buildTestApp({
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = updateGate == null
-            ? ProviderEntriesNotifier()
-            : _BlockingProviderEntriesNotifier(updateGate);
+        final notifier = failUpdate
+            ? _FailingProviderEntriesNotifier()
+            : updateGate == null
+                ? ProviderEntriesNotifier()
+                : _BlockingProviderEntriesNotifier(updateGate);
         // load() is normally called in the provider factory, so we call it here too.
         notifier.load();
         return notifier;
@@ -55,6 +58,17 @@ class _BlockingProviderEntriesNotifier extends ProviderEntriesNotifier {
   }) async {
     await _updateGate;
     await super.update(id, updated, requirePersistence: requirePersistence);
+  }
+}
+
+class _FailingProviderEntriesNotifier extends ProviderEntriesNotifier {
+  @override
+  Future<void> update(
+    String id,
+    ProviderEntry updated, {
+    bool requirePersistence = false,
+  }) async {
+    throw StateError('storage unavailable');
   }
 }
 
@@ -99,6 +113,7 @@ Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
 Future<void> _openCustomMcpConfig(
   WidgetTester tester, {
   Future<void>? updateGate,
+  bool failUpdate = false,
   bool stdio = false,
   String? apiKey,
   Map<String, String>? headers,
@@ -143,7 +158,9 @@ Future<void> _openCustomMcpConfig(
     ]),
   });
 
-  await tester.pumpWidget(_buildTestApp(updateGate: updateGate));
+  await tester.pumpWidget(
+    _buildTestApp(updateGate: updateGate, failUpdate: failUpdate),
+  );
   await tester.pumpAndSettle();
   await tester.tap(find.text('MCP（模型上下文协议）'));
   await tester.pumpAndSettle();
@@ -1261,6 +1278,40 @@ void main() {
         _readOnlyDescriptionValueFinder('Changed while save was pending'),
         findsNothing,
       );
+    });
+
+    testWidgets('custom MCP save failure restores the editable form', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await _openCustomMcpConfig(tester, failUpdate: true);
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_descriptionFieldFinder(), 'Retry this save');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(_descriptionFieldFinder(), findsOneWidget);
+      expect(
+        tester.widget<TextField>(_descriptionFieldFinder()).enabled,
+        isTrue,
+      );
+      expect(find.text('保存中…'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.textContaining('storage unavailable'),
+        ),
+        findsWidgets,
+      );
+      expect(_readOnlyDescriptionValueFinder('Retry this save'), findsNothing);
     });
   });
 }
