@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// A short-lived in-app sign-in view. Callback URLs are deliberately never
@@ -44,47 +47,54 @@ class _TraeSoloAuthorizationPageState extends State<TraeSoloAuthorizationPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('连接 Trae SOLO'),
-          leading: IconButton(
-            tooltip: '取消',
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              _finished = true;
-              Navigator.of(context).pop<Uri>();
-            },
-          ),
+    appBar: AppBar(
+      title: Text(
+        AppLocalizations.of(context)?.traeAuthorizationTitle ?? '连接 Trae SOLO',
+      ),
+      leading: IconButton(
+        tooltip: AppLocalizations.of(context)?.actionCancel ?? '取消',
+        icon: const Icon(Icons.close),
+        onPressed: () {
+          _finished = true;
+          Navigator.of(context).pop<Uri>();
+        },
+      ),
+    ),
+    body: SafeArea(
+      child: InAppWebView(
+        initialUrlRequest: URLRequest(
+          url: WebUri(widget.authorizationUri.toString()),
         ),
-        body: SafeArea(
-          child: InAppWebView(
-            initialUrlRequest: URLRequest(
-              url: WebUri(widget.authorizationUri.toString()),
-            ),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              transparentBackground: false,
-            ),
-            shouldOverrideUrlLoading: (controller, action) async {
-              final uri = action.request.url;
-              if (uri == null) return NavigationActionPolicy.CANCEL;
-              final scheme = uri.scheme.toLowerCase();
-              if (scheme == 'https') return NavigationActionPolicy.ALLOW;
-              if (scheme == 'http' &&
-                  uri.host == '127.0.0.1' &&
-                  uri.path == '/authorize') {
-                return NavigationActionPolicy.ALLOW;
-              }
-              return NavigationActionPolicy.CANCEL;
-            },
-            onReceivedError: (controller, request, error) {
-              if (request.isForMainFrame == true && mounted && !_finished) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('登录页面加载失败，请取消后重试。')),
-                );
-              }
-            },
-          ),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          useShouldOverrideUrlLoading: true,
+          transparentBackground: false,
         ),
-      );
+        shouldOverrideUrlLoading: (controller, action) async {
+          final uri = action.request.url;
+          if (uri == null) return NavigationActionPolicy.CANCEL;
+          final scheme = uri.scheme.toLowerCase();
+          if (scheme == 'https') return NavigationActionPolicy.ALLOW;
+          if (scheme == 'http' &&
+              uri.host == '127.0.0.1' &&
+              uri.path == '/authorize') {
+            return NavigationActionPolicy.ALLOW;
+          }
+          return NavigationActionPolicy.CANCEL;
+        },
+        onReceivedError: (controller, request, error) {
+          if (request.isForMainFrame == true && mounted && !_finished) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)?.traeAuthorizationLoadError ??
+                      '登录页面加载失败，请取消后重试。',
+                ),
+              ),
+            );
+          }
+        },
+      ),
+    ),
+  );
 }

@@ -167,34 +167,23 @@ extension _ChatPageModelsExt on _ChatPageState {
             selectedModelIdentity) {
       return;
     }
+    final currentAccountId = _nextRequestAccountConversationId ==
+                conversationId &&
+            _nextRequestAccountModelIdentity == selectedModelIdentity
+        ? _nextRequestAccountId
+        : null;
     final selectedAccountId = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('本轮使用账号'),
-        content: SizedBox(
-          width: 420,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(
-                title: const Text('按模型组策略路由'),
-                onTap: () => Navigator.of(dialogContext).pop(''),
-              ),
-              for (final account in accounts)
-                ListTile(
-                  title: Text(account.displayName),
-                  subtitle: Text(account.connectorType),
-                  onTap: () => Navigator.of(dialogContext).pop(account.id),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
-          ),
+      builder: (_) => ChatAccountOverrideDialog(
+        accounts: [
+          for (final account in accounts)
+            ChatAccountOverrideChoice(
+              id: account.id,
+              name: account.displayName,
+              connectorType: account.connectorType,
+            ),
         ],
+        selectedAccountId: currentAccountId,
       ),
     );
     if (selectedAccountId == null ||

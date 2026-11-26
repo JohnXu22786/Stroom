@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/pages/llm_account_management_page.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
@@ -43,6 +44,46 @@ void main() {
       expect(find.byTooltip('从 Zed 导入 API 凭据'), findsNothing);
     }
   });
+
+  testWidgets(
+    'localized account editor stays usable on a narrow dark viewport with large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 520);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1.8),
+            ),
+            child: child!,
+          ),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('LLM accounts and model groups'), findsOneWidget);
+      expect(find.text('Accounts'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Add account'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Add LLM account'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'Cloudflare Workers AI keeps token secure and account ID separate',

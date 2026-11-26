@@ -166,13 +166,18 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                 ),
               ),
               if (widget.onAccountOverrideTap != null)
-                _SettingsChip(
-                  icon: Icons.account_circle_outlined,
-                  label: widget.accountOverrideName ?? '账号',
-                  color: widget.accountOverrideName == null
-                      ? Colors.grey
-                      : toolAccentColor,
-                  onTap: widget.onAccountOverrideTap!,
+                Semantics(
+                  selected: widget.accountOverrideName != null,
+                  child: SettingsChip(
+                    icon: Icons.account_circle_outlined,
+                    label: widget.accountOverrideName ??
+                        AppLocalizations.of(context)?.llmAccountLabel ??
+                        '账号',
+                    color: widget.accountOverrideName == null
+                        ? cs.onSurfaceVariant
+                        : cs.secondary,
+                    onTap: widget.onAccountOverrideTap!,
+                  ),
                 ),
               _SettingsChip(
                 icon: Icons.build_outlined,
