@@ -59,7 +59,7 @@ class TodoToolService {
                   'enum': ['high', 'medium', 'low'],
                 },
               },
-              'required': ['content'],
+              'required': ['content', 'status', 'priority'],
             },
           },
         },
@@ -108,12 +108,37 @@ class TodoToolService {
     for (var i = 0; i < todosRaw.length; i++) {
       final item = todosRaw[i];
       if (item is! Map<String, dynamic>) {
-        throw FormatException('Todo item at position $i must be an object.');
+        return 'Error: todos[$i] must be an object.';
       }
+
+      for (final field in ['content', 'status', 'priority']) {
+        if (!item.containsKey(field) || item[field] == null) {
+          return 'Error: todos[$i].$field is required.';
+        }
+      }
+
+      final content = item['content'];
+      if (content is! String) {
+        return 'Error: todos[$i].content must be a string.';
+      }
+
+      final status = item['status'];
+      if (status is! String ||
+          !const {'pending', 'in_progress', 'completed', 'cancelled'}
+              .contains(status)) {
+        return 'Error: todos[$i].status must be one of: pending, in_progress, completed, cancelled.';
+      }
+
+      final priority = item['priority'];
+      if (priority is! String ||
+          !const {'high', 'medium', 'low'}.contains(priority)) {
+        return 'Error: todos[$i].priority must be one of: high, medium, low.';
+      }
+
       replacement.add(TodoItem(
-        content: (item['content'] as String?) ?? '',
-        status: (item['status'] as String?) ?? 'pending',
-        priority: (item['priority'] as String?) ?? 'medium',
+        content: content,
+        status: status,
+        priority: priority,
         position: i,
       ));
     }
