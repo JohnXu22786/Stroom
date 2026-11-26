@@ -1286,7 +1286,7 @@ void main() {
             isA<Exception>().having(
               (error) => error.toString(),
               'message',
-              'Exception: No audio data extracted',
+              'Exception: Invalid selected audio sample',
             ),
           ),
         );
