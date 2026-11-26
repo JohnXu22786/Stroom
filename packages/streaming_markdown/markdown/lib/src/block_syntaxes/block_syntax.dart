@@ -56,12 +56,10 @@ abstract class BlockSyntax {
   }
 
   /// Generates a valid HTML anchor from the inner text of [element].
-  static String generateAnchorHash(Element element) => element
-      .children!
-      .first
-      .textContent
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[^\p{L}\p{M}\p{N} _-]', unicode: true), '')
-      .replaceAll(RegExp(r'\s'), '-');
+  static String generateAnchorHash(Element element) =>
+      element.children!.first.textContent
+          .toLowerCase()
+          .trim()
+          .replaceAll(RegExp(r'[^\p{L}\p{M}\p{N} _-]', unicode: true), '')
+          .replaceAll(RegExp(r'\s'), '-');
 }
