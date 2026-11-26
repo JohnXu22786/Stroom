@@ -559,7 +559,7 @@ function fixProviderEntries(json) {
   if (!Array.isArray(decoded)) return { metadata: { status: 'notList' } };
 
   const list = decoded.filter(isRecord);
-  let changed = false;
+  let changed = list.length !== decoded.length;
   list.forEach(function (entry, index) {
     if (typeof entry.id !== 'string' || entry.id.length === 0) {
       const typeName = typeof entry.type === 'string' ? entry.type : 'unknown';

@@ -30,6 +30,28 @@ function mergeLegacyConfigs(migratedConfigs, existingEntries) {
   };
 }
 
+function fixProviderEntries(entries) {
+  const workerSource = fs.readFileSync(
+    path.resolve(__dirname, '../../web/data_integrity_json_worker.js'),
+    'utf8',
+  );
+  let onMessage;
+  const messages = [];
+  const context = {
+    self: {
+      addEventListener: (_event, handler) => { onMessage = handler; },
+      postMessage: (message) => messages.push(message),
+    },
+  };
+  vm.runInNewContext(workerSource, context);
+  onMessage({data: ['fixProviderEntries', JSON.stringify(entries)]});
+  const [metadataJson, payloadJson] = messages[0].split('\n');
+  return {
+    metadata: JSON.parse(metadataJson),
+    payload: payloadJson ? JSON.parse(payloadJson) : null,
+  };
+}
+
 function legacyConfig(temperature) {
   return {
     providerName: 'Legacy provider',
@@ -113,4 +135,16 @@ test('web migration preserves distinct model settings and removes duplicates', (
   );
   assert.equal(createNewEntry.metadata.status, 'write');
   assert.equal(createNewEntry.payload[0].configs.length, 1);
+});
+
+test('web provider cleanup persists when malformed entries are filtered', () => {
+  const result = fixProviderEntries([null]);
+
+  assert.deepEqual(result.metadata, {status: 'ok', changed: true});
+  assert.deepEqual(result.payload, []);
+
+  const validEntry = {id: 'kept', type: 'tts'};
+  const mixedResult = fixProviderEntries([null, validEntry]);
+  assert.deepEqual(mixedResult.metadata, {status: 'ok', changed: true});
+  assert.deepEqual(mixedResult.payload, [validEntry]);
 });

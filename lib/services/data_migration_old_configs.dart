@@ -498,7 +498,7 @@ Map<String, Object?> _fixProviderEntriesSync(String raw) {
   if (decoded is! List) return {'status': 'notList'};
 
   final list = decoded.whereType<Map<String, dynamic>>().toList();
-  var changed = false;
+  var changed = list.length != decoded.length;
   for (var index = 0; index < list.length; index++) {
     final entry = list[index];
     final id = entry['id'];
