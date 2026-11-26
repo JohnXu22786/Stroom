@@ -918,13 +918,17 @@ class _ProviderConfigDetailPageState
               child: Icon(Icons.drag_handle, color: Colors.grey),
             )
           : const Icon(Icons.smart_toy),
-      title: Text(
+      title: ConstrainedText(
         model.name.isNotEmpty
             ? model.name
             : AppLocalizations.of(context)!.providerUnnamed,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(
+      subtitle: ConstrainedText(
         AppLocalizations.of(context)!.providerModelId(model.modelId),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
