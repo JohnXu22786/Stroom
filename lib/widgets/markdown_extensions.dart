@@ -1708,8 +1708,8 @@ bool _isMermaidFenceLanguage(
     }
     return false;
   }
-  final firstSpace = info.indexOf(' ');
-  final firstWord = firstSpace == -1 ? info : info.substring(0, firstSpace);
+  final firstWordEnd = RegExp(r'[ \t]').firstMatch(info)?.start ?? -1;
+  final firstWord = firstWordEnd == -1 ? info : info.substring(0, firstWordEnd);
   return firstWord.split('-').last.trim().toLowerCase() == 'mermaid';
 }
 
