@@ -236,7 +236,8 @@ void main() {
       );
     });
 
-    test('corrupt provider and legacy payloads keep separate backups', () async {
+    test('corrupt provider and legacy payloads keep separate backups',
+        () async {
       const corruptProviderEntries = '{"provider":"recover me"}';
       final legacyJson = jsonEncode([
         {
