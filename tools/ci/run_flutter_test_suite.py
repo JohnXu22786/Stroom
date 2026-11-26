@@ -265,6 +265,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/connectivity_test_localization_test.dart",
         "services/connectivity_test_service_test.dart",
         "services/desktop_app_service_test.dart",
+        "services/macos_menu_service_test.dart",
         "services/window_manager_legacy_stub_test.dart",
         "services/ios_continued_task_service_test.dart",
         "services/notification_service_test.dart",

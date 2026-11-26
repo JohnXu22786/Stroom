@@ -12,4 +12,15 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testPreferencesRequestWaitsUntilFlutterSignalsReadiness() {
+    var requests = PreferencesRequestBuffer()
+
+    requests.requestPreferences()
+    XCTAssertFalse(requests.takePendingRequestIfReady())
+
+    requests.markHandlerReady()
+    XCTAssertTrue(requests.takePendingRequestIfReady())
+    XCTAssertFalse(requests.takePendingRequestIfReady())
+  }
+
 }
