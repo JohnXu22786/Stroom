@@ -127,16 +127,20 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
 
     // Register Todo tool (todowrite — 读写一体)
     for (final def in TodoToolService.toolDefinitions) {
-      Future<String> handler(Map<String, dynamic> args, Locale? locale) async {
-        switch (def.name) {
-          case 'todowrite':
-            return TodoToolService.handleTodo(args, locale: locale);
-          default:
-            return '错误: 未知的 Todo 工具 "${def.name}"';
-        }
-      }
-
-      ChatService.registerTool(def, null, localizedHandler: handler);
+      ChatService.registerTool(
+        def,
+        null,
+        contextualLocalizedHandler: (args, locale, conversationId) {
+          if (def.name == 'todowrite') {
+            return TodoToolService.handleTodo(
+              args,
+              locale: locale,
+              sessionId: conversationId,
+            );
+          }
+          return '错误: 未知的 Todo 工具 "${def.name}"';
+        },
+      );
     }
     debugPrint(
         'Registered ${TodoToolService.toolDefinitions.length} Todo tools');

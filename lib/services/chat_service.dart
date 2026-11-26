@@ -59,6 +59,7 @@ class ChatService {
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
   final Locale? Function()? _localeOverride;
+  final String? conversationId;
 
   /// 工具循环上限常量：
   /// 单条用户消息内模型 API 请求（步骤）的最大次数，范围 1-100，默认 20。
@@ -204,6 +205,7 @@ class ChatService {
     String endpointType = 'openai',
     ChatProtocol? protocol,
     Locale? Function()? localeOverride,
+    this.conversationId,
   })  : _provider = provider,
         _modelConfig = modelConfig,
         _localeOverride = localeOverride,
@@ -348,11 +350,14 @@ class ChatService {
     ToolDefinition def,
     dynamic Function(Map<String, dynamic>)? handler, {
     dynamic Function(Map<String, dynamic>, Locale?)? localizedHandler,
+    dynamic Function(Map<String, dynamic>, Locale?, String?)?
+        contextualLocalizedHandler,
   }) {
     _toolRegistries[def.name] = {
       'definition': def,
       'handler': handler,
       'localizedHandler': localizedHandler,
+      'contextualLocalizedHandler': contextualLocalizedHandler,
     };
   }
 
