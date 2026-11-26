@@ -15,6 +15,7 @@ import 'package:stroom/anki/pages/card_browser.dart';
 import 'package:stroom/anki/providers/anki_actions.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _EmptyCardDao implements CardDao {
   @override
@@ -438,6 +439,97 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reveals the full French search hint at narrow expanded scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const hint = 'Rechercher des cartes…';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(AsyncData(_EmptyCardDao())),
+        ],
+        child: MaterialApp(
+          locale: const Locale('fr', 'FR'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1.8),
+            ),
+            child: child!,
+          ),
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final hintFinder = find.text(hint);
+    expect(
+      find.descendant(
+        of: find.byType(TextField),
+        matching: find.byType(ConstrainedText),
+      ),
+      findsOneWidget,
+    );
+    expect(hintFinder, findsOneWidget);
+    final initialLeft = tester.getTopLeft(hintFinder).dx;
+    await tester.pump(const Duration(milliseconds: 1100));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.getTopLeft(hintFinder).dx, lessThan(initialLeft - 10));
+    expect(find.byType(EditableText), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), '123');
+    await tester.pump();
+    final editor = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editor.controller.text, '123');
+    expect(editor.controller.selection.extentOffset, 3);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps the fitting English search hint stationary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const hint = 'Search cards...';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(AsyncData(_EmptyCardDao())),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final hintFinder = find.text(hint);
+    expect(
+      find.descendant(
+        of: find.byType(TextField),
+        matching: find.byType(ConstrainedText),
+      ),
+      findsOneWidget,
+    );
+    expect(hintFinder, findsOneWidget);
+    final initialLeft = tester.getTopLeft(hintFinder).dx;
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.getTopLeft(hintFinder).dx, initialLeft);
     expect(tester.takeException(), isNull);
   });
 }
