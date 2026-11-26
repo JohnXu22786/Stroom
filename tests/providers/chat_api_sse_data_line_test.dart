@@ -10,18 +10,17 @@ void main() {
       final provider = OpenAICompatibleChatProvider(
         baseUrl: 'https://example.test/chat/completions',
         apiKey: 'test-key',
-        sseStreamOverride:
-            (
-              url,
-              headers,
-              body, {
-              cancelToken,
-              locale,
-              onResponseHeaders,
-            }) async* {
-              yield 'data:{"choices":[{"delta":{"content":"kept"}}]}';
-              yield 'data: [DONE]';
-            },
+        sseStreamOverride: (
+          url,
+          headers,
+          body, {
+          cancelToken,
+          locale,
+          onResponseHeaders,
+        }) async* {
+          yield 'data:{"choices":[{"delta":{"content":"kept"}}]}';
+          yield 'data: [DONE]';
+        },
       );
 
       final events = await provider.chatStream([
