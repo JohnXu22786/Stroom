@@ -996,7 +996,8 @@ class ManifestDatabase {
       if (_useJsonStore) {
         await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          final list =
+              data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
           final index = list.indexWhere((r) => (r as Map)['id'] == id);
           if (index != -1) {
             (list[index] as Map<String, dynamic>).addAll(updates);
@@ -1310,7 +1311,8 @@ class ManifestDatabase {
       if (_useJsonStore) {
         await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          final list =
+              data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
           final index = list.indexWhere((r) => (r as Map)['id'] == id);
           if (index != -1) {
             (list[index] as Map<String, dynamic>).addAll(updates);

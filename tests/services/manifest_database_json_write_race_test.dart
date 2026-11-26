@@ -21,7 +21,9 @@ void main() {
     ManifestDatabase.beforeWebDataSaveForTesting = null;
   });
 
-  test('concurrent cold JSON updates preserve independent image, video, and text changes', () async {
+  test(
+      'concurrent cold JSON updates preserve independent image, video, and text changes',
+      () async {
     await ManifestDatabase.insertImageRecord({'id': 'image-race'});
     await ManifestDatabase.insertVideoRecord({'id': 'video-race'});
     await ManifestDatabase.insertTextRecord({'id': 'text-race'});
