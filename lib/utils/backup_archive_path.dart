@@ -1,13 +1,26 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 /// Whether [path] is safe to write as a relative path on the current device.
 bool isSafeBackupArchivePath(String path) {
+  return _isSafeBackupArchivePath(
+    path,
+    isWindows: !kIsWeb && Platform.isWindows,
+  );
+}
+
+@visibleForTesting
+bool isSafeBackupArchivePathForTesting(
+  String path, {
+  required bool isWindows,
+}) => _isSafeBackupArchivePath(path, isWindows: isWindows);
+
+bool _isSafeBackupArchivePath(String path, {required bool isWindows}) {
   if (path.codeUnits.contains(0) || path.contains(r'\')) return false;
   final segments = path.split(RegExp(r'[/\\]'));
-  final hasInvalidWindowsSegment = !kIsWeb &&
-      Platform.isWindows &&
+  final hasInvalidWindowsSegment =
+      isWindows &&
       segments.any((segment) => !_isSafeWindowsPathSegment(segment));
   return !hasInvalidWindowsSegment &&
       !segments.any(
@@ -32,6 +45,8 @@ bool _isSafeWindowsPathSegment(String segment) {
       .toLowerCase();
   return !const {
     'con',
+    r'conin$',
+    r'conout$',
     'prn',
     'aux',
     'nul',
