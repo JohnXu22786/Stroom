@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stroom/anki/database/anki_database.dart';
 import 'package:stroom/anki/models/card.dart';
 import 'package:stroom/anki/models/note.dart';
+import 'package:stroom/anki/models/revlog.dart';
 import 'package:stroom/anki/scheduler/scheduler.dart';
 
 void main() {
@@ -78,6 +79,35 @@ void main() {
     },
   );
 
+  test('review selection treats imported due values as collection day ordinals',
+      () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final today = collection.col.dayOrdinalAt(nowSec);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..due = today + 1;
+    await collection.cards.insert(card);
+    final scheduler = AnkiScheduler();
+
+    expect(await scheduler.getNextCard(collection.col, collection.cards, 1),
+        isNull);
+    expect(await scheduler.countDue(collection.col, collection.cards, 1), 0);
+
+    card.due = today;
+    await collection.cards.update(card);
+    expect(
+      (await scheduler.getNextCard(collection.col, collection.cards, 1))?.id,
+      card.id,
+    );
+    expect(await scheduler.countDue(collection.col, collection.cards, 1), 1);
+  });
+
   test(
     'answering a day-learning card applies review scheduling and persists',
     () async {
@@ -93,6 +123,9 @@ void main() {
         ..interval = 10
         ..reps = 2;
       await collection.cards.insert(card);
+      final today = collection.col.dayOrdinalAt(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      );
 
       await AnkiScheduler().answerCard(
         collection.col,
@@ -106,9 +139,147 @@ void main() {
       expect(answered.ctype, CardType.review);
       expect(answered.reps, 3);
       expect(answered.interval, 25);
+      expect(answered.due, today + 25);
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
     },
   );
+
+  test('learning answer that remains in learning is logged as learning',
+      () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.learn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect((await collection.cards.get(card.id))!.queue, CardQueue.learn);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.learning,
+    );
+  });
+
+  test('learning answer that graduates is logged as learning', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.learn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 0x100;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect((await collection.cards.get(card.id))!.ctype, CardType.review);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.learning,
+    );
+  });
+
+  test('Again on a review card is logged as review', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..interval = 10
+      ..reps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 1);
+
+    expect((await collection.cards.get(card.id))!.ctype, CardType.relearn);
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.review,
+    );
+  });
+
+  test('relearning answer is logged as relearning', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.relearn
+      ..queue = CardQueue.learn
+      ..remaining_steps = 2;
+    await collection.cards.insert(card);
+
+    await AnkiScheduler()
+        .answerCard(collection.col, collection.cards, card.id, 3);
+
+    expect(
+      (await collection.revlog.listByCard(card.id)).single.review_kind,
+      RevlogReviewKind.relearning,
+    );
+  });
+
+  test('revlog insert failure rolls back the card answer', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = Card.createNew(note_id: note.id, deck_id: 1)
+      ..ctype = CardType.review
+      ..queue = CardQueue.review
+      ..due = 1
+      ..interval = 10
+      ..ease_factor = 2500
+      ..reps = 2;
+    await collection.cards.insert(card);
+    await collection.db.update('col', {'mod': 1}, where: 'id = 1');
+    final beforeCard = (await collection.cards.get(card.id))!.toMap();
+    final beforeModified = (await collection.db.query(
+      'col',
+      columns: ['mod'],
+      where: 'id = 1',
+    ))
+        .single['mod'];
+    await collection.db.execute('''
+      CREATE TRIGGER fail_review_log_insert
+      BEFORE INSERT ON revlog
+      BEGIN
+        SELECT RAISE(ABORT, 'injected revlog insert failure');
+      END
+    ''');
+
+    await expectLater(
+      AnkiScheduler().answerCard(collection.col, collection.cards, card.id, 3),
+      throwsA(anything),
+    );
+
+    expect((await collection.cards.get(card.id))!.toMap(), beforeCard);
+    expect(await collection.revlog.listByCard(card.id), isEmpty);
+    expect(
+      (await collection.db.query(
+        'col',
+        columns: ['mod'],
+        where: 'id = 1',
+      ))
+          .single['mod'],
+      beforeModified,
+    );
+  });
 
   test(
     'Again on a day-learning card follows review lapse scheduling',

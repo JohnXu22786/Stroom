@@ -43,31 +43,17 @@ class FencedCodeBlockSyntax extends BlockSyntax {
 
     final code = Element.text('code', text);
     if (languageString != null) {
-      final processedLanguage = _processAttribute(
-        languageString,
-        encodeHtml: parser.document.encodeHtml,
-      );
+      final processedLanguage = decodeHtmlCharacters(languageString);
       code.attributes['class'] = 'language-$processedLanguage';
     }
 
     final pre = Element('pre', [code]);
     if (metadataString != null) {
-      final processedMetadata = _processAttribute(
-        metadataString,
-        encodeHtml: parser.document.encodeHtml,
-      );
+      final processedMetadata = decodeHtmlCharacters(metadataString);
       pre.attributes['data-metadata'] = processedMetadata;
     }
 
     return pre;
-  }
-
-  static String _processAttribute(String value, {bool encodeHtml = false}) {
-    final decodedValue = decodeHtmlCharacters(value);
-    if (encodeHtml) {
-      return escapeHtmlAttribute(decodedValue);
-    }
-    return decodedValue;
   }
 
   @override

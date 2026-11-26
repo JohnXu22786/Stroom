@@ -128,7 +128,7 @@ class WidgetVisitor implements m.NodeVisitor {
     MarkdownTag.thead.name: (e, config, visitor) => THeadNode(config, visitor),
     MarkdownTag.tbody.name: (e, config, visitor) => TBodyNode(config, visitor),
     MarkdownTag.tr.name: (e, config, visitor) => TrNode(),
-    MarkdownTag.th.name: (e, config, visitor) => ThNode(),
+    MarkdownTag.th.name: (e, config, visitor) => ThNode(e.attributes),
     MarkdownTag.td.name: (e, config, visitor) => TdNode(e.attributes, visitor),
     MarkdownTag.p.name: (e, config, visitor) => ParagraphNode(config.p),
     MarkdownTag.input.name: (e, config, visitor) =>

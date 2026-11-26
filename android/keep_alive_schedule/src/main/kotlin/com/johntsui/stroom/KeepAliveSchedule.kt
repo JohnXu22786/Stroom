@@ -5,6 +5,40 @@ internal object KeepAliveScheduleIntervals {
     const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
 }
 
+internal data class KeepAliveStartState(
+    val failures: Int,
+    val startPending: Boolean,
+    val nextIntervalMs: Long,
+)
+
+internal fun keepAliveStartStateAfterAlarm(
+    serviceRunning: Boolean,
+    startWasPending: Boolean,
+    startRequestFailed: Boolean,
+    failures: Int,
+    maxFailures: Int,
+): KeepAliveStartState {
+    if (serviceRunning) {
+        return KeepAliveStartState(
+            failures = 0,
+            startPending = false,
+            nextIntervalMs = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS,
+        )
+    }
+
+    val failedStarts = (if (startWasPending) 1 else 0) + (if (startRequestFailed) 1 else 0)
+    val updatedFailures = (failures + failedStarts).coerceAtMost(maxFailures + 1)
+    return KeepAliveStartState(
+        failures = updatedFailures,
+        startPending = !startRequestFailed,
+        nextIntervalMs = if (updatedFailures >= maxFailures) {
+            KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS
+        } else {
+            KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS
+        },
+    )
+}
+
 internal const val KEEP_ALIVE_ALARM_ACTION = "com.johntsui.stroom.KEEP_ALIVE"
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_ACTION = "com.johntsui.stroom.KEEP_ALIVE_REVOCATION_BACKUP"
 internal const val KEEP_ALIVE_ALARM_REQUEST_CODE = 2001

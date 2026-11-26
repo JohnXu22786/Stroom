@@ -138,6 +138,29 @@ void main() {
         moreOrLessEquals(1.0, epsilon: 0.001));
   });
 
+  testWidgets('in-bounds fling does not start a stretch spring',
+      (tester) async {
+    await tester.pumpWidget(buildWrapper());
+
+    final ctx = contextOf(tester);
+    ScrollEndNotification(
+      metrics: buildMetrics(),
+      context: ctx,
+      dragDetails: DragEndDetails(
+        velocity: const Velocity(pixelsPerSecond: Offset(0, -4000)),
+      ),
+    ).dispatch(ctx);
+
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(
+        transformUnderTest(tester).transform.getMaxScaleOnAxis(),
+        moreOrLessEquals(1.0, epsilon: 0.000001),
+        reason: 'an in-bounds fling must not create stretch overscroll',
+      );
+    }
+  });
+
   testWidgets('ignores notifications from a different axis', (tester) async {
     await tester.pumpWidget(buildWrapper(direction: AxisDirection.down));
 

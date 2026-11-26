@@ -395,22 +395,12 @@ String? _userscriptMetadataName(String code) {
 
 Future<String> _fetchUserscript(String sourceUrl) async {
   var uri = Uri.parse(normalizeUserscriptUrl(sourceUrl));
-  bool isTrustedUri(Uri candidate) {
-    final host = candidate.host.toLowerCase();
-    return candidate.scheme == 'https' &&
-        candidate.port == 443 &&
-        candidate.userInfo.isEmpty &&
-        (host == 'greasyfork.org' ||
-            host == 'www.greasyfork.org' ||
-            host == 'update.greasyfork.org' ||
-            host == 'raw.githubusercontent.com');
-  }
 
   UserscriptHttpResponse? response;
   for (var redirects = 0; redirects <= 5; redirects++) {
     response = await fetchUserscriptHttp(uri.toString());
     if (response.responseUrl != uri) {
-      if (!isTrustedUri(response.responseUrl)) {
+      if (!isTrustedUserscriptUri(response.responseUrl)) {
         throw const FormatException('redirectedUrl');
       }
       uri = response.responseUrl;
@@ -425,9 +415,11 @@ Future<String> _fetchUserscript(String sourceUrl) async {
     } on FormatException {
       throw const FormatException('redirectedUrl');
     }
-    if (!isTrustedUri(uri)) throw const FormatException('redirectedUrl');
+    if (!isTrustedUserscriptUri(uri)) {
+      throw const FormatException('redirectedUrl');
+    }
   }
-  if (response == null || !response.isSuccess || !isTrustedUri(uri)) {
+  if (response == null || !response.isSuccess || !isTrustedUserscriptUri(uri)) {
     throw const FormatException('redirectedUrl');
   }
   final source = response.body;
@@ -843,8 +835,9 @@ class _BrowserPageState extends State<BrowserPage> {
           break;
         }
       }
-      final requestedAgain =
-          _scriptInjectionsPendingAfterManagerChange.remove(injectionKey);
+      final requestedAgain = _scriptInjectionsPendingAfterManagerChange.remove(
+        injectionKey,
+      );
       if (requestedAgain &&
           navigationGeneration == _userscriptNavigationGeneration &&
           injectionUrl == _currentUrl &&
@@ -1539,9 +1532,7 @@ class _BrowserPageState extends State<BrowserPage> {
                 !updated.enabled ||
                 updated.code != previous.code) {
               _clearScriptRuntimeError(previous.id);
-              _scriptInjectionsByPage.remove(
-                '${previous.id}\n$_currentUrl',
-              );
+              _scriptInjectionsByPage.remove('${previous.id}\n$_currentUrl');
             }
           }
           final scriptsToInject = scriptsToInjectAfterManagerChange(
@@ -1569,6 +1560,7 @@ Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
       title: ConstrainedText(
         l10n.browserDeleteScriptTitle,
         maxLines: 1,
@@ -1588,6 +1580,40 @@ Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
           onPressed: () => Navigator.pop(context, true),
           child: ConstrainedText(
             l10n.browserScriptDelete,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<bool?> confirmBrowserUserScriptTrust(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: ConstrainedText(
+        l10n.browserScriptTrustWarningTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: Text(l10n.browserScriptTrustWarning),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: ConstrainedText(
+            l10n.browserCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: ConstrainedText(
+            l10n.browserContinue,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1774,36 +1800,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   }
 
   Future<void> _importScriptFromUrl() async {
-    final l10n = AppLocalizations.of(context)!;
-    final trusted = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: ConstrainedText(
-          l10n.browserScriptTrustWarningTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: Text(l10n.browserScriptTrustWarning),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: ConstrainedText(
-              l10n.browserCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: ConstrainedText(
-              l10n.browserContinue,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
+    final trusted = await confirmBrowserUserScriptTrust(context);
     if (trusted != true || !mounted) return;
     final imported = await showBrowserUserScriptImportDialog(context);
     if (imported == null || !mounted) return;
@@ -1857,9 +1854,8 @@ Future<UserScript?> showBrowserUserScriptImportDialog(
 }) =>
     showDialog<UserScript>(
       context: context,
-      builder: (context) => _ScriptImportDialog(
-        fetchSource: fetchSource ?? _fetchUserscript,
-      ),
+      builder: (context) =>
+          _ScriptImportDialog(fetchSource: fetchSource ?? _fetchUserscript),
     );
 
 class _ScriptEditDialog extends StatefulWidget {

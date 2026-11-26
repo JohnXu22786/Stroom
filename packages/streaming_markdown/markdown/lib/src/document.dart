@@ -176,7 +176,12 @@ class Document {
     } else {
       final last = children.last;
       if (last is Element) {
-        last.children?.addAll(refs);
+        final lastChildren = last.children;
+        if (lastChildren == null) {
+          children.addAll(refs);
+        } else {
+          lastChildren.addAll(refs);
+        }
       } else {
         children.last = Element('p', [last, ...refs]);
       }

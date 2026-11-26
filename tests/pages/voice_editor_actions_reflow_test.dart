@@ -6,6 +6,36 @@ import 'package:stroom/pages/voice_batch_add_page.dart';
 import 'package:stroom/pages/voice_editor_page.dart';
 
 void main() {
+  testWidgets('remaining ID focus callbacks survive deleting an earlier row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceEditorPage(
+          initialVoices: [
+            VoiceEntry(name: 'First', id: 'first'),
+            VoiceEntry(name: 'Second', id: 'second'),
+            VoiceEntry(name: 'Third', id: 'third'),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.delete).first);
+    await tester.pump();
+
+    final thirdIdField = find.byType(TextField).at(3);
+    await tester.tap(thirdIdField);
+    await tester.enterText(thirdIdField, 'second');
+    FocusScope.of(tester.element(thirdIdField)).unfocus();
+    await tester.pump();
+
+    expect(find.byIcon(Icons.warning_amber), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('wide voice editor keeps actions inline and batch action works', (
     tester,
   ) async {

@@ -89,7 +89,7 @@ abstract class ListSyntax extends BlockSyntax {
     }
 
     String parseTaskListItem(String text) {
-      final pattern = RegExp(r'^ {0,3}\[([ xX])\][ \t]');
+      final pattern = RegExp(r'^ {0,3}\[([ xX])\](?:[ \t]|$)');
 
       if (taskListParserEnabled && pattern.hasMatch(text)) {
         return text.replaceFirstMapped(pattern, (match) {

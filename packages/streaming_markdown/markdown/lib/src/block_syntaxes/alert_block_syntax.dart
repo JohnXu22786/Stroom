@@ -61,6 +61,7 @@ class AlertBlockSyntax extends BlockSyntax {
                   (!lastLine.isBlankLine &&
                       !codeFencePattern.hasMatch(lastLine.content)))) ||
           (otherMatched is CodeBlockSyntax &&
+              !lastLine.isBlankLine &&
               !indentPattern.hasMatch(lastLine.content))) {
         childLines.add(parser.current);
         _lazyContinuation = true;

@@ -312,14 +312,22 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
       - run: flutter pub get
+      - name: Run Web manifest locale regression
+        if: matrix.suite == 'component-integrations'
+        run: node --test tests/web/manifest_locale_test.cjs
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core' || matrix.suite == 'component-integrations'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components' || matrix.suite == 'chat-taskflow-core' || matrix.suite == 'component-integrations'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
+      - name: Run userscript web HTTP adapter regressions in Chrome
+        if: matrix.suite == 'component-integrations'
+        run: flutter test --reporter expanded --platform chrome test/services/userscript_http_web_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Web MCP SSE connection regressions in Chrome
         if: matrix.suite == 'chat-taskflow-core'
         run: flutter test --reporter expanded --platform chrome test/services/sse_client_web_connect_test.dart

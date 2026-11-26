@@ -241,6 +241,46 @@ void main() {
     expect(container.read(taskListProvider).single.status, TaskStatus.paused);
   });
 
+  test('lifecycle failure cancels active synthesis without saving output',
+      () async {
+    final synthesisStarted = Completer<CancelToken>();
+    final finishSynthesis = Completer<Uint8List>();
+    final synthesisFinished = Completer<void>();
+    notifier.debugSynthesize = (_, _, cancelToken) async {
+      synthesisStarted.complete(cancelToken);
+      try {
+        return await finishSynthesis.future;
+      } finally {
+        synthesisFinished.complete();
+      }
+    };
+
+    final id = notifier.addTask(
+      title: 'Interrupted speech',
+      text: 'Interrupted source',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final cancelToken = await synthesisStarted.future.timeout(
+      const Duration(seconds: 5),
+    );
+
+    notifier.failAllRunningTasks(error: 'Application interrupted');
+
+    expect(cancelToken.isCancelled, isTrue);
+    expect(container.read(taskListProvider).single.status, TaskStatus.failed);
+    finishSynthesis.complete(audio);
+    await synthesisFinished.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(Duration.zero);
+
+    final task = container.read(taskListProvider).single;
+    expect(task.id, id);
+    expect(task.status, TaskStatus.failed);
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await FileManifest.readFile('$hash.wav'), isNull);
+    expect(await FileManifest.readFile('$hash.txt'), isNull);
+  });
+
   for (final persisted in [false, true]) {
     test(
         persisted

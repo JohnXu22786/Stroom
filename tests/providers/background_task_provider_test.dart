@@ -6,8 +6,10 @@ import 'dart:ui' show Locale;
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/l10n/app_localizations.dart';
@@ -21,6 +23,7 @@ import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 import 'package:stroom/services/notification_service.dart';
 import 'package:stroom/services/ocr_retry_storage.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
 /// Returns the on-disk tasks.json inside [dirPath] (per-test isolated dir).
@@ -29285,5 +29288,171 @@ void main() {
         expect(calls, isEmpty, reason: '非 iOS 平台（或 iOS < 26）不得触发任何桥接调用');
       },
     );
+  });
+  _defineSynthesisPersistenceTests();
+}
+
+typedef _SynthesisTaskRow = Map<String, dynamic>;
+
+class _SynthesisTaskDocuments extends PathProviderPlatform {
+  _SynthesisTaskDocuments(this.path);
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+_SynthesisTaskRow _synthesisTaskRow(
+  String id, {
+  String status = 'completed',
+  String? error,
+}) =>
+    {
+      'id': id,
+      'title': 'Task $id',
+      'status': status,
+      'error': error,
+      'createdAt': DateTime.utc(2025, 1, 1).toIso8601String(),
+      'text': 'Synthesis text for $id',
+      'providerConfig': {
+        'id': 'provider-$id',
+        'providerName': 'Test provider',
+      },
+      'modelConfig': {
+        'id': 'model-$id',
+        'name': 'Test model',
+        'modelId': 'test-model',
+      },
+    };
+
+void _defineSynthesisPersistenceTests() {
+  group('TaskListNotifier synthesis task persistence', () {
+    late Directory testDir;
+    late PathProviderPlatform previousPathProvider;
+
+    File tasksFile() => File(p.join(testDir.path, 'synthesis', 'tasks.json'));
+    File corruptRowsFile() =>
+        File(p.join(testDir.path, 'synthesis', 'tasks.corrupt.json'));
+
+    setUp(() async {
+      testDir = await Directory.systemTemp.createTemp('synthesis_task_test_');
+      previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _SynthesisTaskDocuments(testDir.path);
+      AppStorage.resetCache();
+    });
+
+    tearDown(() async {
+      PathProviderPlatform.instance = previousPathProvider;
+      AppStorage.resetCache();
+      try {
+        await testDir.delete(recursive: true);
+      } catch (_) {}
+    });
+
+    test('valid task rows restore beside malformed rows in saved order',
+        () async {
+      await tasksFile().parent.create(recursive: true);
+      await tasksFile().writeAsString(jsonEncode([
+        _synthesisTaskRow('first', status: 'paused'),
+        {'id': 'invalid-status', 'status': 'not-a-task-status'},
+        _synthesisTaskRow('second', status: 'completed'),
+      ]));
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(taskListProvider.notifier);
+      await notifier.restoreFromPersistence();
+
+      expect(container.read(taskListProvider).map((task) => task.id),
+          ['first', 'second']);
+      expect(container.read(taskListProvider).map((task) => task.status), [
+        TaskStatus.paused,
+        TaskStatus.completed,
+      ]);
+    });
+
+    test(
+        'malformed rows from later restores accumulate through mutation and restart',
+        () async {
+      final malformedRow = {
+        'id': 'invalid-status',
+        'status': 'not-a-task-status'
+      };
+      await tasksFile().parent.create(recursive: true);
+      await tasksFile().writeAsString(jsonEncode([
+        _synthesisTaskRow('recoverable-task', error: 'old error'),
+        malformedRow,
+      ]));
+
+      final firstContainer = ProviderContainer();
+      final firstNotifier = firstContainer.read(taskListProvider.notifier);
+      await firstNotifier.restoreFromPersistence();
+      firstNotifier.dismissError('recoverable-task');
+
+      await _waitFor(() async => await corruptRowsFile().exists());
+      await _waitFor(() async {
+        final content = await _readFileIfExists(tasksFile());
+        return content?.contains('"error":null') ?? false;
+      });
+      final recoveryRows =
+          jsonDecode(await corruptRowsFile().readAsString()) as List;
+      expect(recoveryRows, [malformedRow]);
+
+      final laterMalformedRow = {
+        'id': 'later-invalid-status',
+        'status': 'also-not-a-task-status',
+      };
+      await tasksFile().writeAsString(jsonEncode([
+        _synthesisTaskRow('recoverable-task'),
+        laterMalformedRow,
+      ]));
+      await firstNotifier.restoreFromPersistence();
+      firstNotifier.dismissError('recoverable-task');
+      await _waitFor(() async {
+        final content = await _readFileIfExists(corruptRowsFile());
+        return content?.contains('later-invalid-status') ?? false;
+      });
+      expect(
+        jsonDecode(await corruptRowsFile().readAsString()),
+        [malformedRow, laterMalformedRow],
+      );
+      firstContainer.dispose();
+
+      final restartedContainer = ProviderContainer();
+      addTearDown(restartedContainer.dispose);
+      final restartedNotifier =
+          restartedContainer.read(taskListProvider.notifier);
+      await restartedNotifier.restoreFromPersistence();
+
+      expect(restartedContainer.read(taskListProvider).map((task) => task.id),
+          ['recoverable-task']);
+      expect(restartedContainer.read(taskListProvider).single.error, isNull);
+      expect(
+        jsonDecode(await corruptRowsFile().readAsString()),
+        [malformedRow, laterMalformedRow],
+        reason: 'all raw malformed rows remain available after restart',
+      );
+    });
+
+    test('all-valid rows restore normally without a recovery file', () async {
+      await tasksFile().parent.create(recursive: true);
+      await tasksFile().writeAsString(jsonEncode([
+        _synthesisTaskRow('first', status: 'paused'),
+        _synthesisTaskRow('second', status: 'completed'),
+      ]));
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(taskListProvider.notifier);
+      await notifier.restoreFromPersistence();
+
+      expect(container.read(taskListProvider).map((task) => task.id),
+          ['first', 'second']);
+      expect(container.read(taskListProvider).map((task) => task.status), [
+        TaskStatus.paused,
+        TaskStatus.completed,
+      ]);
+      expect(await corruptRowsFile().exists(), isFalse);
+    });
   });
 }

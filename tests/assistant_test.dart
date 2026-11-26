@@ -2,11 +2,26 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/locale_provider.dart';
+
+class _FailingAssistantCorruptBackupStore
+    extends InMemorySharedPreferencesStore {
+  _FailingAssistantCorruptBackupStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.startsWith('flutter.assistants_corrupt_')) {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
 
 void main() {
   group('AssistantModel', () {
@@ -381,6 +396,90 @@ void main() {
   });
 
   group('AssistantProvider', () {
+    test('recovers valid rows and backs up malformed assistant data', () async {
+      final validAssistant = Assistant(
+        id: 'recoverable-assistant',
+        name: 'Recoverable assistant',
+        prompt: 'Keep this prompt',
+      );
+      final originalJson = jsonEncode([
+        validAssistant.toMap(),
+        {
+          'id': 'malformed-assistant',
+          'name': 'Malformed assistant',
+          'prompt': 'Bad row',
+          'settings': 'not a map',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'assistants': originalJson});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(assistantProvider.notifier);
+      await notifier.ready;
+
+      expect(notifier.state, hasLength(1));
+      expect(notifier.state.single.id, validAssistant.id);
+      expect(notifier.state.single.prompt, validAssistant.prompt);
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('assistants_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), originalJson);
+      final savedAssistants =
+          jsonDecode(prefs.getString('assistants')!) as List;
+      expect(savedAssistants, hasLength(1));
+      expect(savedAssistants.single['id'], validAssistant.id);
+    });
+
+    test('does not overwrite malformed assistant data when backup fails',
+        () async {
+      final validAssistant = Assistant(
+        id: 'recoverable-assistant',
+        name: 'Recoverable assistant',
+        prompt: 'Keep this prompt',
+      );
+      final originalJson = jsonEncode([
+        validAssistant.toMap(),
+        {
+          'id': 'malformed-assistant',
+          'name': 'Malformed assistant',
+          'prompt': 'Bad row',
+          'settings': 'not a map',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailingAssistantCorruptBackupStore({
+        'flutter.assistants': originalJson,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      try {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        final notifier = container.read(assistantProvider.notifier);
+        await notifier.ready;
+
+        expect(notifier.state, hasLength(1));
+        expect(notifier.state.single.id, validAssistant.id);
+
+        final storedValues = await store.getAllWithPrefix('flutter.');
+        expect(storedValues['flutter.assistants'], originalJson);
+        expect(
+          storedValues.keys.where(
+            (key) => key.startsWith('flutter.assistants_corrupt_'),
+          ),
+          isEmpty,
+        );
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
     test(
       'seeds a localized default assistant for the selected locale',
       () async {

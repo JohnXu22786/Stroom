@@ -568,6 +568,24 @@ void main() {
   });
 
   group('GitHub footnote definitions', () {
+    test('appends backlinks after a final self-closing child', () {
+      final nodes = m.Document(extensionSet: m.ExtensionSet.gitHubFlavored)
+          .parse('Reference[^note]\n\n[^note]: note text\n\n    ---');
+
+      final footnote = _findElement(nodes, 'li');
+      expect(footnote, isNotNull);
+      final children = footnote!.children!;
+      expect(children, hasLength(4));
+      final horizontalRule = children[1] as m.Element;
+      expect(horizontalRule.tag, 'hr');
+      expect(horizontalRule.children, isNull);
+      expect((children[2] as m.Text).text, ' ');
+      final backlink = children.last as m.Element;
+      expect(backlink.tag, 'a');
+      expect(backlink.attributes['class'], 'footnote-backref');
+      expect(backlink.attributes['href'], '#fnref-note');
+    });
+
     test('two blank lines end a definition before an indented code block', () {
       final nodes =
           m.Document(extensionSet: m.ExtensionSet.gitHubFlavored).parse(
@@ -597,6 +615,88 @@ void main() {
           '<p><a href="https://example.com" title="title">link</a></p>\n',
         );
       }
+    });
+  });
+
+  group('HTML attribute escaping', () {
+    test('escapes attribute values before serialization', () {
+      final element = m.Element('span', [])
+        ..attributes['title'] = 'safe "quoted" & <tag>';
+
+      expect(
+        m.renderToHtml([element]),
+        '<span title="safe &quot;quoted&quot; &amp; &lt;tag&gt;"></span>',
+      );
+    });
+
+    test('escapes generated IDs before serialization', () {
+      final element = m.Element('span', [])
+        ..generatedId = 'safe "quoted" & <tag>';
+
+      expect(
+        m.renderToHtml([element]),
+        '<span id="safe &quot;quoted&quot; &amp; &lt;tag&gt;"></span>',
+      );
+    });
+
+    test('preserves literal entity text in raw attribute and ID values', () {
+      final attribute = m.Element('span', [])..attributes['title'] = '&amp;';
+      final generatedId = m.Element('span', [])..generatedId = '&amp;';
+
+      expect(
+        m.renderToHtml([attribute, generatedId]),
+        '<span title="&amp;amp;"></span><span id="&amp;amp;"></span>',
+      );
+    });
+
+    test('preserves normalized parser attribute output', () {
+      expect(
+        m.markdownToHtml('[link](https://example.test "A & B")'),
+        '<p><a href="https://example.test" title="A &amp; B">'
+        'link</a></p>\n',
+      );
+
+      expect(
+        m.markdownToHtml('```dart meta & value\ncode\n```'),
+        '<pre data-metadata="meta &amp; value"><code '
+        'class="language-dart">code\n</code></pre>\n',
+      );
+    });
+
+    test('preserves parser-generated URL and image text attributes', () {
+      const url = 'https://example.com/?a=1&b=2';
+      expect(
+        m.markdownToHtml('<$url>'),
+        '<p><a href="https://example.com/?a=1&amp;b=2">'
+        'https://example.com/?a=1&amp;b=2</a></p>\n',
+      );
+      expect(
+        m.markdownToHtml(
+          'www.example.com/?a=1&b=2',
+          extensionSet: m.ExtensionSet.gitHubFlavored,
+        ),
+        '<p><a href="http://www.example.com/?a=1&amp;b=2">'
+        'www.example.com/?a=1&amp;b=2</a></p>\n',
+      );
+      expect(
+        m.markdownToHtml('![A & B](https://example.com/img.png)'),
+        '<p><img src="https://example.com/img.png" alt="A &amp; B" /></p>\n',
+      );
+      expect(
+        m.markdownToHtml(r'''![![`&amp;`](inner.png)](outer.png)'''),
+        '<p><img src="outer.png" alt="&amp;amp;" /></p>\n',
+      );
+    });
+
+    test('preserves raw image alt entities when HTML encoding is disabled', () {
+      expect(
+        m.markdownToHtml(r'![`&amp;`](image.png)', encodeHtml: false),
+        '<p><img src="image.png" alt="&amp;amp;" /></p>\n',
+      );
+      expect(
+        m.markdownToHtml('![&amp;amp;](image.png)', encodeHtml: false),
+        '<p><img src="image.png" alt="&amp;amp;" /></p>\n',
+      );
     });
   });
 

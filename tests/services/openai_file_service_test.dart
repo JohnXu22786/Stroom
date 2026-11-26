@@ -1198,5 +1198,35 @@ void main() {
       final bodyStr = _bodyString(req.bodyBytes);
       expect(bodyStr.contains('filename="my_file.json"'), isTrue);
     });
+
+    test('regular upload sends caller-provided MIME type', () async {
+      final adapter = _MockAdapter();
+      adapter.onPost('/files', (options, bodyBytes) {
+        return ResponseBody.fromString(
+          '{"id":"file-mime","object":"file","bytes":10,"created_at":1,"filename":"document.bin","purpose":"user_data"}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
+        );
+      });
+
+      final service = OpenAiFileService(
+        config: _testConfig(),
+        dio: _mockDio(adapter),
+      );
+      await service.uploadFile(
+        bytes: Uint8List(10),
+        filename: 'document.bin',
+        mimeType: 'application/pdf',
+        purpose: 'user_data',
+      );
+
+      final request = adapter.capturedRequests.single;
+      expect(
+        _bodyString(request.bodyBytes),
+        contains('content-type: application/pdf'),
+      );
+    });
   });
 }

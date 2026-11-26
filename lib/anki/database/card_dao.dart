@@ -35,7 +35,7 @@ class CardDao {
     final rows = await _db.query(
       'cards',
       where:
-          'did = ? AND queue >= 0 AND ((queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+          'did = ? AND queue >= 0 AND ((queue IN (0, 1, 4) AND due <= ?) OR (queue IN (2, 3) AND ? IS NOT NULL AND due <= ?))',
       whereArgs: [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return rows.map(Card.fromMap).toList();
@@ -49,7 +49,7 @@ class CardDao {
     final rows = await _db.query(
       'cards',
       where:
-          'did = ? AND (queue = 0 OR (queue > 0 AND queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+          'did = ? AND (queue = 0 OR (queue IN (1, 4) AND due <= ?) OR (queue IN (2, 3) AND ? IS NOT NULL AND due <= ?))',
       whereArgs: [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return rows.map(Card.fromMap).toList();
@@ -74,7 +74,7 @@ class CardDao {
 
   Future<int> countDue(int deckId, int nowSec, {int? dayOrdinal}) async {
     final result = await _db.rawQuery(
-      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND (queue = 0 OR (queue > 0 AND queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND (queue = 0 OR (queue IN (1, 4) AND due <= ?) OR (queue IN (2, 3) AND ? IS NOT NULL AND due <= ?))',
       [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return result.first['cnt'] as int;
@@ -94,17 +94,18 @@ class CardDao {
     return card.id;
   }
 
-  Future<void> update(Card card) async {
+  Future<void> update(Card card, {DatabaseExecutor? executor}) async {
     card
       ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
       ..usn = -1;
-    await _db.update(
+    final db = executor ?? _db;
+    await db.update(
       'cards',
       card.toMap(),
       where: 'id = ?',
       whereArgs: [card.id],
     );
-    await _touchCollection();
+    await _touchCollection(db);
   }
 
   Future<void> delete(int id) async {
@@ -150,10 +151,10 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
-  Future<int> countDueReviewAll(int nowSec) async {
+  Future<int> countDueReviewAll(int dayOrdinal) async {
     final result = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE queue = 2 AND due <= ?',
-      [nowSec],
+      [dayOrdinal],
     );
     return result.first['cnt'] as int;
   }

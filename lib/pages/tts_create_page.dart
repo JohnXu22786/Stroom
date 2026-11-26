@@ -106,6 +106,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   void initState() {
     super.initState();
     _initTaskData(); // 先处理 retryTask 再处理单独的 initialText/originalTitle（后者优先级更高）
+    final entriesState = ref.read(providerEntriesProvider);
+    if (entriesState.isLoaded) {
+      _refreshModels(entriesState, rebuild: false);
+    }
+    ref.listenManual(providerEntriesProvider, (previous, next) {
+      if (next.isLoaded) _refreshModels(next);
+    });
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       _textController.text = widget.initialText!;
     }
@@ -167,7 +174,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   }
 
   /// 根据最新的 providerEntriesState 刷新可用模型列表
-  void _refreshModels(ProviderEntriesState entriesState) {
+  void _refreshModels(
+    ProviderEntriesState entriesState, {
+    bool rebuild = true,
+  }) {
+    if (identical(entriesState, _lastEntriesState)) return;
+    _lastEntriesState = entriesState;
+
     final ttsEntry =
         entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
 
@@ -175,14 +188,20 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     // 重试预设的 _modelConfig 保留，避免 provider 异步加载期间（条目
     // 暂时为空）丢失重试任务的模型选择。
     if (ttsEntry == null) {
-      setState(() {
+      void clearModels() {
         _ttsEntryId = null;
         _availableModels = [];
         if (_retryModelId == null) {
           _modelConfig = null;
           _selectedModelIndex = null;
         }
-      });
+      }
+
+      if (rebuild) {
+        setState(clearModels);
+      } else {
+        clearModels();
+      }
       return;
     }
 
@@ -195,13 +214,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       }
     }
 
-    // provider 状态没变（不可变对象，同实例 = 同数据）就不触发重建——
-    // 旧实现只比较模型 ID 列表，同 ID 下新增音色会被跳过，页面保留
-    // 不含新音色的旧模型快照，音色下拉框不出现。
-    if (identical(entriesState, _lastEntriesState)) return;
-    _lastEntriesState = entriesState;
-
-    setState(() {
+    void updateModels() {
       _ttsEntryId = ttsEntry.id;
       if (allModels.isEmpty) {
         // 模型列表变空 → 清空当前选择。重试预设期间保留自定义参数
@@ -272,7 +285,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           }
         }
       }
-    });
+    }
+
+    if (rebuild) {
+      setState(updateModels);
+    } else {
+      updateModels();
+    }
   }
 
   /// 跳转到 TTS 供应商配置页
@@ -410,10 +429,6 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final entriesState = ref.watch(providerEntriesProvider);
-
-    // 响应式刷新模型列表（每次 provider 数据变化时自动重建）
-    _refreshModels(entriesState);
 
     final cs = Theme.of(context).colorScheme;
 
@@ -481,6 +496,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     // 重新套用（模型本身的选择保留，仅不再回退到重试预设）
     _retryModelId = null;
     _retryInstruction = null;
+    for (final param in _modelConfig?.customParams ?? const <CustomParam>[]) {
+      _customParamControllers[param.paramName]?.text = param.defaultValue;
+    }
     _instructionController.clear();
     _textController.clear();
     _titleController.clear();

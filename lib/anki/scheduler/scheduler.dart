@@ -31,7 +31,7 @@ class AnkiScheduler {
     // 2. Review cards
     final review = await cards.listByQueue(did, 2);
     for (final c in review) {
-      if (c.isDue(now)) return c;
+      if (c.isDue(now, dayOrdinal: today)) return c;
     }
 
     // 3. New cards
@@ -49,24 +49,33 @@ class AnkiScheduler {
     int rating, {
     int reviewDuration = 0,
   }) async {
+    await col.load();
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
     final nowSec = nowMs ~/ 1000;
+    final today = col.dayOrdinalAt(nowSec);
     final card = await cards.get(cid);
     if (card == null) return;
 
+    final reviewKind = switch (card.ctype) {
+      CardType.new_ || CardType.learn => RevlogReviewKind.learning,
+      CardType.relearn => RevlogReviewKind.relearning,
+      CardType.review => RevlogReviewKind.review,
+    };
     final lastIvl = card.interval;
 
     switch (card.queue.value) {
       case 0: // new
         _sm2.scheduleLearning(card, nowMs);
         card.answerLearning(nowMs,
+            dayOrdinal: today,
             steps: _sm2.learningSteps,
             answerIdx: (rating - 1).clamp(0, 3),
             graduatingIvl: _sm2.graduatingInterval);
         break;
       case 1: // learning
         card.answerLearning(nowMs,
+            dayOrdinal: today,
             steps: _sm2.learningSteps,
             answerIdx: (rating - 1).clamp(0, 3),
             graduatingIvl: _sm2.graduatingInterval);
@@ -74,6 +83,7 @@ class AnkiScheduler {
       case 2: // review
       case 3: // day learning
         card.answerReview(nowMs,
+            dayOrdinal: today,
             rating: rating,
             hardMult: _sm2.hardMultiplier,
             relearnSteps: _sm2.learningSteps.length,
@@ -85,23 +95,24 @@ class AnkiScheduler {
     }
 
     card.mtime = nowSec;
-    await cards.update(card);
+    await col.transaction((txn) async {
+      await cards.update(card, executor: txn);
 
-    // Log the review
-    await col.revlog.insert(RevlogEntry(
-      cid: cid,
-      button_chosen: rating,
-      interval: card.interval,
-      last_interval: lastIvl,
-      ease_factor: card.ease_factor,
-      taken_millis: reviewDuration,
-      review_kind:
-          card.ctype == CardType.learn || card.ctype == CardType.relearn
-              ? RevlogReviewKind.relearning
-              : RevlogReviewKind.review,
-    ));
+      // Log the review with the card update in the same transaction.
+      await col.revlog.insert(
+          RevlogEntry(
+            cid: cid,
+            button_chosen: rating,
+            interval: card.interval,
+            last_interval: lastIvl,
+            ease_factor: card.ease_factor,
+            taken_millis: reviewDuration,
+            review_kind: reviewKind,
+          ),
+          executor: txn);
 
-    await col.save();
+      await col.save(executor: txn);
+    });
   }
 
   Future<int> countDue(ColDao col, CardDao cardDao, int did) async {

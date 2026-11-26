@@ -151,13 +151,14 @@ class MPDParser {
   ) {
     final templateAttributes = <String, String>{};
     _MpdElement? timeline;
-    var hasRepresentationTemplate = false;
-    for (final element in hierarchy) {
+    int? templateIndex;
+    for (var index = 0; index < hierarchy.length; index++) {
+      final element = hierarchy[index];
       final template = element.children.firstWhereOrNull(
         (node) => _isDash(node, 'SegmentTemplate'),
       );
       if (template == null) continue;
-      if (identical(element, representation)) hasRepresentationTemplate = true;
+      templateIndex = index;
       templateAttributes.addAll(template.attributes);
       timeline = template.children.firstWhereOrNull(
             (node) => _isDash(node, 'SegmentTimeline'),
@@ -165,10 +166,19 @@ class MPDParser {
           timeline;
     }
 
-    final list = representation.children.firstWhereOrNull(
-      (node) => _isDash(node, 'SegmentList'),
-    );
-    if (list != null && !hasRepresentationTemplate) {
+    _MpdElement? list;
+    int? listIndex;
+    for (var index = 0; index < hierarchy.length; index++) {
+      final element = hierarchy[index];
+      final segmentList = element.children.firstWhereOrNull(
+        (node) => _isDash(node, 'SegmentList'),
+      );
+      if (segmentList == null) continue;
+      list = segmentList;
+      listIndex = index;
+    }
+
+    if (list != null && (templateIndex == null || listIndex! > templateIndex)) {
       return _parseSegmentList(list, baseUrl, maxSegments);
     }
 
@@ -371,6 +381,13 @@ class MPDParser {
       if (media != null) {
         result.add((url: _resolveBase(media, baseUrl), duration: 0));
       }
+    }
+    final initialization = list.children.firstWhereOrNull(
+      (node) => _isDash(node, 'Initialization'),
+    );
+    final sourceUrl = initialization?.attributes['sourceURL'];
+    if (sourceUrl != null) {
+      result.insert(0, (url: _resolveBase(sourceUrl, baseUrl), duration: 0));
     }
     return result;
   }

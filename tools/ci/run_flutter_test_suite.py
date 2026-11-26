@@ -80,6 +80,8 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/temporary_conversation_test.dart",
         "utils/model_order_test.dart",
         "utils/attachment_preview_lifecycle_test.dart",
+        "markdown_delimiter_syntax_test.dart",
+        "markdown_email_autolink_test.dart",
     ),
     "chat-ai-ui": (
         "reasoning_section_animation_test.dart",
@@ -137,8 +139,10 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/storage_file_publication_test.dart",
         "utils/web_file_store_blob_stub_test.dart",
         "utils/tts_audio_saver_test.dart",
+        "utils/tts_storage_service_test.dart",
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",
+        "utils/sort_config_test.dart",
         "pages/backup_restore_page_test.dart",
         "pages/backup_restore_info_dialog_test.dart",
         "pages/backup_restore_constrained_text_test.dart",
@@ -164,6 +168,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/background_task_provider_test.dart",
         "providers/ocr*_test.dart",
         "providers/tts_config_persistence_test.dart",
+        "providers/custom_trim_presets_async_test.dart",
         "providers/tts_save_cancellation_test.dart",
         "providers/tts_state_shared_test.dart",
         "providers/tts_stream_playback_test.dart",
@@ -216,6 +221,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/image_preview_dialog_test.dart",
     ),
     "text-math": (
+        "markdown_task_list_test.dart",
         "markdown_unicode_scalars_test.dart",
         "markdown_alert_boundary_test.dart",
         "math_3d*_test.dart",
@@ -314,6 +320,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 # steps in .github/workflows/ci.yml, not by the native Flutter test runner.
 BROWSER_ONLY_TESTS: dict[str, str] = {
     "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
+    "services/userscript_http_web_test.dart": "component-integrations",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 

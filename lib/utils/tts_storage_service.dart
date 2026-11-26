@@ -196,8 +196,8 @@ class StorageService {
   static bool get isWeb => kIsWeb;
 
   static Future<void> clearWebStorage() async {
-    if (!kIsWeb) return;
-    // WebFileStore 没有列出所有 key 的 API，简单置空内存状态
+    if (!kIsWeb && !WebFileStore.isTestMode) return;
+    await WebFileStore.deleteByPrefix('storage_service/');
     _webStore?.clear();
   }
 }

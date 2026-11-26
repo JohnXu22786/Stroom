@@ -1,6 +1,8 @@
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +40,52 @@ Widget _buildTestApp({List<ProviderEntry>? entries}) {
       supportedLocales: AppLocalizations.supportedLocales,
       home: AsrPage(),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+    ),
+  );
+}
+
+const _modelSelectorCaptureKey = ValueKey('asr-model-selector-capture');
+
+Widget _buildModelSelectorLayoutTestApp({
+  required List<ProviderEntry> entries,
+  required Locale locale,
+  required double textScale,
+  ThemeMode themeMode = ThemeMode.light,
+  double? inheritedLetterSpacing,
+}) {
+  final notifier = ProviderEntriesNotifier()
+    ..state = ProviderEntriesState(entries: entries);
+  final lightTheme = ThemeData.light(useMaterial3: true);
+  final configuredLightTheme = inheritedLetterSpacing == null
+      ? lightTheme
+      : lightTheme.copyWith(
+          textTheme: lightTheme.textTheme.copyWith(
+            bodyMedium: lightTheme.textTheme.bodyMedium?.copyWith(
+              letterSpacing: inheritedLetterSpacing,
+            ),
+          ),
+        );
+  return RepaintBoundary(
+    key: _modelSelectorCaptureKey,
+    child: ProviderScope(
+      overrides: [
+        audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
+        providerEntriesProvider.overrideWith((ref) => notifier),
+      ],
+      child: MaterialApp(
+        theme: configuredLightTheme,
+        darkTheme: ThemeData.dark(useMaterial3: true),
+        themeMode: themeMode,
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const AsrPage(),
+      ),
     ),
   );
 }
@@ -99,12 +147,145 @@ ProviderEntry _createAsrEntry({bool withModels = true}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(
+        family,
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  });
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
   });
 
   group('AsrPage - model selector', () {
+    testWidgets(
+      'keeps the model selector visible with a long Portuguese label at large text scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 1200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildModelSelectorLayoutTestApp(
+            entries: [_createAsrEntry()],
+            locale: const Locale('pt', 'BR'),
+            textScale: 2.5,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final label = find.text('Modelo de reconhecimento');
+        final dropdown = find.byType(DropdownButton<int>);
+        expect(label, findsOneWidget);
+        expect(find.text('Whisper-1 | OpenAI'), findsWidgets);
+        expect(
+          tester.getRect(dropdown).top,
+          greaterThan(tester.getRect(label).bottom),
+        );
+        expect(tester.getRect(dropdown).width, greaterThanOrEqualTo(104));
+        expect(tester.takeException(), isNull);
+        await expectLater(
+          find.byKey(_modelSelectorCaptureKey),
+          matchesGoldenFile(
+            '../../../docs/ui-constrained-text-qa/asr-page-model-selector/asr-model-selector-pt-BR-320x1200-scale2_5-light.png',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildModelSelectorLayoutTestApp(
+            entries: [_createAsrEntry()],
+            locale: const Locale('pt', 'BR'),
+            textScale: 2.5,
+            themeMode: ThemeMode.dark,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Modelo de reconhecimento'), findsOneWidget);
+        expect(find.text('Whisper-1 | OpenAI'), findsWidgets);
+        expect(tester.takeException(), isNull);
+        await expectLater(
+          find.byKey(_modelSelectorCaptureKey),
+          matchesGoldenFile(
+            '../../../docs/ui-constrained-text-qa/asr-page-model-selector/asr-model-selector-pt-BR-320x1200-scale2_5-dark.png',
+          ),
+        );
+      },
+    );
+
+    testWidgets('keeps the original single row when the selector fits', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(640, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildModelSelectorLayoutTestApp(
+          entries: [_createAsrEntry()],
+          locale: const Locale('pt', 'BR'),
+          textScale: 1,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final label = find.text('Modelo de reconhecimento');
+      final dropdown = find.byType(DropdownButton<int>);
+      expect(label, findsOneWidget);
+      expect(dropdown, findsOneWidget);
+      expect(
+        tester.getRect(label).center.dy,
+        closeTo(tester.getRect(dropdown).center.dy, 1),
+      );
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byKey(_modelSelectorCaptureKey),
+        matchesGoldenFile(
+          '../../../docs/ui-constrained-text-qa/asr-page-model-selector/asr-model-selector-pt-BR-640x800-scale1-light.png',
+        ),
+      );
+    });
+
+    testWidgets('reserves dropdown space for inherited label letter spacing', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(385, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildModelSelectorLayoutTestApp(
+          entries: [_createAsrEntry()],
+          locale: const Locale('pt', 'BR'),
+          textScale: 1,
+          inheritedLetterSpacing: 3,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final label = find.text('Modelo de reconhecimento');
+      final dropdown = find.byType(DropdownButton<int>);
+      expect(
+        tester.getRect(dropdown).top,
+        greaterThan(tester.getRect(label).bottom),
+      );
+      expect(tester.getRect(dropdown).width, greaterThanOrEqualTo(104));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows model selector when ASR provider has models', (
       tester,
     ) async {

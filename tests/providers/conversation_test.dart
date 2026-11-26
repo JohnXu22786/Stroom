@@ -2,6 +2,7 @@
 //   - conversation_draft_test.dart
 //   - conversation_history_ordering_test.dart
 //   - conversation_mcp_tools_test.dart
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

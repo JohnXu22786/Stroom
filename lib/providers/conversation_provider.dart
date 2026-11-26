@@ -580,9 +580,25 @@ final conversationsInitialLoadProvider = FutureProvider<void>((ref) async {
 
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
+  @visibleForTesting
+  final Future<bool> Function(
+    SharedPreferences prefs,
+    String key,
+    String value,
+  )? corruptConversationBackupWriter;
+  @visibleForTesting
+  final Future<void> Function()? corruptConversationBackupAfterWrite;
   List<dynamic> _unparsedConversationRecords = [];
+  String? _corruptConversationDataAwaitingBackup;
+  String? _corruptConversationRecoveryGuard;
+  String? _corruptConversationRecoveryPersistedFrom;
+  String? _corruptConversationRecoveryPersistedJson;
 
-  ConversationsNotifier(this._ref) : super([]);
+  ConversationsNotifier(
+    this._ref, {
+    @visibleForTesting this.corruptConversationBackupWriter,
+    @visibleForTesting this.corruptConversationBackupAfterWrite,
+  }) : super([]);
 
   List<Conversation> get currentConversations => state;
 
@@ -635,6 +651,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.
   Future<void> get ready => _initialLoad;
+
+  @visibleForTesting
+  Future<void> loadForTesting() => _initialLoad = _load();
+
+  @visibleForTesting
+  Future<bool> persistNowForTesting() => _persistCoreResult();
+
+  @visibleForTesting
+  Future<void> waitForPersistenceQueueForTesting() => _persistQueue;
 
   Timer? _persistTimer;
 

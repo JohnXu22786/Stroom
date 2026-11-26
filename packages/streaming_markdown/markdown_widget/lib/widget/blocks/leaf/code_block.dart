@@ -29,13 +29,20 @@ class CodeBlockNode extends ElementNode {
       language = null;
       debugPrint('get language error:$e');
     }
-    final splitContents =
-        content.split(visitor.splitRegExp ?? WidgetVisitor.defaultSplitRegExp);
-    if (splitContents.last.isEmpty) splitContents.removeLast();
     final codeBuilder = preConfig.builder;
     if (codeBuilder != null) {
       return WidgetSpan(child: codeBuilder.call(content, language ?? ''));
     }
+    final splitSpans = _splitSpansByLines(
+      highLightSpans(
+        content,
+        language: language ?? preConfig.language,
+        theme: preConfig.theme,
+        textStyle: style,
+        styleNotMatched: preConfig.styleNotMatched,
+      ),
+    );
+    if (splitSpans.last.isEmpty) splitSpans.removeLast();
     final widget = Container(
       decoration: preConfig.decoration,
       margin: preConfig.margin,
@@ -45,18 +52,9 @@ class CodeBlockNode extends ElementNode {
         scrollDirection: Axis.horizontal,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: List.generate(splitContents.length, (index) {
-            final currentContent = splitContents[index];
+          children: List.generate(splitSpans.length, (index) {
             return ProxyRichText(
-              TextSpan(
-                children: highLightSpans(
-                  currentContent,
-                  language: language ?? preConfig.language,
-                  theme: preConfig.theme,
-                  textStyle: style,
-                  styleNotMatched: preConfig.styleNotMatched,
-                ),
-              ),
+              TextSpan(children: splitSpans[index]),
               richTextBuilder: visitor.richTextBuilder,
             );
           }),
@@ -70,6 +68,37 @@ class CodeBlockNode extends ElementNode {
 
   @override
   TextStyle get style => preConfig.textStyle.merge(parentStyle);
+}
+
+/// Splits already-highlighted spans into display lines without re-parsing each
+/// line, so lexer state such as multiline comments is preserved.
+List<List<InlineSpan>> _splitSpansByLines(List<InlineSpan> spans) {
+  final lines = <List<InlineSpan>>[[]];
+
+  void append(InlineSpan span, TextStyle? inheritedStyle) {
+    if (span is! TextSpan) return;
+    final style = inheritedStyle?.merge(span.style) ?? span.style;
+
+    if (span.text != null) {
+      final textLines = span.text!.split('\n');
+      for (var index = 0; index < textLines.length; index++) {
+        final text = textLines[index];
+        if (text.isNotEmpty) {
+          lines.last.add(TextSpan(text: text, style: style));
+        }
+        if (index < textLines.length - 1) lines.add([]);
+      }
+    }
+
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      append(child, style);
+    }
+  }
+
+  for (final span in spans) {
+    append(span, null);
+  }
+  return lines;
 }
 
 ///transform code to highlight code

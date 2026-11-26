@@ -150,8 +150,12 @@ class ColDao {
     await load();
   }
 
+  /// Runs related collection writes in a single database transaction.
+  Future<T> transaction<T>(Future<T> Function(DatabaseExecutor) action) =>
+      _db.transaction(action);
+
   /// Persist the JSON blobs back to the col row.
-  Future<void> save() async {
+  Future<void> save({DatabaseExecutor? executor}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final nowSecs = nowMs ~/ 1000;
     modified = nowSecs;
@@ -173,7 +177,7 @@ class ColDao {
           ..usn = -1;
       }
     }
-    await _db.update(
+    await (executor ?? _db).update(
         'col',
         {
           'mod': modified,
@@ -484,7 +488,7 @@ class ColDao {
     );
     final revCnt = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND queue = 2 AND due <= ?',
-      [did, now],
+      [did, today],
     );
     final total = await cards.totalCount(did);
     return DeckStats(
@@ -498,8 +502,8 @@ class ColDao {
 
   /// Returns Anki's collection-relative day ordinal for [nowSec].
   ///
-  /// Card due values in queue 3 are day ordinals since the collection's
-  /// creation day, unlike queue 1/2 values which this app stores in seconds.
+  /// Card due values in queues 2 and 3 are day ordinals since the collection's
+  /// creation day, unlike queue 1 values which are stored in seconds.
   int dayOrdinalAt(int nowSec) {
     return (nowSec - creationDate) ~/ Duration(days: 1).inSeconds;
   }

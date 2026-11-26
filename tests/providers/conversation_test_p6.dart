@@ -1,6 +1,133 @@
 part of 'conversation_test.dart';
 
 void conversationGroup6() {
+  group('ConversationsNotifier corrupt payload recovery', () {
+    test('backs up valid JSON with a non-list shape', () async {
+      const corruptJson = '{"unexpected":"payload"}';
+      SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('conversations.corrupt.'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), corruptJson);
+      expect(prefs.getString('conversations'), isNull);
+    });
+
+    test('backs up an empty stored conversations payload', () async {
+      SharedPreferences.setMockInitialValues({'conversations': ''});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('conversations.corrupt.'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), '');
+      expect(prefs.getString('conversations'), isNull);
+    });
+
+    test(
+      'keeps source payload and blocks saves when backup writes fail',
+      () async {
+        const corruptJson = '{"unexpected":"payload"}';
+        SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+        var backupAttempts = 0;
+        final container = ProviderContainer(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(
+                ref,
+                corruptConversationBackupWriter: (_, __, ___) async {
+                  backupAttempts++;
+                  return false;
+                },
+              );
+              notifier.loadForTesting();
+              return notifier;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final notifier = container.read(conversationsProvider.notifier);
+        await notifier.ready;
+        final saved = await notifier.persistNowForTesting();
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(saved, isFalse);
+        expect(backupAttempts, 2);
+        expect(prefs.getString('conversations'), corruptJson);
+        expect(
+          prefs.getKeys().where(
+                (key) => key.startsWith('conversations.corrupt.'),
+              ),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'serializes backup retries with concurrent conversation saves',
+      () async {
+        const corruptJson = '{"unexpected":"payload"}';
+        SharedPreferences.setMockInitialValues({'conversations': corruptJson});
+        var backupAttempts = 0;
+        final firstBackupStarted = Completer<void>();
+        final firstBackup = Completer<bool>();
+        final secondBackup = Completer<bool>();
+        final container = ProviderContainer(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(
+                ref,
+                corruptConversationBackupWriter: (_, __, ___) {
+                  backupAttempts++;
+                  if (backupAttempts == 1) return Future<bool>.value(false);
+                  if (backupAttempts == 2) {
+                    firstBackupStarted.complete();
+                    return firstBackup.future;
+                  }
+                  return secondBackup.future;
+                },
+              );
+              notifier.loadForTesting();
+              return notifier;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final notifier = container.read(conversationsProvider.notifier);
+        await notifier.ready;
+        final firstSave = notifier.persistNowForTesting();
+        await firstBackupStarted.future;
+        final secondSave = notifier.persistNowForTesting();
+        await Future<void>.delayed(Duration.zero);
+
+        final overlappingBackupStarted = backupAttempts == 3;
+        firstBackup.complete(true);
+        await firstSave;
+        if (overlappingBackupStarted) secondBackup.complete(true);
+        await secondSave;
+
+        expect(overlappingBackupStarted, isFalse);
+      },
+    );
+  });
+
   // ===================================================================
   // 6. Draft attachments (unsent attachment snapshots) persistence
   // ===================================================================

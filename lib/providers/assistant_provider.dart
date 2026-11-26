@@ -86,18 +86,54 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
 
   Future<void> _load() async {
     SharedPreferences? prefs;
+    var mayCreateDefault = true;
     try {
       prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('assistants');
       if (json != null) {
-        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
-        state = list.map((m) => Assistant.fromMap(m)).toList();
+        Object? decoded;
+        var decodedSuccessfully = false;
+        try {
+          decoded = jsonDecode(json);
+          decodedSuccessfully = true;
+        } catch (e) {
+          debugPrint('Failed to decode assistants: $e');
+        }
+
+        if (!decodedSuccessfully || decoded is! List) {
+          mayCreateDefault = await _backupCorruptAssistantData(prefs, json);
+        } else {
+          final assistants = <Assistant>[];
+          var hasMalformedRow = false;
+          for (final row in decoded) {
+            try {
+              if (row is! Map<String, dynamic>) {
+                throw const FormatException('Assistant row is not an object.');
+              }
+              assistants.add(Assistant.fromMap(row));
+            } catch (e) {
+              hasMalformedRow = true;
+              debugPrint('Failed to load assistant row: $e');
+            }
+          }
+          state = assistants;
+
+          if (hasMalformedRow) {
+            final backedUp = await _backupCorruptAssistantData(prefs, json);
+            if (!backedUp) {
+              mayCreateDefault = false;
+            } else if (assistants.isNotEmpty) {
+              await _persist();
+              return;
+            }
+          }
+        }
       }
     } catch (e) {
       debugPrint('Failed to load assistants: $e');
     }
     // If no assistants, create a default one
-    if (state.isEmpty) {
+    if (state.isEmpty && mayCreateDefault) {
       await _createDefaultAssistant(
         appLocalizationsForLocale(
           localeFromCode(prefs?.getString(localePreferenceKey)),
@@ -107,6 +143,21 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     // NOTE: Old conversation migration (null assistantId → default assistant)
     // is handled inside ConversationsNotifier._load() to avoid race conditions
     // between the two providers. See conversation_provider.dart.
+  }
+
+  Future<bool> _backupCorruptAssistantData(
+      SharedPreferences prefs, String corruptJson) async {
+    try {
+      final backupKey =
+          'assistants_corrupt_${DateTime.now().microsecondsSinceEpoch}';
+      final saved = await prefs.setString(backupKey, corruptJson);
+      if (!saved) return false;
+      debugPrint('Backed up corrupt assistants to $backupKey');
+      return true;
+    } catch (e) {
+      debugPrint('Failed to back up corrupt assistants: $e');
+      return false;
+    }
   }
 
   Future<void> _persist() async {

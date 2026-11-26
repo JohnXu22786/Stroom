@@ -675,6 +675,8 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   Note? _note;
   bool _showAnswer = false;
   bool _studying = true;
+  bool _initialLoadComplete = false;
+  Object? _initialLoadError;
   bool _answering = false;
   bool _currentAnswered = false;
   bool _whiteboardOn = false;
@@ -685,28 +687,45 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load().catchError((Object _) {});
+    });
   }
 
   Future<void> _load() async {
-    final previousCardId = _current?.id;
-    final previousCardAnswered = _currentAnswered;
-    final card = await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
-    Note? note;
-    if (card != null) {
-      try {
-        final dao = ref.read(ankiNoteDaoProvider).requireValue;
-        note = await dao.get(card.note_id);
-      } catch (_) {}
+    final isInitialLoad = !_initialLoadComplete;
+    try {
+      final previousCardId = _current?.id;
+      final previousCardAnswered = _currentAnswered;
+      final card =
+          await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
+      Note? note;
+      if (card != null) {
+        try {
+          final dao = ref.read(ankiNoteDaoProvider).requireValue;
+          note = await dao.get(card.note_id);
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _current = card;
+          _note = note;
+          _showAnswer = false;
+          _studying = card != null;
+          _initialLoadComplete = true;
+          _initialLoadError = null;
+          _currentAnswered = previousCardAnswered && card?.id == previousCardId;
+        });
+      }
+    } catch (error) {
+      if (mounted && isInitialLoad) {
+        setState(() {
+          _initialLoadComplete = true;
+          _initialLoadError = error;
+        });
+      }
+      rethrow;
     }
-    if (mounted)
-      setState(() {
-        _current = card;
-        _note = note;
-        _showAnswer = false;
-        _studying = card != null;
-        _currentAnswered = previousCardAnswered && card?.id == previousCardId;
-      });
   }
 
   Future<void> _answer(int rating) async {
@@ -767,12 +786,17 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
 
   Future<void> _retryLoad() async {
     if (_answering) return;
+    final retryingInitialLoad = _initialLoadError != null;
     setState(() => _answering = true);
     try {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      _showRetryLoadError(error);
+      if (retryingInitialLoad) {
+        setState(() => _initialLoadError = error);
+      } else {
+        _showRetryLoadError(error);
+      }
     } finally {
       if (mounted) setState(() => _answering = false);
     }
@@ -828,14 +852,61 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
           ),
         ],
       ),
-      body: _studying && _current != null
-          ? Stack(
-              children: [
-                _buildContent(context, cs),
-                if (_whiteboardOn) _buildWhiteboard(),
-              ],
-            )
-          : _buildDone(context, cs),
+      body: !_initialLoadComplete
+          ? const Center(child: CircularProgressIndicator())
+          : _initialLoadError != null
+              ? _buildInitialLoadError(context, cs)
+              : _studying && _current != null
+                  ? Stack(
+                      children: [
+                        _buildContent(context, cs),
+                        if (_whiteboardOn) _buildWhiteboard(),
+                      ],
+                    )
+                  : _buildDone(context, cs),
+    );
+  }
+
+  Widget _buildInitialLoadError(BuildContext context, ColorScheme cs) {
+    final l10n = AppLocalizations.of(context)!;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: cs.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.ankiCardBrowserLoadError(_initialLoadError.toString()),
+                    style: TextStyle(fontSize: 16, color: cs.onSurface),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _answering ? null : _retryLoad,
+                    icon: _answering
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: ConstrainedText(
+                      l10n.actionRetry,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

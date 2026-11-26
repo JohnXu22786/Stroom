@@ -81,6 +81,7 @@ Widget _buildTestApp({
 ProviderEntry _createTtsEntry({
   bool withModels = true,
   int maxWordsPerRequest = 0,
+  List<CustomParam> secondModelCustomParams = const [],
 }) {
   return ProviderEntry(
     id: 'test_tts',
@@ -98,7 +99,11 @@ ProviderEntry _createTtsEntry({
                   modelId: 'tts-1',
                   maxWordsPerRequest: maxWordsPerRequest,
                 ),
-                ModelConfig(name: 'TTS-2', modelId: 'tts-2'),
+                ModelConfig(
+                  name: 'TTS-2',
+                  modelId: 'tts-2',
+                  customParams: secondModelCustomParams,
+                ),
               ]
             : [],
       ),
@@ -544,6 +549,68 @@ void main() {
   });
 
   group('TTSCreatePage - model selector (OCR/ASR style)', () {
+    testWidgets(
+      'loading state with a TTS entry does not refresh models during build',
+      (tester) async {
+        final notifier = ProviderEntriesNotifier();
+        notifier.state = ProviderEntriesState(
+          entries: [_createTtsEntry()],
+          isLoaded: false,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+              providerEntriesProvider.overrideWith((ref) => notifier),
+            ],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: TTSCreatePage(retryTask: _retryTask()),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+
+        notifier.state = ProviderEntriesState(entries: [_createTtsEntry()]);
+        await tester.pumpAndSettle();
+        expect(find.text('TTS-2 | OpenAI'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'no-entry loading state preserves retry model until providers load',
+      (tester) async {
+        final notifier = ProviderEntriesNotifier();
+        notifier.state = const ProviderEntriesState(
+          entries: [],
+          isLoaded: false,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+              providerEntriesProvider.overrideWith((ref) => notifier),
+            ],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: TTSCreatePage(retryTask: _retryTask()),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+
+        notifier.state = ProviderEntriesState(entries: [_createTtsEntry()]);
+        await tester.pumpAndSettle();
+        expect(find.text('TTS-2 | OpenAI'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('shows pill model selector with "ModelName | ProviderName"', (
       tester,
     ) async {
@@ -996,6 +1063,77 @@ void main() {
 
       expect(find.text('清空'), findsNothing);
       expect(find.text('将保存为: 根目录/你好世界.wav'), findsNothing);
+    });
+
+    testWidgets('clearing a retry restores custom parameter defaults', (
+      tester,
+    ) async {
+      final entry = _createTtsEntry(
+        secondModelCustomParams: [
+          CustomParam(paramName: 'style', defaultValue: 'default-style'),
+        ],
+      );
+      final retry = SynthesisTask(
+        id: 'retry-task',
+        title: '旧标题',
+        text: '旧文本',
+        providerConfig: entry.configs.single,
+        modelConfig: entry.configs.single.models[1],
+        customParams: {'style': 'retry-style'},
+      );
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith((ref) {
+            final notifier = ProviderEntriesNotifier();
+            // ignore: invalid_use_of_visible_for_testing_member
+            // ignore: invalid_use_of_protected_member
+            notifier.state = ProviderEntriesState(entries: [entry]);
+            return notifier;
+          }),
+          taskListProvider.overrideWith((ref) {
+            final notifier = TaskListNotifier(ref);
+            // ignore: invalid_use_of_visible_for_testing_member
+            notifier.debugSynthesize = (_, _, _) async => Uint8List(0);
+            return notifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: TTSCreatePage(retryTask: retry),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final styleField = find.byType(TextField).last;
+      expect(
+        tester.widget<TextField>(styleField).controller!.text,
+        'retry-style',
+      );
+      await tester.tap(find.text('清空'));
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(styleField).controller!.text,
+        'default-style',
+      );
+      await tester.enterText(find.byType(TextField).at(1), '新文本');
+      await tester.pump();
+      await tester.tap(find.text('生成录音'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(taskListProvider), hasLength(1));
+      expect(container.read(taskListProvider).single.customParams, {
+        'style': 'default-style',
+      });
     });
   });
 

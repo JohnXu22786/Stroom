@@ -13,6 +13,14 @@ void main() {
     expect(videoMimeTypeForPath('videos/sample.3gpp'), 'video/3gpp');
   });
 
+  test('maps ambiguous web video containers to browser MIME types', () {
+    expect(videoMimeTypeForPath('videos/sample.mov'), 'video/quicktime');
+    expect(videoMimeTypeForPath('videos/sample.flv'), 'video/x-flv');
+    expect(videoMimeTypeForPath('videos/sample.avi'), 'video/x-msvideo');
+    expect(videoMimeTypeForPath('videos/sample.mpeg'), 'video/mpeg');
+    expect(videoMimeTypeForPath('videos/sample.mpg'), 'video/mpeg');
+  });
+
   for (final testCase in [
     (locale: const Locale('en'), error: 'Could not load video'),
     (locale: const Locale('zh', 'CN'), error: '无法加载视频'),
