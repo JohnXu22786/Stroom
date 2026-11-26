@@ -14,4 +14,4 @@ python3 -m http.server 8876 --bind 127.0.0.1 --directory build/voice-editor-inpu
 python3 tool/qa/voice_editor_hint_capture.py
 ```
 
-The focused production-widget regression test is `flutter test --no-pub --reporter expanded tests/pages/voice_editor_page_constrained_hints_test.dart`.
+The focused production-widget regression test is `flutter test --no-pub --reporter expanded tests/task_flow/voice_editor_page_constrained_hints_test.dart`.
