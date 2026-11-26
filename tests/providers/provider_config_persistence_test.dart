@@ -129,6 +129,139 @@ void main() {
       expect(prefs.getString('chat_configs'), isNull);
     });
 
+    test('invalid-only legacy chat_configs are backed up before removal',
+        () async {
+      final legacyJson = jsonEncode(['invalid row', 42, null]);
+      SharedPreferences.setMockInitialValues({'chat_configs': legacyJson});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), legacyJson);
+      expect(prefs.getString('chat_configs'), isNull);
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'migrated_llm'),
+        isFalse,
+      );
+    });
+
+    test('legacy configs with invalid model rows are backed up before removal',
+        () async {
+      final legacyJson = jsonEncode([
+        {
+          'providerName': 'Legacy provider',
+          'models': [
+            'recover this model',
+            {'modelId': 'migrated-model'},
+          ],
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'chat_configs': legacyJson});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), legacyJson);
+      expect(prefs.getString('chat_configs'), isNull);
+      final migrated = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'migrated_llm',
+      );
+      expect(migrated.configs.single.models.single.modelId, 'migrated-model');
+    });
+
+    test(
+        'legacy configs with invalid models values are backed up before removal',
+        () async {
+      final legacyJson = jsonEncode([
+        {
+          'providerName': 'Legacy provider',
+          'models': 'recoverable model data',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'chat_configs': legacyJson});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), legacyJson);
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('valid legacy chat_configs still migrate normally', () async {
+      SharedPreferences.setMockInitialValues({
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model'},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final migrated = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'migrated_llm',
+      );
+      expect(migrated.configs.single.providerName, 'Legacy provider');
+      expect(prefs.getString('chat_configs'), isNull);
+      expect(
+        prefs
+            .getKeys()
+            .where((key) => key.startsWith('provider_entries_corrupt_')),
+        isEmpty,
+      );
+    });
+
+    test('corrupt provider and legacy payloads keep separate backups',
+        () async {
+      const corruptProviderEntries = '{"provider":"recover me"}';
+      final legacyJson = jsonEncode([
+        {
+          'providerName': 'Legacy provider',
+          'models': 'recoverable model data',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': corruptProviderEntries,
+        'chat_configs': legacyJson,
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backups = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .map((key) => prefs.getString(key))
+          .toSet();
+      expect(backups, containsAll([corruptProviderEntries, legacyJson]));
+    });
+
     test(
         'non-array provider_entries is quarantined before migration '
         'overwrite', () async {
