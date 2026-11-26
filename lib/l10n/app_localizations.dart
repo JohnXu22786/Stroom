@@ -19913,6 +19913,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.'**
   String get providerResponsesEndpointHelp;
+
+  /// No description provided for @assistantSchemaNonEmptyString.
+  ///
+  /// In en, this message translates to:
+  /// **'Non-empty string'**
+  String get assistantSchemaNonEmptyString;
+
+  /// No description provided for @assistantSchemaIso8601OptionalString.
+  ///
+  /// In en, this message translates to:
+  /// **'ISO 8601 string, optional'**
+  String get assistantSchemaIso8601OptionalString;
+
+  /// No description provided for @assistantSchemaOptionalObject.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional object'**
+  String get assistantSchemaOptionalObject;
+
+  /// No description provided for @assistantSchemaObjectList.
+  ///
+  /// In en, this message translates to:
+  /// **'Object list'**
+  String get assistantSchemaObjectList;
+
+  /// No description provided for @assistantSchemaSameOriginRelativePath.
+  ///
+  /// In en, this message translates to:
+  /// **'Same-origin relative path'**
+  String get assistantSchemaSameOriginRelativePath;
+
+  /// No description provided for @assistantSchemaSha256HexString.
+  ///
+  /// In en, this message translates to:
+  /// **'64-character hexadecimal string'**
+  String get assistantSchemaSha256HexString;
+
+  /// No description provided for @assistantSchemaOptionalStringList.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional string list'**
+  String get assistantSchemaOptionalStringList;
+
+  /// No description provided for @assistantSchemaPositiveInteger.
+  ///
+  /// In en, this message translates to:
+  /// **'Positive integer'**
+  String get assistantSchemaPositiveInteger;
+
+  /// No description provided for @assistantSchemaInteger.
+  ///
+  /// In en, this message translates to:
+  /// **'Integer'**
+  String get assistantSchemaInteger;
+
+  /// No description provided for @assistantSchemaModelConfiguredOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Model configured on this device'**
+  String get assistantSchemaModelConfiguredOnDevice;
+
+  /// No description provided for @assistantSchemaOptionalStringListNoTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional string list (no tools currently available)'**
+  String get assistantSchemaOptionalStringListNoTools;
+
+  /// No description provided for @assistantSchemaOptionalString.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional string'**
+  String get assistantSchemaOptionalString;
+
+  /// No description provided for @assistantSchemaString.
+  ///
+  /// In en, this message translates to:
+  /// **'String'**
+  String get assistantSchemaString;
+
+  /// No description provided for @assistantSchemaCharacterRangeBool.
+  ///
+  /// In en, this message translates to:
+  /// **'100–100000 characters / bool'**
+  String get assistantSchemaCharacterRangeBool;
 }
 
 class _AppLocalizationsDelegate

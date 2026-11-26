@@ -7191,6 +7191,20 @@
   "ocrSamplingSliderRepairRequired": "Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.",
   "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "Utilisez l’URL Responses configurée pour ce fournisseur, par exemple /v1/responses. Stroom l’envoie telle quelle."
+  "providerResponsesEndpointHelp": "Utilisez l’URL Responses configurée pour ce fournisseur, par exemple /v1/responses. Stroom l’envoie telle quelle.",
+  "assistantSchemaNonEmptyString": "Non-empty string",
+  "assistantSchemaIso8601OptionalString": "ISO 8601 string, optional",
+  "assistantSchemaOptionalObject": "Optional object",
+  "assistantSchemaObjectList": "Object list",
+  "assistantSchemaSameOriginRelativePath": "Same-origin relative path",
+  "assistantSchemaSha256HexString": "64-character hexadecimal string",
+  "assistantSchemaOptionalStringList": "Optional string list",
+  "assistantSchemaPositiveInteger": "Positive integer",
+  "assistantSchemaInteger": "Integer",
+  "assistantSchemaModelConfiguredOnDevice": "Model configured on this device",
+  "assistantSchemaOptionalStringListNoTools": "Optional string list (no tools currently available)",
+  "assistantSchemaOptionalString": "Optional string",
+  "assistantSchemaString": "String",
+  "assistantSchemaCharacterRangeBool": "100–100000 characters / bool"
 
 }

@@ -7191,6 +7191,20 @@
   "ocrSamplingSliderRepairRequired": "범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.",
   "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
   "endpointResponsesApi": "OpenAI Responses API",
-  "providerResponsesEndpointHelp": "이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다."
+  "providerResponsesEndpointHelp": "이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다.",
+  "assistantSchemaNonEmptyString": "Non-empty string",
+  "assistantSchemaIso8601OptionalString": "ISO 8601 string, optional",
+  "assistantSchemaOptionalObject": "Optional object",
+  "assistantSchemaObjectList": "Object list",
+  "assistantSchemaSameOriginRelativePath": "Same-origin relative path",
+  "assistantSchemaSha256HexString": "64-character hexadecimal string",
+  "assistantSchemaOptionalStringList": "Optional string list",
+  "assistantSchemaPositiveInteger": "Positive integer",
+  "assistantSchemaInteger": "Integer",
+  "assistantSchemaModelConfiguredOnDevice": "Model configured on this device",
+  "assistantSchemaOptionalStringListNoTools": "Optional string list (no tools currently available)",
+  "assistantSchemaOptionalString": "Optional string",
+  "assistantSchemaString": "String",
+  "assistantSchemaCharacterRangeBool": "100–100000 characters / bool"
 
 }
