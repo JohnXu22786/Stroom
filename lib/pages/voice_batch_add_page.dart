@@ -378,10 +378,39 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 分隔符选择：窄屏上下排列，宽屏维持原有同行布局。
+            // Narrow or scaled layouts stack; fitting labels keep the inline row.
             LayoutBuilder(
               builder: (context, constraints) {
-                final isNarrow = constraints.maxWidth < 420;
+                final textScaler = MediaQuery.textScalerOf(context);
+                final textDirection = Directionality.of(context);
+                final locale = Localizations.localeOf(context);
+                final dropdownStyle =
+                    Theme.of(context).textTheme.titleMedium ?? const TextStyle();
+                double textWidth(String text, TextStyle style) {
+                  final painter = TextPainter(
+                    text: TextSpan(text: text, style: style),
+                    textDirection: textDirection,
+                    textScaler: textScaler,
+                    locale: locale,
+                    maxLines: 1,
+                  )..layout();
+                  return painter.width;
+                }
+
+                final widestOption = _separatorOptions
+                    .map(
+                      (option) => textWidth(
+                        _separatorLabel(option, l10n),
+                        dropdownStyle,
+                      ),
+                    )
+                    .reduce((first, second) => first > second ? first : second);
+                final labelWidth = textWidth(
+                  l10n.voiceBatchSeparator,
+                  DefaultTextStyle.of(context).style,
+                );
+                final isNarrow = constraints.maxWidth < 420 ||
+                    labelWidth + 8 + widestOption + 40 > constraints.maxWidth;
                 final dropdown = DropdownButton<String>(
                   dropdownColor: StroomMenuStyle.surface(context),
                   borderRadius: StroomMenuStyle.borderRadius,
@@ -421,7 +450,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 }
 
                 return Row(
-                  children: [label, const SizedBox(width: 8), dropdown],
+                  children: [
+                    label,
+                    const SizedBox(width: 8),
+                    Flexible(child: dropdown),
+                  ],
                 );
               },
             ),

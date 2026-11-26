@@ -186,6 +186,52 @@ void main() {
     expect(find.text('Senkrechter Strich (|)'), findsOneWidget);
   });
 
+  testWidgets('scaled long separator stays within the wide card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(500, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Clear the page AppBar's separate large-scale overflow; this regression
+    // covers the separator card below.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    final pipeOption = find.text('Senkrechter Strich (|)').last;
+    await tester.tapAt(Offset(80, tester.getRect(pipeOption).center.dy));
+    await tester.pumpAndSettle();
+
+    final card = find.byType(Card).first;
+    expect(
+      tester.widget<DropdownButton<String>>(dropdown).value,
+      '竖线 (|)',
+    );
+    expect(
+      tester.getRect(dropdown).top,
+      greaterThan(tester.getRect(find.text('Trennzeichen:')).bottom),
+    );
+    expect(
+      tester.getRect(dropdown).right,
+      lessThanOrEqualTo(tester.getRect(card).right),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('separator dropdown uses the shared rounded surface', (
     tester,
   ) async {
