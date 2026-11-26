@@ -8,6 +8,84 @@ void main() {
     TodoToolService.reset();
   });
 
+  group('TodoToolService - conversation scoping', () {
+    test('isolates session lists and preserves replacement', () async {
+      const locale = Locale('en', 'US');
+      await Future.wait([
+        TodoToolService.handleTodo(
+          {
+            'todos': [
+              {
+                'content': 'Conversation A task',
+                'status': 'pending',
+                'priority': 'high',
+              },
+            ],
+          },
+          locale: locale,
+          sessionId: 'conversation-a',
+        ),
+        TodoToolService.handleTodo(
+          {
+            'todos': [
+              {
+                'content': 'Conversation B task',
+                'status': 'in_progress',
+                'priority': 'medium',
+              },
+            ],
+          },
+          locale: locale,
+          sessionId: 'conversation-b',
+        ),
+      ]);
+
+      final reads = await Future.wait([
+        TodoToolService.handleTodo(
+          {},
+          locale: locale,
+          sessionId: 'conversation-a',
+        ),
+        TodoToolService.handleTodo(
+          {},
+          locale: locale,
+          sessionId: 'conversation-b',
+        ),
+      ]);
+      expect(reads[0], contains('Conversation A task'));
+      expect(reads[0], isNot(contains('Conversation B task')));
+      expect(reads[1], contains('Conversation B task'));
+      expect(reads[1], isNot(contains('Conversation A task')));
+
+      await TodoToolService.handleTodo(
+        {
+          'todos': [
+            {
+              'content': 'Replacement in A',
+              'status': 'completed',
+              'priority': 'low',
+            },
+          ],
+        },
+        locale: locale,
+        sessionId: 'conversation-a',
+      );
+      final aReplacement = await TodoToolService.handleTodo(
+        {},
+        locale: locale,
+        sessionId: 'conversation-a',
+      );
+      final bAfterReplacement = await TodoToolService.handleTodo(
+        {},
+        locale: locale,
+        sessionId: 'conversation-b',
+      );
+      expect(aReplacement, contains('Replacement in A'));
+      expect(aReplacement, isNot(contains('Conversation A task')));
+      expect(bAfterReplacement, contains('Conversation B task'));
+    });
+  });
+
   group('TodoToolService - tool definitions', () {
     test('exposes a single todowrite tool (read/write merged)', () {
       expect(TodoToolService.toolDefinitions, hasLength(1));

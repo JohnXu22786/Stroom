@@ -21,8 +21,11 @@ import '../models/tool_call.dart';
 class TodoToolService {
   TodoToolService._();
 
-  /// 内存中的待办事项列表（按 position 排序）
-  static final List<TodoItem> _todos = [];
+  /// In-memory todo lists keyed by the conversation/session that owns them.
+  static final Map<Object, List<TodoItem>> _todosBySession = {};
+  static const Object _defaultSession = Object();
+
+  static Object _sessionKey(String? sessionId) => sessionId ?? _defaultSession;
 
   /// 工具定义列表（单一 todowrite 工具，读写一体）
   static final List<ToolDefinition> toolDefinitions = [
@@ -71,7 +74,7 @@ class TodoToolService {
   /// 重置状态（用于测试）
   @visibleForTesting
   static void reset() {
-    _todos.clear();
+    _todosBySession.clear();
   }
 
   /// 处理 todowrite 调用（读写一体入口）。
@@ -83,13 +86,14 @@ class TodoToolService {
   static Future<String> handleTodo(
     Map<String, dynamic> args, {
     Locale? locale,
+    String? sessionId,
   }) async {
     final todos = args['todos'];
     if (todos == null) {
-      return handleTodoRead(args, locale: locale);
+      return handleTodoRead(args, locale: locale, sessionId: sessionId);
     }
     if (todos is List) {
-      return handleTodoWrite(args, locale: locale);
+      return handleTodoWrite(args, locale: locale, sessionId: sessionId);
     }
     return appLocalizationsForLocale(locale).toolResultTodoInvalid;
   }
@@ -101,6 +105,7 @@ class TodoToolService {
   static Future<String> handleTodoWrite(
     Map<String, dynamic> args, {
     Locale? locale,
+    String? sessionId,
   }) async {
     final todosRaw = args['todos'] as List<dynamic>? ?? [];
 
@@ -143,14 +148,17 @@ class TodoToolService {
       ));
     }
 
-    _todos
+    final todos = _todosBySession.putIfAbsent(
+      _sessionKey(sessionId),
+      () => <TodoItem>[],
+    )
       ..clear()
       ..addAll(replacement);
 
-    final activeCount = _todos
+    final activeCount = todos
         .where((t) => t.status != 'completed' && t.status != 'cancelled')
         .length;
-    final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
+    final jsonStr = jsonEncode(todos.map((t) => t.toJson()).toList());
 
     final countLabel =
         appLocalizationsForLocale(locale).toolResultTodoCount(activeCount);
@@ -161,15 +169,17 @@ class TodoToolService {
   static Future<String> handleTodoRead(
     Map<String, dynamic> args, {
     Locale? locale,
+    String? sessionId,
   }) async {
-    if (_todos.isEmpty) {
+    final todos = _todosBySession[_sessionKey(sessionId)] ?? const <TodoItem>[];
+    if (todos.isEmpty) {
       return appLocalizationsForLocale(locale).toolResultTodoEmpty;
     }
 
-    final activeCount = _todos
+    final activeCount = todos
         .where((t) => t.status != 'completed' && t.status != 'cancelled')
         .length;
-    final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
+    final jsonStr = jsonEncode(todos.map((t) => t.toJson()).toList());
 
     final countLabel =
         appLocalizationsForLocale(locale).toolResultTodoCount(activeCount);
