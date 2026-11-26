@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'app_log_service.dart';
+import 'sse_data_line.dart';
 
 /// 原生平台的 SSE 流式客户端
 /// 使用 Dio ResponseType.stream（在原生平台有效）
@@ -44,7 +45,7 @@ Stream<String> sseStream(
         .transform(const LineSplitter());
 
     await for (final line in lineStream) {
-      if (line.startsWith('data: ')) {
+      if (sseDataLineValue(line) != null) {
         // Yield the raw SSE line; the caller (chat_api_provider.dart)
         // strips the prefix, parses JSON, and handles content/reasoning/tool_calls.
         yield line;
@@ -158,8 +159,8 @@ Stream<SseFrame> sseEventStream(
   await for (final line in lineStream) {
     if (line.startsWith('event: ')) {
       currentEvent = line.substring('event: '.length).trim();
-    } else if (line.startsWith('data: ')) {
-      final data = line.substring('data: '.length).trim();
+    } else if (sseDataLineValue(line) case final value?) {
+      final data = value.trim();
       yield SseFrame(currentEvent, data);
       currentEvent = '';
     } else if (line.isEmpty) {

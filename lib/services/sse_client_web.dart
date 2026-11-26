@@ -4,6 +4,7 @@ import 'dart:html' as html;
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:stroom/services/sse_client_web_error.dart';
+import 'package:stroom/services/sse_data_line.dart';
 
 /// SSE 事件帧：事件名 + 数据。
 ///
@@ -86,8 +87,9 @@ Stream<String> sseStream(
 
     for (var i = processedLines; i < completeCount; i++) {
       final line = lines[i];
-      if (line.startsWith('data: ')) {
-        final data = line.substring(6).trim();
+      final value = sseDataLineValue(line);
+      if (value != null) {
+        final data = value.trim();
         if (data == '[DONE]') {
           processedLines = completeCount;
           if (!controller.isClosed) controller.close();
@@ -142,8 +144,9 @@ Stream<String> sseStream(
       final allLines = remainingText.split('\n');
       for (var i = processedLines; i < allLines.length; i++) {
         final line = allLines[i];
-        if (line.startsWith('data: ')) {
-          final data = line.substring(6).trim();
+        final value = sseDataLineValue(line);
+        if (value != null) {
+          final data = value.trim();
           if (data == '[DONE]') break;
           // Yield raw SSE line (caller strips prefix, parses JSON)
           if (!controller.isClosed) controller.add(line);
@@ -363,8 +366,8 @@ Stream<SseFrame> sseEventStream(
       final line = lines[i];
       if (line.startsWith('event: ')) {
         lastEvent = line.substring(7).trim();
-      } else if (line.startsWith('data: ')) {
-        final data = line.substring(6).trim();
+      } else if (sseDataLineValue(line) case final value?) {
+        final data = value.trim();
         if (!controller.isClosed) {
           controller.add(SseFrame(lastEvent, data));
         }
