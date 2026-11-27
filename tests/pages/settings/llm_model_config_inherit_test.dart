@@ -7,11 +7,13 @@
 // - 推理开关/推理力度卡不可删除（删除按钮被启用开关替换）；
 //   供应商传递下来的附加推理参数与自定义参数同样不可删除
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// 打开模型配置页；[beforeSave] 在点保存前执行；返回保存结果。
 Future<ModelConfig?> _pumpAndSave(
@@ -20,13 +22,24 @@ Future<ModelConfig?> _pumpAndSave(
   ProviderConfigItem? provider,
   bool tapSave = true,
   Future<void> Function(WidgetTester tester)? beforeSave,
+  Locale locale = const Locale('zh', 'CN'),
+  double textScaleFactor = 1,
+  bool disableAnimations = false,
+  String saveButtonLabel = '保存',
 }) async {
   ModelConfig? saved;
   await tester.pumpWidget(
     MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScaleFactor),
+          disableAnimations: disableAnimations,
+        ),
+        child: child!,
+      ),
       home: Builder(
         builder: (context) => Center(
           child: ElevatedButton(
@@ -50,7 +63,7 @@ Future<ModelConfig?> _pumpAndSave(
   await tester.pumpAndSettle();
   if (tapSave) {
     if (beforeSave != null) await beforeSave(tester);
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.text(saveButtonLabel));
     await tester.pumpAndSettle();
   }
   return saved;
@@ -90,17 +103,42 @@ Future<void> _selectAdditionalParamType(
 Future<void> _addAdditionalParamOption(
   WidgetTester tester,
   String paramName,
-  String value,
-) async {
+  String value, {
+  Future<void> Function(WidgetTester tester, Finder field)? onOpen,
+}) async {
   await _scrollToReasoning(tester, find.text(paramName));
   final card = find
       .ancestor(of: find.text(paramName), matching: find.byType(Card))
       .first;
-  await tester.tap(find.descendant(of: card, matching: find.text('添加值')));
+  final l10n = AppLocalizations.of(tester.element(card))!;
+  final addButton =
+      find.descendant(of: card, matching: find.text(l10n.reasoningAddValue));
+  await tester.ensureVisible(addButton);
   await tester.pumpAndSettle();
-  await tester.enterText(find.byType(TextField).last, value);
+  await tester.tap(addButton);
+  await tester.pumpAndSettle();
+  final field = find.byType(TextField).last;
+  if (onOpen != null) await onOpen(tester, field);
+  final editable = find.descendant(
+    of: field,
+    matching: find.byType(EditableText),
+  );
+  final semantics = tester.ensureSemantics();
+  final hint =
+      AppLocalizations.of(tester.element(editable))!.reasoningOptionExample;
+  final fieldData = tester.getSemantics(editable).getSemanticsData();
+  final fieldHint = fieldData.hint;
+  expect(fieldHint, hint);
+  expect(hint.allMatches(fieldHint).length, 1);
+  expect(fieldData.hasAction(SemanticsAction.tap), isTrue);
+  expect(fieldData.hasAction(SemanticsAction.setText), isTrue);
+  expect(fieldData.hasAction(SemanticsAction.setSelection), isTrue);
+  await tester.enterText(field, value);
   await tester.pump();
-  await tester.tap(find.text('确定'));
+  expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+  expect(tester.widget<EditableText>(editable).controller.text, value);
+  semantics.dispose();
+  await tester.tap(find.text(l10n.batchDlgConfirm));
   await tester.pumpAndSettle();
 }
 
@@ -153,6 +191,78 @@ Future<void> _tapBlock(WidgetTester tester, String value) async {
 }
 
 void main() {
+  testWidgets('measures clipped reasoning option hint in the production dialog',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpAndSave(
+      tester,
+      locale: const Locale('fr', 'FR'),
+      textScaleFactor: 1.8,
+      disableAnimations: true,
+      saveButtonLabel: 'Enregistrer',
+      model: ModelConfig(
+        name: 'Test model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'json_param',
+            type: 'string',
+            options: ['balanced'],
+            optionOrder: ['balanced'],
+          ),
+        ],
+      ),
+      beforeSave: (tester) async {
+        await _addAdditionalParamOption(
+          tester,
+          'json_param',
+          'quick',
+          onOpen: (tester, field) async {
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(AlertDialog)),
+            )!;
+            final hint = l10n.reasoningOptionExample;
+            final hintFinder = find.byWidgetPredicate(
+              (widget) => widget is ConstrainedInputHint && widget.data == hint,
+            );
+            expect(hintFinder, findsOneWidget);
+            final slot = tester.getSize(hintFinder);
+            final visualHint = tester.widget<ConstrainedText>(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == hint,
+              ),
+            );
+            final hintContext = tester.element(hintFinder);
+            final natural = TextPainter(
+              text: TextSpan(text: hint, style: visualHint.style),
+              textDirection: Directionality.of(hintContext),
+              textScaler: MediaQuery.textScalerOf(hintContext),
+              locale: Localizations.localeOf(hintContext),
+            )..layout();
+            expect(natural.width, greaterThan(slot.width));
+            debugPrint(
+              'reasoning option hint=$hint slot=$slot '
+              'intrinsic=${natural.width}',
+            );
+          },
+        );
+      },
+    );
+  });
+
   group('LlmModelConfigPage reasoning option blocks', () {
     testWidgets('can add model extra params without a reasoning toggle', (
       tester,
@@ -1400,8 +1510,24 @@ void main() {
           // 添加新选项 creative
           await tester.tap(find.text('添加选项'));
           await tester.pumpAndSettle();
-          await tester.enterText(find.byType(TextField).last, 'creative');
+          final field = find.byType(TextField).last;
+          final editable = find.descendant(
+            of: field,
+            matching: find.byType(EditableText),
+          );
+          final semantics = tester.ensureSemantics();
+          final hint = AppLocalizations.of(
+            tester.element(editable),
+          )!
+              .reasoningOptionExample;
+          final fieldData = tester.getSemantics(editable).getSemanticsData();
+          expect(fieldData.hint, hint);
+          expect(hint.allMatches(fieldData.hint).length, 1);
+          expect(fieldData.hasAction(SemanticsAction.setText), isTrue);
+          await tester.enterText(field, 'creative');
           await tester.pump();
+          expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+          semantics.dispose();
           await tester.tap(find.text('确定'));
           await tester.pumpAndSettle();
           expect(find.text('creative'), findsOneWidget);
@@ -2192,6 +2318,20 @@ void main() {
             await tester.tap(find.byIcon(Icons.edit).first);
             await tester.pumpAndSettle();
             expect(find.byType(TextField).last, findsOneWidget);
+            final field = find.byType(TextField).last;
+            final editable = find.descendant(
+              of: field,
+              matching: find.byType(EditableText),
+            );
+            final semantics = tester.ensureSemantics();
+            final hint = AppLocalizations.of(
+              tester.element(editable),
+            )!
+                .reasoningOptionExample;
+            final fieldData = tester.getSemantics(editable).getSemanticsData();
+            expect(fieldData.hint, hint);
+            expect(hint.allMatches(fieldData.hint).length, 1);
+            expect(fieldData.hasAction(SemanticsAction.setText), isTrue);
             expect(
               (tester
                       .widget<TextField>(find.byType(TextField).last)
@@ -2199,7 +2339,10 @@ void main() {
                   .text,
               'warm',
             );
-            await tester.enterText(find.byType(TextField).last, '   ');
+            await tester.enterText(field, '   ');
+            await tester.pump();
+            expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+            semantics.dispose();
             await tester.tap(find.text('保存').last);
             await tester.pumpAndSettle();
             expect(find.text('warm'), findsOneWidget);
