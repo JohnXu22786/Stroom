@@ -5,6 +5,11 @@ from PIL import Image, ImageStat
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
+def video_recording_wait_seconds(motion_seconds, page_setup_seconds):
+    """Record long enough to cover setup time included in a video seek offset."""
+    return motion_seconds + page_setup_seconds
+
+
 def wait_for_flutter_render(
     page, expected_size, expected_text, timeout=120, poll_interval=0.5
 ):

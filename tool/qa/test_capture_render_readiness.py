@@ -4,7 +4,10 @@ import unittest
 from PIL import Image
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from capture_render_readiness import wait_for_flutter_render
+from capture_render_readiness import (
+    video_recording_wait_seconds,
+    wait_for_flutter_render,
+)
 
 
 def png_bytes(color):
@@ -55,6 +58,9 @@ class FakePage:
 
 
 class CaptureRenderReadinessTest(unittest.TestCase):
+    def test_video_recording_covers_page_setup_before_trim_offset(self):
+        self.assertEqual(video_recording_wait_seconds(15, 0.4), 15.4)
+
     def test_waits_until_flutter_paints_nonblank_pixels(self):
         page = FakePage(
             [png_bytes("white"), png_bytes("white"), png_bytes("navy")],

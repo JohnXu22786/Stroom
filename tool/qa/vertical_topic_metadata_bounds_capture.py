@@ -5,7 +5,10 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-from capture_render_readiness import wait_for_flutter_render
+from capture_render_readiness import (
+    video_recording_wait_seconds,
+    wait_for_flutter_render,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/qa/vertical_topic_metadata_bounds"
@@ -44,13 +47,17 @@ with sync_playwright() as playwright:
     )
     recording_started = time.monotonic()
     video_page = video_context.new_page()
+    video_page_setup_seconds = time.monotonic() - recording_started
     video_page.on("pageerror", lambda error: errors.append(str(error)))
     video_page.goto(PREVIEW_URL, wait_until="load", timeout=120_000)
     wait_for_flutter_render(video_page, (320, 640), "Topic")
     motion_started_at = time.monotonic()
     readiness_offset_seconds = motion_started_at - recording_started
     await_motion_seconds = 15
-    video_page.wait_for_timeout(await_motion_seconds * 1_000)
+    recording_wait_seconds = video_recording_wait_seconds(
+        await_motion_seconds, video_page_setup_seconds
+    )
+    video_page.wait_for_timeout(round(recording_wait_seconds * 1_000))
     video_path = video_page.video.path()
     video_page.close()
     video_context.close()
