@@ -119,10 +119,12 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        SizedBox(
-                          width: 28,
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 28),
                           child: Text(
                             '${i + 1}.',
+                            maxLines: 1,
+                            softWrap: false,
                             style: const TextStyle(fontSize: 14),
                           ),
                         ),
