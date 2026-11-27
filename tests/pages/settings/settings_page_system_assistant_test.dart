@@ -41,6 +41,26 @@ String _llmEntriesJson() => jsonEncode([
       },
     ]);
 
+String _duplicateModelNamesLlmEntriesJson() => jsonEncode([
+      {
+        'id': 'builtin_llm',
+        'type': 'llm',
+        'name': 'LLM供应商',
+        'configs': [
+          {
+            'providerName': 'OpenAI',
+            'host': 'https://api.openai.com/v1',
+            'key': 'sk-test',
+            'endpointType': 'openai',
+            'models': [
+              {'name': 'Shared', 'modelId': 'model-a'},
+              {'name': 'Shared', 'modelId': 'model-b'},
+            ],
+          },
+        ],
+      },
+    ]);
+
 /// 在面板（BottomSheet）内部查找 [text]。
 Finder _inSheet(String text) =>
     find.descendant(of: find.byType(BottomSheet), matching: find.text(text));
@@ -260,6 +280,99 @@ void main() {
       // tile 副标题显示所选模型（对话页同款格式）
       await tester.pumpAndSettle();
       expect(find.text('GPT-4o | OpenAI'), findsOneWidget);
+    });
+
+    testWidgets('同名模型选择后按稳定身份保存且只高亮所选项', (tester) async {
+      _setLargeView(tester);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _duplicateModelNamesLlmEntriesJson(),
+        'system_title_model_id': 'missing-model',
+        'system_title_model_provider': 'OpenAI',
+        'system_title_model_name': 'Shared | OpenAI',
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await _openTitlePanel(tester);
+      await tester.tap(_inSheet('Shared | OpenAI'));
+      await tester.pumpAndSettle();
+
+      final pickerRows = find.descendant(
+        of: find.byType(BottomSheet).last,
+        matching: find.widgetWithText(ListTile, 'Shared | OpenAI'),
+      );
+      expect(pickerRows, findsNWidgets(2));
+      final firstRow = tester.widget<ListTile>(pickerRows.first);
+      final secondRow = tester.widget<ListTile>(pickerRows.last);
+      expect(firstRow.trailing, isNull);
+      expect(secondRow.trailing, isNull);
+
+      await tester.tap(pickerRows.last);
+      await tester.pumpAndSettle();
+      await tester.tap(_inSheet('Shared | OpenAI'));
+      await tester.pumpAndSettle();
+
+      final selectedRows = find.descendant(
+        of: find.byType(BottomSheet).last,
+        matching: find.widgetWithText(ListTile, 'Shared | OpenAI'),
+      );
+      expect(selectedRows, findsNWidgets(2));
+      final firstSelectedRow = tester.widget<ListTile>(selectedRows.first);
+      final secondSelectedRow = tester.widget<ListTile>(selectedRows.last);
+      expect(firstSelectedRow.trailing, isNull);
+      expect((secondSelectedRow.trailing! as Icon).icon, Icons.check);
+
+      await tester.tap(selectedRows.last);
+      await tester.pumpAndSettle();
+      await tester.tap(_inSheet('保存'));
+      await tester.pumpAndSettle();
+      await _waitForPrefs(
+          (prefs) => prefs.getString('system_title_model_id') == 'model-b');
+      expect(await _prefsValue('system_title_model_id'), 'model-b');
+      expect(await _prefsValue('system_title_model_provider'), 'OpenAI');
+    });
+
+    testWidgets('旧配置仅在显示名唯一时预选模型', (tester) async {
+      _setLargeView(tester);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _duplicateModelNamesLlmEntriesJson(),
+        'system_title_model_name': 'Shared | OpenAI',
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await _openTitlePanel(tester);
+      await tester.tap(_inSheet('Shared | OpenAI'));
+      await tester.pumpAndSettle();
+
+      final pickerRows = find.descendant(
+        of: find.byType(BottomSheet).last,
+        matching: find.widgetWithText(ListTile, 'Shared | OpenAI'),
+      );
+      expect(pickerRows, findsNWidgets(2));
+      expect(tester.widget<ListTile>(pickerRows.first).trailing, isNull);
+      expect(tester.widget<ListTile>(pickerRows.last).trailing, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntriesJson(),
+        'system_title_model_id': 'removed-model',
+        'system_title_model_provider': 'OpenAI',
+        'system_title_model_name': 'GPT-4o | OpenAI',
+      });
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await _openTitlePanel(tester);
+      await tester.tap(_inSheet('GPT-4o | OpenAI'));
+      await tester.pumpAndSettle();
+
+      final uniqueMatch = find.descendant(
+        of: find.byType(BottomSheet).last,
+        matching: find.widgetWithText(ListTile, 'GPT-4o | OpenAI'),
+      );
+      expect(uniqueMatch, findsOneWidget);
+      expect(tester.widget<ListTile>(uniqueMatch).trailing, isA<Icon>());
     });
 
     testWidgets('模型选择中可选择"跟随对话页当前模型"清除配置', (tester) async {
