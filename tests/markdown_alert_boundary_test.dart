@@ -2,6 +2,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
 void main() {
+  test('preserves indented code inside GitHub alert blockquotes', () {
+    const source = '> [!NOTE]\n>     code';
+    final alert = markdown.Document(
+      extensionSet: markdown.ExtensionSet.gitHubWeb,
+    ).parse(source).single as markdown.Element;
+    final codeBlock = alert.children![1] as markdown.Element;
+
+    expect(codeBlock.tag, 'pre');
+    expect(
+        (codeBlock.children!.single as markdown.Element).textContent, 'code\n');
+    expect(
+      markdown.markdownToHtml(
+        source,
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      ),
+      contains('<pre><code>code\n</code></pre>'),
+    );
+
+    final tabSeparatedAlert = markdown.Document(
+      extensionSet: markdown.ExtensionSet.gitHubWeb,
+    ).parse('> [!NOTE]\n>\ttext').single as markdown.Element;
+    expect((tabSeparatedAlert.children![1] as markdown.Element).tag, 'p');
+    expect(tabSeparatedAlert.children![1].textContent, 'text');
+  });
   test('blank blockquote content ends before indented code', () {
     expect(
       markdown.markdownToHtml('>\n    code'),
