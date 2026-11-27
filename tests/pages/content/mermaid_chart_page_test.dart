@@ -1580,6 +1580,43 @@ void main() {
       },
     );
 
+    testWidgets(
+      'new chart filename with uppercase MMD suffix gets type before extension',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pump();
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'graph TD\n  A-->B',
+        );
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              _hasTextFieldHint(widget, '输入文件名（自动添加 .mmd 后缀）'),
+        );
+        await tester.enterText(fileNameField, 'chart.MMD');
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(savedRecord.name, 'chart-流程图');
+        expect(find.textContaining('chart-流程图.mmd'), findsOneWidget);
+      },
+    );
+
     testWidgets('new chart filename containing only mmd suffix is rejected', (
       tester,
     ) async {
