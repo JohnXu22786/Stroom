@@ -216,6 +216,19 @@ void main() {
         find.byKey(const Key('file_picker_short_viewport_scroll'));
     final landscapeViewport = const Rect.fromLTWH(0, 0, 568, 320);
     expect(tester.getRect(landscapeFile).overlaps(landscapeViewport), isTrue);
+    await tester.dragFrom(
+        tester.getCenter(landscapeFile), const Offset(-200, 0));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_tab_content_image')),
+      findsOneWidget,
+    );
+    await tester.dragFrom(const Offset(300, 280), const Offset(200, 0));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_tab_content_text')),
+      findsOneWidget,
+    );
     final previewTopBeforeDrag = tester.getTopLeft(landscapePreview).dy;
     await tester.drag(landscapeScroll, const Offset(0, -300));
     await tester.pumpAndSettle();
@@ -424,10 +437,17 @@ void main() {
     final scrollState = tester.state<ScrollableState>(scrollable);
     final longFolderExtent = scrollState.position.maxScrollExtent;
     expect(longFolderExtent, greaterThan(1000));
-    final lastLongFile = find.text('picker-chrome-long-9.txt');
+    final lastLongFile = find.text('picker-chrome-long-9.txt').first;
     expect(lastLongFile, findsOneWidget);
-    await tester.drag(scroll, const Offset(0, -4000));
+    await tester.ensureVisible(lastLongFile);
     await tester.pumpAndSettle();
+    expect(
+      tester.getRect(lastLongFile).overlaps(tester.getRect(scroll)),
+      isTrue,
+    );
+    await tester.tap(lastLongFile);
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Clear (2)'), findsOneWidget);
     expect(
       tester
           .getRect(lastLongFile)

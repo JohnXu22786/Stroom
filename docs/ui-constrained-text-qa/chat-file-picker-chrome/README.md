@@ -41,9 +41,11 @@ route test checks all four labels and their semantics, verifies tab selection
 and the active page after each tap, clears the selection, and checks that the
 layout reports no rendering exception. Short 568 × 320 and 568 × 401 landscape
 cases check that the selected file list, Clear action, preview and confirmation
-remain reachable with a vertical drag. A long text folder verifies that the
-scroll extent follows the active folder's natural rows, then contracts after
-switching to an empty tab. The
+remain reachable with a vertical drag and that a horizontal swipe still changes
+the active tab. A long text folder verifies that its row is hit-testable after
+scrolling, selection count changes on tap, and the scroll extent follows the
+active folder's natural rows before contracting after switching to an empty
+tab. Only the active tab's page is built in this compact scroll layout. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.

@@ -73,6 +73,7 @@ typedef _FileTabType = FileTabType;
 
 class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     with SingleTickerProviderStateMixin {
+  Offset? _shortViewportPointerDown;
   late final TabController _tabController;
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
@@ -275,17 +276,6 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final expandedTabRowHeight =
         shortViewportChrome ? 56.0 : standardExpandedTabRowHeight;
     final clearRowHeight = shortViewportChrome ? 56.0 : standardClearRowHeight;
-    final tabBarView = TabBarView(
-      controller: _tabController,
-      children: _FileTabType.values
-          .map(
-            (type) => _buildTabContent(
-              type,
-              shortViewport: false,
-            ),
-          )
-          .toList(),
-    );
     final confirmationButton = SafeArea(
       top: false,
       child: Container(
@@ -413,9 +403,33 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   children: [
                     KeyedSubtree(
                       key: const Key('file_picker_content'),
-                      child: _buildTabContent(
-                        _activeTabType,
-                        shortViewport: true,
+                      child: Listener(
+                        onPointerDown: (event) {
+                          _shortViewportPointerDown = event.position;
+                        },
+                        onPointerCancel: (_) {
+                          _shortViewportPointerDown = null;
+                        },
+                        onPointerUp: (event) {
+                          final start = _shortViewportPointerDown;
+                          _shortViewportPointerDown = null;
+                          if (start == null) return;
+                          final delta = event.position - start;
+                          if (delta.dx.abs() < 50 ||
+                              delta.dx.abs() <= delta.dy.abs()) {
+                            return;
+                          }
+                          final nextIndex =
+                              _tabController.index + (delta.dx < 0 ? 1 : -1);
+                          if (nextIndex >= 0 &&
+                              nextIndex < _FileTabType.values.length) {
+                            _tabController.animateTo(nextIndex);
+                          }
+                        },
+                        child: _buildTabContent(
+                          _activeTabType,
+                          shortViewport: true,
+                        ),
                       ),
                     ),
                     if (hasSelection) _buildPreviewBar(cs),
@@ -428,7 +442,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   // Tab content
                   Expanded(
                     key: const Key('file_picker_content'),
-                    child: tabBarView,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: _FileTabType.values
+                          .map(
+                            (type) => _buildTabContent(
+                              type,
+                              shortViewport: false,
+                            ),
+                          )
+                          .toList(),
+                    ),
                   ),
 
                   // Preview bar (bottom)
