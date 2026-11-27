@@ -39,10 +39,11 @@ reflow to a text-first two-column layout. The full tab labels fit without
 motion; the selected tab keeps its primary-color underline. The production
 route test checks all four labels and their semantics, verifies tab selection
 and the active page after each tap, clears the selection, and checks that the
-layout reports no rendering exception. A short 568 × 320 landscape case checks
-that the file list, Clear action, preview and confirmation remain reachable
-with a vertical drag after selection, including just above the short-height
-threshold. The
+layout reports no rendering exception. Short 568 × 320 and 568 × 401 landscape
+cases check that the selected file list, Clear action, preview and confirmation
+remain reachable with a vertical drag. A long text folder verifies that the
+scroll extent follows the active folder's natural rows, then contracts after
+switching to an empty tab. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.

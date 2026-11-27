@@ -223,7 +223,8 @@ def main():
                     for frame_path, requested_at, captured_at in raw_frames
                     if (
                         requested_at >= first_rendered_python
-                        and endpoint_at <= captured_at <= endpoint_at + 0.5
+                        and requested_at >= endpoint_at
+                        and endpoint_at <= captured_at <= endpoint_at + 2
                     )
                 ]
                 if not candidates:

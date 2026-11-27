@@ -34,7 +34,9 @@ Future<void> _openPicker(
   required ThemeData theme,
   required ValueNotifier<double> textScale,
   required Locale locale,
+  String fixtureName = 'picker-chrome-note.txt',
   bool disableAnimations = false,
+  Duration tabDataWait = const Duration(milliseconds: 500),
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -70,8 +72,8 @@ Future<void> _openPicker(
   );
   await tester.tap(find.text('Open picker'));
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 500));
-  await tester.tap(find.text('picker-chrome-note.txt'));
+  await tester.pump(tabDataWait);
+  await tester.tap(find.text(fixtureName));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
 }
@@ -228,15 +230,18 @@ void main() {
     tester.view.physicalSize = const Size(568, 401);
     await tester.pumpAndSettle();
     expect(landscapeScroll, findsOneWidget);
-    tester.view.physicalSize = const Size(568, 320);
+    await tester.drag(landscapeScroll, const Offset(0, -300));
     await tester.pumpAndSettle();
-    await tester.drag(landscapeScroll, const Offset(0, -500));
-    await tester.pumpAndSettle();
+    const thresholdViewport = Rect.fromLTWH(0, 0, 568, 401);
     expect(
-      tester.getRect(landscapeConfirm).overlaps(landscapeViewport),
+      tester.getRect(landscapePreview).overlaps(thresholdViewport),
       isTrue,
     );
-    expect(tester.getRect(landscapeClear).overlaps(landscapeViewport), isTrue);
+    expect(
+      tester.getRect(landscapeConfirm).overlaps(thresholdViewport),
+      isTrue,
+    );
+    expect(tester.getRect(landscapeClear).overlaps(thresholdViewport), isTrue);
     expect(tester.takeException(), isNull);
     await tester.tap(landscapeConfirm);
     await tester.pumpAndSettle();
@@ -363,6 +368,93 @@ void main() {
     reducedMotionScale.dispose();
 
     semantics.dispose();
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  });
+
+  testWidgets('short landscape scroll extent follows the active tab', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.runAsync(() async {
+      await TextManifest.writeText('picker-chrome-anchor.txt', 'safe fixture');
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'picker-chrome-anchor',
+          hash: 'picker-chrome-anchor',
+          size: 12,
+          createdAt: DateTime(2026, 11, 27),
+        ),
+      );
+      for (var index = 0; index < 20; index++) {
+        final name = 'picker-chrome-long-$index';
+        await TextManifest.writeText('$name.txt', 'safe fixture');
+        await TextManifest.addRecord(
+          TextRecord(
+            name: name,
+            hash: name,
+            size: 12,
+            createdAt: DateTime(2026, 11, 27),
+          ),
+        );
+      }
+      TextManifest.invalidateCache();
+    });
+
+    final textScale = ValueNotifier(3.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: textScale,
+      locale: const Locale('en', 'US'),
+      fixtureName: 'picker-chrome-anchor.txt',
+      tabDataWait: const Duration(seconds: 2),
+    );
+    tester.view.physicalSize = const Size(568, 320);
+    await tester.pumpAndSettle();
+
+    final scroll = find.byKey(const Key('file_picker_short_viewport_scroll'));
+    final scrollable = find
+        .descendant(
+          of: scroll,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    expect(scrollable, findsOneWidget);
+    final scrollState = tester.state<ScrollableState>(scrollable);
+    final longFolderExtent = scrollState.position.maxScrollExtent;
+    expect(longFolderExtent, greaterThan(1000));
+    final lastLongFile = find.text('picker-chrome-long-9.txt');
+    expect(lastLongFile, findsOneWidget);
+    await tester.drag(scroll, const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getRect(lastLongFile)
+          .overlaps(const Rect.fromLTWH(0, 0, 568, 320)),
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const Key('file_picker_tab_image')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_tab_content_image')),
+      findsOneWidget,
+    );
+    final sparseTabExtent = scrollState.position.maxScrollExtent;
+    expect(sparseTabExtent, lessThan(longFolderExtent / 2));
+    await tester.drag(scroll, const Offset(0, -1000));
+    await tester.pumpAndSettle();
+    final confirm = find.byKey(const Key('file_picker_confirm_btn'));
+    expect(
+      tester.getRect(confirm).overlaps(const Rect.fromLTWH(0, 0, 568, 320)),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    semantics.dispose();
+    textScale.dispose();
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   });

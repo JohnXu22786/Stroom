@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' show max;
 import 'dart:typed_data';
 import 'dart:ui' show SemanticsRole;
 
@@ -276,21 +275,13 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final expandedTabRowHeight =
         shortViewportChrome ? 56.0 : standardExpandedTabRowHeight;
     final clearRowHeight = shortViewportChrome ? 56.0 : standardClearRowHeight;
-    final maxShortViewportRows = _tabData.values.fold<int>(1, (largest, data) {
-      final rows = data.records.length + data.allFolders.length + 1;
-      return max(largest, rows);
-    });
-    final shortViewportTabContentHeight = max(
-      200.0,
-      maxShortViewportRows * 112.0 + 48,
-    ).toDouble();
     final tabBarView = TabBarView(
       controller: _tabController,
       children: _FileTabType.values
           .map(
             (type) => _buildTabContent(
               type,
-              shortViewport: shortViewportChrome,
+              shortViewport: false,
             ),
           )
           .toList(),
@@ -420,10 +411,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 key: const Key('file_picker_short_viewport_scroll'),
                 child: Column(
                   children: [
-                    SizedBox(
+                    KeyedSubtree(
                       key: const Key('file_picker_content'),
-                      height: shortViewportTabContentHeight,
-                      child: tabBarView,
+                      child: _buildTabContent(
+                        _activeTabType,
+                        shortViewport: true,
+                      ),
                     ),
                     if (hasSelection) _buildPreviewBar(cs),
                     confirmationButton,
