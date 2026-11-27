@@ -7,6 +7,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/audio_player_page.dart'
     show buildAudioTextPickerSubtitle;
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 // ============================================================================
 // Helper: A simple test record model
@@ -46,6 +47,7 @@ Widget _buildTestApp(Widget trigger) {
 // ============================================================================
 
 MediaPickerConfig<_TestRecord> _createTestConfig({
+  String title = '测试选择器',
   bool multiSelect = false,
   List<_TestRecord> records = const [],
   Set<String> folders = const {},
@@ -53,7 +55,7 @@ MediaPickerConfig<_TestRecord> _createTestConfig({
   Widget Function(_TestRecord record)? subtitleBuilder,
 }) {
   return MediaPickerConfig<_TestRecord>(
-    title: '测试选择器',
+    title: title,
     emptyIcon: Icons.folder_outlined,
     emptyText: '暂无文件',
     fileIcon: Icons.insert_drive_file,
@@ -83,6 +85,114 @@ String _formatSize(int bytes) {
 
 void main() {
   group('UnifiedMediaPickerDialog', () {
+    testWidgets(
+      'keeps picker controls and selected count within bounds at large text',
+      (tester) async {
+        const viewport = Size(320, 640);
+        tester.view.physicalSize = viewport;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        Widget buildApp(double textScale) => MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+              child: MaterialApp(
+                locale: const Locale('fr'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                home: Scaffold(
+                  body: Builder(
+                    builder: (context) => ElevatedButton(
+                      onPressed: () => showMediaPickerDialog(
+                        context,
+                        _createTestConfig(
+                          title: 'Sélecteur de médias',
+                          records: const [
+                            _TestRecord(id: '1', name: 'photo.png')
+                          ],
+                          multiSelect: true,
+                        ),
+                      ),
+                      child: const Text('Open'),
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+        await tester.pumpWidget(buildApp(1));
+
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('photo.png'));
+        await tester.pumpAndSettle();
+        final bar = find.byKey(const Key('media_picker_preview_bar'));
+        final count = find.text('1 fichiers sélectionnés');
+        final clearButton = find.byKey(const Key('media_picker_clear_btn'));
+        final clearRectAtOneX = tester.getRect(clearButton);
+        expect(clearRectAtOneX.right, 320);
+        expect(clearRectAtOneX.width, closeTo(179.1, 0.1));
+        expect(tester.getSize(bar).height, 106);
+        expect(tester.getRect(count).height, lessThan(20));
+        final previewList =
+            find.descendant(of: bar, matching: find.byType(ListView));
+        expect(
+          tester.getSize(previewList).height,
+          72,
+        );
+        expect(
+          tester.getRect(previewList).top - tester.getRect(bar).top,
+          24.5,
+        );
+
+        await tester.pumpWidget(buildApp(3));
+        await tester.pumpAndSettle();
+
+        expect(bar, findsOneWidget);
+        expect(count, findsOneWidget);
+        final countRect = tester.getRect(count);
+        final barRect = tester.getRect(bar);
+        final appBarRect = tester.getRect(find.byType(AppBar));
+        final clearRect = tester.getRect(clearButton);
+        final titleRect = tester.getRect(
+          find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.byType(ConstrainedText),
+              )
+              .first,
+        );
+        expect(clearRect.left, greaterThanOrEqualTo(appBarRect.left));
+        expect(clearRect.right, lessThanOrEqualTo(appBarRect.right));
+        expect(clearRect.width, lessThanOrEqualTo(320 * 0.36));
+        expect(titleRect.left, greaterThanOrEqualTo(appBarRect.left));
+        expect(titleRect.right, lessThanOrEqualTo(appBarRect.right));
+        expect(
+          tester.widget<TextButton>(clearButton).onPressed,
+          isNotNull,
+        );
+        expect(find.text('Effacer (1)'), findsOneWidget);
+        expect(countRect.top, greaterThanOrEqualTo(barRect.top));
+        expect(countRect.bottom, lessThanOrEqualTo(barRect.bottom));
+        final removeButton = find.descendant(
+          of: bar,
+          matching: find.byIcon(Icons.close),
+        );
+        expect(removeButton, findsOneWidget);
+        expect(tester.getRect(removeButton).top, greaterThan(countRect.bottom));
+        final confirmRect = tester.getRect(
+          find.byKey(const Key('media_picker_confirm_btn')),
+        );
+        expect(confirmRect.top, greaterThanOrEqualTo(barRect.bottom));
+        expect(confirmRect.bottom, lessThanOrEqualTo(viewport.height));
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(clearButton);
+        await tester.pump();
+        expect(bar, findsNothing);
+      },
+    );
+
     testWidgets('wraps long metadata subtitles at narrow widths',
         (tester) async {
       const characterCount = '1.234.567 Zeichen im gespeicherten Text';
