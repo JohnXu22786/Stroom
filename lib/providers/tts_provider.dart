@@ -99,21 +99,22 @@ class CustomTTSProvider extends BaseTTSProvider {
         _apiKey = apiKey,
         _name = name,
         _locale = locale,
-        _dio = dio ?? Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-            ...openRouterAppHeaders,
-          },
-          // Layered timeouts: fast-fail on connect/upload issues; the
-          // response bound is deliberately long (60 min) — a slow-but-
-          // healthy TTS server computing a long utterance must not be
-          // dropped (the old 30s receive timeout killed them).
-          connectTimeout: const Duration(seconds: 10),
-          sendTimeout: const Duration(minutes: 2),
-          receiveTimeout: receiveTimeoutFallback,
-        ));
+        _dio = dio ??
+            Dio(BaseOptions(
+              baseUrl: '',
+              headers: {
+                'Content-Type': 'application/json',
+                if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+                ...openRouterAppHeaders,
+              },
+              // Layered timeouts: fast-fail on connect/upload issues; the
+              // response bound is deliberately long (60 min) — a slow-but-
+              // healthy TTS server computing a long utterance must not be
+              // dropped (the old 30s receive timeout killed them).
+              connectTimeout: const Duration(seconds: 10),
+              sendTimeout: const Duration(minutes: 2),
+              receiveTimeout: receiveTimeoutFallback,
+            ));
 
   @override
   String get name => _name;
