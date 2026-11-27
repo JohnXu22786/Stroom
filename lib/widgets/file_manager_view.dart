@@ -1405,27 +1405,32 @@ class _FileManagerViewState<T extends FileRecord>
                   onChanged: (_) => _toggleSelection(file.id),
                 ),
               // File icon / thumbnail (cached)
-              Container(
-                width: 44,
-                height: 44,
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: hasThumbnailBuilder
-                      ? null
-                      : Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+              if (!hasThumbnailBuilder &&
+                  widget.config.allowFileIconExpansion)
+                widget.config.fileIconBuilder(file)
+              else
+                Container(
+                  width: 44,
+                  height: 44,
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: hasThumbnailBuilder
+                        ? null
+                        : Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  clipBehavior:
+                      hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
+                  child: hasThumbnailBuilder
+                      ? _putThumbnailCache(
+                          file.id,
+                          () => widget.config.fileThumbnailBuilder!.call(file),
+                        )
+                      : widget.config.fileIconBuilder(file),
                 ),
-                clipBehavior: hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
-                child: hasThumbnailBuilder
-                    ? _putThumbnailCache(
-                        file.id,
-                        () => widget.config.fileThumbnailBuilder!.call(file),
-                      )
-                    : widget.config.fileIconBuilder(file),
-              ),
               // File info
               Expanded(
                 child: Column(
