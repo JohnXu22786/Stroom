@@ -231,6 +231,21 @@ void main() {
       find.byKey(const Key('file_picker_tab_content_text')),
       findsOneWidget,
     );
+    final unusedTabViewportPoint = Offset(
+      tester.getRect(landscapeScroll).right - 2,
+      tester.getRect(landscapeScroll).top + 8,
+    );
+    await tester.dragFrom(unusedTabViewportPoint, const Offset(-200, 0));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_tab_content_image')),
+      findsOneWidget,
+    );
+    await tester.drag(
+      find.byIcon(Icons.folder_open_outlined),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
     await tester.drag(landscapeScroll, const Offset(0, -150));
     await tester.pumpAndSettle();
     expect(landscapePreview, findsOneWidget);

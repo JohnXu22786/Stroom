@@ -75,6 +75,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     with SingleTickerProviderStateMixin {
   Offset? _shortViewportPointerDown;
   final _shortViewportScrollController = ScrollController();
+  final _shortViewportPreviewBarKey = GlobalKey();
+  final _shortViewportConfirmBarKey = GlobalKey();
   late final TabController _tabController;
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
@@ -404,15 +406,30 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         body: shortViewportChrome
             ? KeyedSubtree(
                 key: const Key('file_picker_content'),
-                child: CustomScrollView(
-                  key: const Key('file_picker_short_viewport_scroll'),
-                  controller: _shortViewportScrollController,
-                  slivers: [
-                    ..._buildShortViewportTabSlivers(_activeTabType),
-                    if (hasSelection)
-                      SliverToBoxAdapter(child: _buildPreviewBar(cs)),
-                    SliverToBoxAdapter(child: confirmationButton),
-                  ],
+                child: Listener(
+                  onPointerDown: _handleCompactPointerDown,
+                  onPointerCancel: _handleCompactPointerCancel,
+                  onPointerUp: _handleCompactPointerUp,
+                  child: CustomScrollView(
+                    key: const Key('file_picker_short_viewport_scroll'),
+                    controller: _shortViewportScrollController,
+                    slivers: [
+                      ..._buildShortViewportTabSlivers(_activeTabType),
+                      if (hasSelection)
+                        SliverToBoxAdapter(
+                          child: KeyedSubtree(
+                            key: _shortViewportPreviewBarKey,
+                            child: _buildPreviewBar(cs),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: KeyedSubtree(
+                          key: _shortViewportConfirmBarKey,
+                          child: confirmationButton,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               )
             : Column(
@@ -533,6 +550,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
 
   void _handleCompactPointerDown(PointerDownEvent event) {
+    final boundaryKey = _shortViewportPreviewBarKey.currentContext == null
+        ? _shortViewportConfirmBarKey
+        : _shortViewportPreviewBarKey;
+    final boundaryContext = boundaryKey.currentContext;
+    final boundaryRenderObject = boundaryContext?.findRenderObject();
+    if (boundaryRenderObject is RenderBox &&
+        event.position.dy >=
+            boundaryRenderObject.localToGlobal(Offset.zero).dy) {
+      _shortViewportPointerDown = null;
+      return;
+    }
     _shortViewportPointerDown = event.position;
   }
 
@@ -546,19 +574,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     if (start == null) return;
     final delta = event.position - start;
     if (delta.dx.abs() < 50 || delta.dx.abs() <= delta.dy.abs()) return;
-    final nextIndex = _tabController.index + (delta.dx < 0 ? 1 : -1);
+    final ltr = Directionality.of(context) == TextDirection.ltr;
+    final nextIndex = _tabController.index + ((delta.dx < 0) == ltr ? 1 : -1);
     if (nextIndex >= 0 && nextIndex < _FileTabType.values.length) {
       _tabController.animateTo(nextIndex);
     }
-  }
-
-  Widget _withCompactSwipe(Widget child) {
-    return Listener(
-      onPointerDown: _handleCompactPointerDown,
-      onPointerCancel: _handleCompactPointerCancel,
-      onPointerUp: _handleCompactPointerUp,
-      child: child,
-    );
   }
 
   List<Widget> _buildShortViewportTabSlivers(_FileTabType type) {
@@ -611,7 +631,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             ? _buildFolderItem(type, subFolders[index], currentFolder)
             : _buildFileItem(type, currentFiles[index - subFolders.length]);
       }
-      return _withCompactSwipe(item);
+      return item;
     }
 
     final slivers = <Widget>[
@@ -645,30 +665,25 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       slivers.add(
         SliverToBoxAdapter(
           key: pageKey,
-          child: _withCompactSwipe(
-            SizedBox(
-              height: 200,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.folder_open_outlined,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      isRoot
-                          ? l10n.chatFilePickerEmpty
-                          : l10n.appMediaEmptyFolder,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+          child: SizedBox(
+            height: 200,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.folder_open_outlined,
+                    size: 48,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    isRoot
+                        ? l10n.chatFilePickerEmpty
+                        : l10n.appMediaEmptyFolder,
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                  ),
+                ],
               ),
             ),
           ),

@@ -19,9 +19,11 @@ The [German Clear reveal preview](chat-file-picker-de-DE-clear-reveal-320x640.we
 is a direct Playwright recording of the production `ChatFilePickerDialog` route
 in Flutter Web/Chromium, with a selected local text fixture. It is 13.33 seconds
 long at 6 fps (capture timestamps 0 through 13.17 seconds) and shows the
-one-second initial still, the 24 logical px/s
-travel to the tail endpoint, its two-second hold, the return travel, and the
-two-second head hold. The full label remains in route semantics throughout.
+one-second initial still, the 24 logical px/s travel to the tail endpoint, its
+two-second hold, the return travel, and the two-second head hold. In the latest
+capture the first completed screenshot was 0.386 seconds after first render;
+the forward and return travels have 25 real samples each, with maximum gaps of
+one and zero frames. The full label remains in route semantics throughout.
 The Chromium recorder starts sampling at the fixture-selection click and uses
 a `MutationObserver` timestamp for the first rendered Clear semantics node to
 align the video timeline. It requires an actual screenshot request after first
@@ -41,8 +43,9 @@ route test checks all four labels and their semantics, verifies tab selection
 and the active page after each tap, clears the selection, and checks that the
 layout reports no rendering exception. Short 568 × 320 and 568 × 401 landscape
 cases check that the selected file list, Clear action, preview and confirmation
-remain reachable with a vertical drag and that a horizontal swipe still changes
-the active tab. A long text folder verifies that its row is hit-testable after
+remain reachable with a vertical drag and that horizontal swipes from a row,
+the empty state, and unused active-tab viewport space still change the tab;
+preview and confirmation interactions remain outside the swipe region. A long text folder verifies that its row is hit-testable after
 scrolling, selection count changes on tap, and the scroll extent follows the
 active folder's natural rows before contracting after switching to an empty
 tab. Only the active tab's page is built in this compact scroll layout, with
