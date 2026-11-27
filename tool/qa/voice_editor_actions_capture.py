@@ -2,7 +2,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from capture_render_readiness import wait_for_flutter_render
+from capture_render_readiness import navigate_and_wait_for_flutter_render
 
 ROOT = Path(__file__).resolve().parents[2]
 CAPTURES = (
@@ -33,8 +33,12 @@ with sync_playwright() as playwright:
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     for scale, output in CAPTURES:
-        page.goto(f"{BASE_URL}&scale={scale}", wait_until="load", timeout=120_000)
-        wait_for_flutter_render(page, (320, 640), "Stimmen bearbeiten")
+        navigate_and_wait_for_flutter_render(
+            page,
+            f"{BASE_URL}&scale={scale}",
+            (320, 640),
+            "Stimmen bearbeiten",
+        )
         page.screenshot(path=str(output))
         print(
             {

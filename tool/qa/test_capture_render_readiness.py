@@ -1,11 +1,13 @@
 from io import BytesIO
 import unittest
+from unittest.mock import patch
 
 from PIL import Image
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from capture_render_readiness import (
-    video_recording_wait_seconds,
+    navigate_and_wait_for_flutter_render,
+    video_preview_timing,
     wait_for_flutter_render,
 )
 
@@ -19,16 +21,39 @@ def png_bytes(color):
     return output.getvalue()
 
 
+class FakeClock:
+    def __init__(self, now):
+        self.now = now
+
+    def monotonic(self):
+        return self.now
+
+
 class FakePage:
     def __init__(
-        self, screenshots, rendered_texts, focus_error=False, screenshot_error=False
+        self,
+        screenshots,
+        rendered_texts,
+        focus_error=False,
+        screenshot_error=False,
+        clock=None,
+        navigation_seconds=0,
     ):
         self.screenshots = iter(screenshots)
         self.rendered_texts = iter(rendered_texts)
         self.focus_error = focus_error
         self.screenshot_error = screenshot_error
+        self.clock = clock
+        self.navigation_seconds = navigation_seconds
         self.screenshot_count = 0
         self.press_timeout = None
+        self.wait_for_function_count = 0
+
+    def goto(self, _url, wait_until, timeout):
+        self.goto_wait_until = wait_until
+        self.goto_timeout = timeout
+        if self.clock:
+            self.clock.now += self.navigation_seconds
 
     def locator(self, _selector):
         return self
@@ -48,6 +73,7 @@ class FakePage:
             return None
 
     def wait_for_function(self, _expression, *, arg, timeout=None):
+        self.wait_for_function_count += 1
         self.wait_for_function_timeout = timeout
         try:
             while arg not in next(self.rendered_texts):
@@ -70,8 +96,33 @@ class FakePage:
 
 
 class CaptureRenderReadinessTest(unittest.TestCase):
-    def test_video_recording_covers_page_setup_before_trim_offset(self):
-        self.assertEqual(video_recording_wait_seconds(15, 0.4), 15.4)
+    def test_video_seek_uses_recording_start_after_page_creation(self):
+        recording_started_at = 10.4
+        motion_started_at = 12
+
+        seek_offset, duration = video_preview_timing(
+            recording_started_at, motion_started_at, 15
+        )
+
+        self.assertAlmostEqual(seek_offset, 1.6)
+        self.assertEqual(duration, 15)
+
+    def test_navigation_and_render_share_one_deadline(self):
+        clock = FakeClock(10)
+        page = FakePage(
+            [png_bytes("navy")],
+            ["Topic"],
+            clock=clock,
+            navigation_seconds=0.6,
+        )
+
+        with patch("capture_render_readiness.time.monotonic", clock.monotonic):
+            navigate_and_wait_for_flutter_render(
+                page, "http://fixture/", (2, 2), "Topic", timeout=1
+            )
+
+        self.assertEqual(page.goto_timeout, 1_000)
+        self.assertLessEqual(page.focus_timeout, 400)
 
     def test_waits_until_flutter_paints_nonblank_pixels(self):
         page = FakePage(
@@ -93,9 +144,11 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 page,
                 (2, 2),
                 "Stimmen bearbeiten",
-                timeout=0,
+                timeout=1,
                 poll_interval=0,
             )
+        self.assertEqual(page.wait_for_function_count, 1)
+        self.assertEqual(page.screenshot_count, 0)
     def test_fails_explicitly_when_expected_content_is_still_blank(self):
         page = FakePage([png_bytes("white")], ["Stimmen bearbeiten"])
 
@@ -104,7 +157,7 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 page,
                 (2, 2),
                 "Stimmen bearbeiten",
-                timeout=0,
+                timeout=0.01,
                 poll_interval=0,
             )
 

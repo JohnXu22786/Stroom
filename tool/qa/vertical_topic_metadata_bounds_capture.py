@@ -6,8 +6,8 @@ import time
 from playwright.sync_api import sync_playwright
 
 from capture_render_readiness import (
-    video_recording_wait_seconds,
-    wait_for_flutter_render,
+    navigate_and_wait_for_flutter_render,
+    video_preview_timing,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,8 +33,9 @@ with sync_playwright() as playwright:
     )
     screenshot_page = screenshot_context.new_page()
     screenshot_page.on("pageerror", lambda error: errors.append(str(error)))
-    screenshot_page.goto(SCREENSHOT_URL, wait_until="load", timeout=120_000)
-    wait_for_flutter_render(screenshot_page, (320, 640), "Topic")
+    navigate_and_wait_for_flutter_render(
+        screenshot_page, SCREENSHOT_URL, (320, 640), "Topic"
+    )
     screenshot_page.screenshot(path=str(CAPTURE))
     screenshot_page.close()
     screenshot_context.close()
@@ -45,17 +46,16 @@ with sync_playwright() as playwright:
         record_video_dir=str(VIDEO_DIR),
         record_video_size={"width": 320, "height": 640},
     )
-    recording_started = time.monotonic()
     video_page = video_context.new_page()
-    video_page_setup_seconds = time.monotonic() - recording_started
+    recording_started = time.monotonic()
     video_page.on("pageerror", lambda error: errors.append(str(error)))
-    video_page.goto(PREVIEW_URL, wait_until="load", timeout=120_000)
-    wait_for_flutter_render(video_page, (320, 640), "Topic")
+    navigate_and_wait_for_flutter_render(
+        video_page, PREVIEW_URL, (320, 640), "Topic"
+    )
     motion_started_at = time.monotonic()
-    readiness_offset_seconds = motion_started_at - recording_started
     await_motion_seconds = 15
-    recording_wait_seconds = video_recording_wait_seconds(
-        await_motion_seconds, video_page_setup_seconds
+    readiness_offset_seconds, recording_wait_seconds = video_preview_timing(
+        recording_started, motion_started_at, await_motion_seconds
     )
     video_page.wait_for_timeout(round(recording_wait_seconds * 1_000))
     video_path = video_page.video.path()
