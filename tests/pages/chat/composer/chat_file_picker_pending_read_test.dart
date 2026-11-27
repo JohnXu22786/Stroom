@@ -425,8 +425,8 @@ void _expectOnlyKnownScaleThreeChromeOverflows(WidgetTester tester) {
 
 Future<void> _seedPdf(WidgetTester tester, String name) async {
   // ignore: invalid_use_of_visible_for_testing_member
-  TextManifest.readFileOverrideForTesting = (_) async =>
-      Uint8List.fromList([1, 2, 3]);
+  TextManifest.readFileOverrideForTesting =
+      (_) async => Uint8List.fromList([1, 2, 3]);
   await tester.runAsync(() async {
     await TextManifest.addRecord(
       TextRecord(
