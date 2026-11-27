@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' show max;
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
@@ -132,6 +133,13 @@ class AnkiApkgImporter {
     Database? importDb;
     Database? targetDb;
     try {
+      late final String sourceSnapshotFingerprint;
+      try {
+        sourceSnapshotFingerprint =
+            (await sha256.bind(File(tmpDbPath).openRead()).first).toString();
+      } on FileSystemException {
+        throw AnkiApkgException.localFileFailure(tmpDbPath);
+      }
       try {
         importDb = await openDatabase(tmpDbPath, readOnly: true);
       } on DatabaseException catch (error) {
@@ -410,6 +418,12 @@ class AnkiApkgImporter {
             )
           ''');
           await txn.execute('''
+            CREATE TABLE IF NOT EXISTS apkg_revlog_source_snapshots (
+              snapshot_fingerprint TEXT PRIMARY KEY,
+              source_collection_key TEXT NOT NULL
+            )
+          ''');
+          await txn.execute('''
             CREATE TABLE IF NOT EXISTS apkg_revlog_source_note_aliases (
               source_collection_key TEXT NOT NULL,
               note_guid TEXT NOT NULL,
@@ -492,6 +506,7 @@ class AnkiApkgImporter {
         final sourceCollectionKey = await _resolveSourceCollectionKey(
           txn,
           collectionCreated: srcCol.first['crt'] as int,
+          snapshotFingerprint: sourceSnapshotFingerprint,
         );
 
         // Keep only one bounded page of source reviews and matching target rows
@@ -752,75 +767,100 @@ class AnkiApkgImporter {
   static Future<String> _resolveSourceCollectionKey(
     Transaction txn, {
     required int collectionCreated,
+    required String snapshotFingerprint,
   }) async {
+    final snapshotRows = await txn.query(
+      'apkg_revlog_source_snapshots',
+      columns: ['source_collection_key'],
+      where: 'snapshot_fingerprint = ?',
+      whereArgs: [snapshotFingerprint],
+    );
+    String? sourceCollectionKey = snapshotRows.isEmpty
+        ? null
+        : snapshotRows.single['source_collection_key'] as String;
+
     final sources = await txn.query(
       'apkg_revlog_source_collections',
       columns: ['source_collection_key'],
       where: 'collection_created = ?',
       whereArgs: [collectionCreated],
     );
-    // Reuse only an exact alias set or a unique majority overlap with multiple
-    // stable note identities. Weak or tied matches may be independent sources.
-    final scores = <String, double>{};
-    final candidateNoteCountRows = await txn.rawQuery('''
-      SELECT COUNT(*) AS note_count
-      FROM apkg_revlog_source_note_candidates
-    ''');
-    final candidateNoteCount =
-        candidateNoteCountRows.single['note_count'] as int;
-    if (candidateNoteCount == 0) return const Uuid().v4();
-    for (final source in sources) {
-      final sourceKey = source['source_collection_key'] as String;
-      final sourceNoteCountRows = await txn.rawQuery(
-        '''
+    if (sourceCollectionKey == null) {
+      // Reuse only an exact alias set or a unique majority overlap with
+      // multiple stable note identities. Weak or tied matches may be
+      // independent sources, so an exact snapshot mapping keeps repeated
+      // ambiguous imports idempotent without conflating changed snapshots.
+      final scores = <String, double>{};
+      final candidateNoteCountRows = await txn.rawQuery('''
+        SELECT COUNT(*) AS note_count
+        FROM apkg_revlog_source_note_candidates
+      ''');
+      final candidateNoteCount =
+          candidateNoteCountRows.single['note_count'] as int;
+      if (candidateNoteCount > 0) {
+        for (final source in sources) {
+          final sourceKey = source['source_collection_key'] as String;
+          final sourceNoteCountRows = await txn.rawQuery(
+            '''
           SELECT COUNT(*) AS note_count
           FROM apkg_revlog_source_note_aliases
           WHERE source_collection_key = ?
         ''',
-        [sourceKey],
-      );
-      final sourceNoteCount = sourceNoteCountRows.single['note_count'] as int;
-      final sharedNoteCountRows = await txn.rawQuery(
-        '''
+            [sourceKey],
+          );
+          final sourceNoteCount =
+              sourceNoteCountRows.single['note_count'] as int;
+          final sharedNoteCountRows = await txn.rawQuery(
+            '''
           SELECT COUNT(*) AS note_count
           FROM apkg_revlog_source_note_aliases AS aliases
           JOIN apkg_revlog_source_note_candidates AS candidates
             ON candidates.note_guid = aliases.note_guid
           WHERE aliases.source_collection_key = ?
         ''',
-        [sourceKey],
-      );
-      final sharedCount = sharedNoteCountRows.single['note_count'] as int;
-      if (sharedCount == 0) continue;
-      final unionCount = candidateNoteCount + sourceNoteCount - sharedCount;
-      final exactMatch =
-          sharedCount == candidateNoteCount && sharedCount == sourceNoteCount;
-      final strongOverlap = sharedCount >= 2 && sharedCount / unionCount > 0.5;
-      if (exactMatch || strongOverlap) {
-        scores[sourceKey] = sharedCount / unionCount;
+            [sourceKey],
+          );
+          final sharedCount = sharedNoteCountRows.single['note_count'] as int;
+          if (sharedCount == 0) continue;
+          final unionCount = candidateNoteCount + sourceNoteCount - sharedCount;
+          final exactMatch = sharedCount == candidateNoteCount &&
+              sharedCount == sourceNoteCount;
+          final strongOverlap =
+              sharedCount >= 2 && sharedCount / unionCount > 0.5;
+          if (exactMatch || strongOverlap) {
+            scores[sourceKey] = sharedCount / unionCount;
+          }
+        }
+      }
+
+      if (scores.isNotEmpty) {
+        final bestScore = scores.values.reduce(max);
+        final bestCandidates = scores.entries
+            .where((entry) => entry.value == bestScore)
+            .map((entry) => entry.key)
+            .toList(growable: false);
+        if (bestCandidates.length == 1) {
+          sourceCollectionKey = bestCandidates.single;
+        }
+      }
+
+      if (sourceCollectionKey == null) {
+        sourceCollectionKey = const Uuid().v4();
+        await txn.insert('apkg_revlog_source_collections', {
+          'source_collection_key': sourceCollectionKey,
+          'collection_created': collectionCreated,
+        });
       }
     }
 
-    String? sourceCollectionKey;
-    if (scores.isNotEmpty) {
-      final bestScore = scores.values.reduce(max);
-      final bestCandidates = scores.entries
-          .where((entry) => entry.value == bestScore)
-          .map((entry) => entry.key)
-          .toList(growable: false);
-      if (bestCandidates.length == 1) {
-        sourceCollectionKey = bestCandidates.single;
-      }
-    }
-
-    if (sourceCollectionKey == null) {
-      sourceCollectionKey = const Uuid().v4();
-      await txn.insert('apkg_revlog_source_collections', {
+    await txn.insert(
+      'apkg_revlog_source_snapshots',
+      {
+        'snapshot_fingerprint': snapshotFingerprint,
         'source_collection_key': sourceCollectionKey,
-        'collection_created': collectionCreated,
-      });
-    }
-
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
     await txn.rawInsert(
       '''
         INSERT OR IGNORE INTO apkg_revlog_source_note_aliases

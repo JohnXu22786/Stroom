@@ -872,6 +872,20 @@ void main() {
           noteGuid: 'shared-note-guid',
           revlogs: [_revlogEntry(id: 123456, cardId: 43)],
         );
+        await _addSourceReview(
+          ambiguousSourcePath,
+          noteId: 44,
+          cardId: 44,
+          noteGuid: 'first-source-note',
+          reviewId: 123459,
+        );
+        await _addSourceReview(
+          ambiguousSourcePath,
+          noteId: 45,
+          cardId: 45,
+          noteGuid: 'second-source-note',
+          reviewId: 123460,
+        );
         await _createCollection(targetPath);
         final firstPackage = await _packageCollection(
           documents,
@@ -892,14 +906,45 @@ void main() {
 
         await AnkiApkgImporter.import(retainedFirstPackage);
         await AnkiApkgImporter.import(retainedSecondPackage);
+
+        // Model two previously distinct sources whose surviving note aliases
+        // now tie exactly against this snapshot. Repeated imports must reuse
+        // the identity assigned to the ambiguous snapshot itself.
+        final targetForAliases = await sqflite.openDatabase(targetPath);
+        try {
+          final sources = await targetForAliases.query(
+            'apkg_revlog_source_collections',
+            where: 'collection_created = ?',
+            whereArgs: [100],
+          );
+          expect(sources, hasLength(2));
+          for (final source in sources) {
+            for (final noteGuid in [
+              'shared-note-guid',
+              'first-source-note',
+              'second-source-note',
+            ]) {
+              await targetForAliases.insert(
+                  'apkg_revlog_source_note_aliases',
+                  {
+                    'source_collection_key': source['source_collection_key'],
+                    'note_guid': noteGuid,
+                  },
+                  conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
+            }
+          }
+        } finally {
+          await targetForAliases.close();
+        }
+
         await AnkiApkgImporter.import(ambiguousPackage);
         await AnkiApkgImporter.import(ambiguousPackage);
 
         final target = await sqflite.openDatabase(targetPath, readOnly: true);
         try {
           final revlogs = await target.query('revlog');
-          expect(revlogs, hasLength(5));
-          expect(revlogs.map((row) => row['id']).toSet(), hasLength(5));
+          expect(revlogs, hasLength(7));
+          expect(revlogs.map((row) => row['id']).toSet(), hasLength(7));
         } finally {
           await target.close();
         }
