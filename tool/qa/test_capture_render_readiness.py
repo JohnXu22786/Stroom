@@ -54,7 +54,10 @@ class FakePage:
         self.unrelated_page_image = unrelated_page_image
         self.last_locator_selector = None
         self.screenshot_count = 0
-        self.press_timeout = None
+        self.keyboard_events = []
+        self.focused_via_script = False
+        self.activation_expression = None
+        self.events = []
         self.wait_for_function_count = 0
 
     def goto(self, _url, wait_until, timeout):
@@ -71,17 +74,20 @@ class FakePage:
     def first(self):
         return self
 
-    def focus(self, timeout=None):
-        self.focus_timeout = timeout
-        if self.focus_error:
-            raise PlaywrightTimeoutError("semantics placeholder did not appear")
-
-    def press(self, _key, timeout=None):
-        self.press_timeout = timeout
-        pass
-
     def evaluate(self, expression, timeout=None):
         self.evaluate_timeout = timeout
+        if "element.focus()" in expression and "KeyboardEvent" in expression:
+            self.focus_timeout = timeout
+            self.focused_via_script = True
+            self.activation_expression = expression
+            self.events.append("focus")
+            self.keyboard_events = [
+                event
+                for event in ("keydown", "keyup")
+                if f'"{event}"' in expression
+            ]
+            if self.focus_error:
+                raise PlaywrightTimeoutError("semantics placeholder did not appear")
         if expression == "body => document.activeElement.blur()":
             return None
 
@@ -97,9 +103,10 @@ class FakePage:
     def screenshot(self, path=None, timeout=None):
         self.screenshot_timeout = timeout
         self.screenshot_count += 1
+        self.events.append("screenshot")
         if self.clock:
             self.clock.now += self.screenshot_seconds
-        if self.screenshot_error:
+        if self.screenshot_error and self.screenshot_count > 1:
             raise PlaywrightTimeoutError("screenshot timed out")
         try:
             return next(self.screenshots)
@@ -112,6 +119,44 @@ class FakePage:
 
 
 class CaptureRenderReadinessTest(unittest.TestCase):
+    def test_nonblank_splash_does_not_satisfy_catcatch_empty_state_readiness(self):
+        page = FakePage([png_bytes("navy")], ["Flutter splash screen"])
+
+        with self.assertRaisesRegex(RuntimeError, "Aucune tâche de téléchargement"):
+            wait_for_flutter_render(
+                page,
+                (2, 2),
+                "Aucune tâche de téléchargement pour le moment",
+                timeout=1,
+                poll_interval=0,
+            )
+
+        self.assertEqual(page.screenshot_count, 1)
+        self.assertEqual(page.keyboard_events, ["keydown", "keyup"])
+
+    def test_catcatch_empty_state_text_and_painted_canvas_satisfy_readiness(self):
+        page = FakePage(
+            [png_bytes("navy"), png_bytes("navy")],
+            ["Aucune tâche de téléchargement pour le moment"],
+        )
+
+        wait_for_flutter_render(
+            page,
+            (2, 2),
+            "Aucune tâche de téléchargement pour le moment",
+            timeout=1,
+            poll_interval=0,
+        )
+
+        self.assertEqual(page.screenshot_count, 2)
+        self.assertTrue(page.focused_via_script)
+        self.assertLessEqual(page.focus_timeout, 1_000)
+        self.assertEqual(page.keyboard_events, ["keydown", "keyup"])
+        self.assertIn('key: "Enter"', page.activation_expression)
+        self.assertLess(
+            page.events.index("screenshot"), page.events.index("focus")
+        )
+
     def test_video_frame_manifest_preserves_full_capture_interval(self):
         with tempfile.TemporaryDirectory() as temporary_frames:
             manifest = write_video_frame_manifest(
@@ -129,7 +174,7 @@ class CaptureRenderReadinessTest(unittest.TestCase):
     def test_navigation_and_render_share_one_deadline(self):
         clock = FakeClock(10)
         page = FakePage(
-            [png_bytes("navy")],
+            [png_bytes("navy"), png_bytes("navy")],
             ["Topic"],
             clock=clock,
             navigation_seconds=0.6,
@@ -145,7 +190,12 @@ class CaptureRenderReadinessTest(unittest.TestCase):
 
     def test_waits_until_flutter_paints_nonblank_pixels(self):
         page = FakePage(
-            [png_bytes("white"), png_bytes("white"), png_bytes("navy")],
+            [
+                png_bytes("white"),
+                png_bytes("white"),
+                png_bytes("navy"),
+                png_bytes("navy"),
+            ],
             ["", "", "Stimmen bearbeiten"],
         )
 
@@ -153,7 +203,7 @@ class CaptureRenderReadinessTest(unittest.TestCase):
             page, (2, 2), "Stimmen bearbeiten", timeout=1, poll_interval=0
         )
 
-        self.assertEqual(page.screenshot_count, 3)
+        self.assertEqual(page.screenshot_count, 4)
         self.assertEqual(page.last_locator_selector, "flt-glass-pane canvas")
 
     def test_unrelated_page_pixels_do_not_satisfy_flutter_surface_readiness(self):
@@ -188,7 +238,8 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 poll_interval=0,
             )
         self.assertEqual(page.wait_for_function_count, 1)
-        self.assertEqual(page.screenshot_count, 0)
+        self.assertEqual(page.screenshot_count, 1)
+
     def test_fails_explicitly_when_expected_content_is_still_blank(self):
         page = FakePage([png_bytes("white")], ["Stimmen bearbeiten"])
 
@@ -202,7 +253,7 @@ class CaptureRenderReadinessTest(unittest.TestCase):
             )
 
     def test_fails_explicitly_when_flutter_semantics_placeholder_is_missing(self):
-        page = FakePage([], [], focus_error=True)
+        page = FakePage([png_bytes("navy")], [], focus_error=True)
 
         with self.assertRaisesRegex(RuntimeError, "Stimmen bearbeiten"):
             wait_for_flutter_render(
@@ -216,7 +267,9 @@ class CaptureRenderReadinessTest(unittest.TestCase):
 
     def test_fails_explicitly_when_screenshot_exceeds_readiness_deadline(self):
         page = FakePage(
-            [], ["Stimmen bearbeiten"], screenshot_error=True
+            [png_bytes("navy"), png_bytes("navy")],
+            ["Stimmen bearbeiten"],
+            screenshot_error=True,
         )
 
         with self.assertRaisesRegex(RuntimeError, "Stimmen bearbeiten"):
@@ -228,7 +281,7 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 poll_interval=0,
             )
         self.assertLessEqual(page.focus_timeout, 1_000)
-        self.assertLessEqual(page.press_timeout, 1_000)
+        self.assertEqual(page.keyboard_events, ["keydown", "keyup"])
         self.assertLessEqual(page.evaluate_timeout, 1_000)
         self.assertLessEqual(page.wait_for_function_timeout, 1_000)
         self.assertLessEqual(page.screenshot_timeout, 1_000)

@@ -1,14 +1,16 @@
 from io import BytesIO
 from pathlib import Path
-import time
 
 from PIL import Image, ImageStat
 from playwright.sync_api import sync_playwright
+
+from capture_render_readiness import navigate_and_wait_for_flutter_render
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = "http://127.0.0.1:8874"
 OUTPUT_DIR = ROOT / "docs/qa/catcatch_empty_state"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+EXPECTED_READY_TEXT = "Aucune tâche de téléchargement pour le moment"
 
 
 def capture(
@@ -20,17 +22,12 @@ def capture(
     )
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(f"{BASE_URL}/?locale=fr&theme={theme}&scale={scale}", wait_until="load")
-    page.locator("flt-semantics-placeholder").wait_for(timeout=120_000)
-
-    deadline = time.monotonic() + 120
-    while True:
-        rendered = Image.open(BytesIO(page.screenshot())).convert("RGB")
-        if max(ImageStat.Stat(rendered).stddev) >= 1:
-            break
-        if time.monotonic() >= deadline:
-            raise RuntimeError("Flutter Web did not render within 120 seconds")
-        time.sleep(1)
+    navigate_and_wait_for_flutter_render(
+        page,
+        f"{BASE_URL}/?locale=fr&theme={theme}&scale={scale}",
+        (320, 640),
+        EXPECTED_READY_TEXT,
+    )
 
     if scroll:
         page.mouse.move(160, 350)
