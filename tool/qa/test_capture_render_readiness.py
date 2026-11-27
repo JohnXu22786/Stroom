@@ -2,6 +2,7 @@ from io import BytesIO
 import unittest
 
 from PIL import Image
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from capture_render_readiness import wait_for_flutter_render
 
@@ -16,17 +17,20 @@ def png_bytes(color):
 
 
 class FakePage:
-    def __init__(self, screenshots, rendered_texts):
+    def __init__(self, screenshots, rendered_texts, focus_error=False):
         self.screenshots = iter(screenshots)
         self.rendered_texts = iter(rendered_texts)
+        self.focus_error = focus_error
         self.screenshot_count = 0
         self.keyboard = self
 
     def locator(self, _selector):
         return self
 
-    def focus(self):
-        pass
+    def focus(self, timeout):
+        self.focus_timeout = timeout
+        if self.focus_error:
+            raise PlaywrightTimeoutError("semantics placeholder did not appear")
 
     def press(self, _key):
         pass
@@ -74,7 +78,6 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 timeout=0,
                 poll_interval=0,
             )
-
     def test_fails_explicitly_when_expected_content_is_still_blank(self):
         page = FakePage([png_bytes("white")], ["Stimmen bearbeiten"])
 
@@ -86,6 +89,19 @@ class CaptureRenderReadinessTest(unittest.TestCase):
                 timeout=0,
                 poll_interval=0,
             )
+
+    def test_fails_explicitly_when_flutter_semantics_placeholder_is_missing(self):
+        page = FakePage([], [], focus_error=True)
+
+        with self.assertRaisesRegex(RuntimeError, "Stimmen bearbeiten"):
+            wait_for_flutter_render(
+                page,
+                (2, 2),
+                "Stimmen bearbeiten",
+                timeout=1,
+                poll_interval=0,
+            )
+        self.assertLessEqual(page.focus_timeout, 1_000)
 
 
 if __name__ == "__main__":

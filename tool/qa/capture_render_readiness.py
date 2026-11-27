@@ -2,6 +2,7 @@ from io import BytesIO
 import time
 
 from PIL import Image, ImageStat
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
 def wait_for_flutter_render(
@@ -9,7 +10,16 @@ def wait_for_flutter_render(
 ):
     """Wait until the expected Flutter content and a nonblank frame appear."""
     deadline = time.monotonic() + timeout
-    page.locator("flt-semantics-placeholder").focus()
+    failure_message = (
+        f"Flutter Web did not render {expected_text!r} on a nonblank "
+        f"{expected_size} surface within {timeout} seconds"
+    )
+    try:
+        page.locator("flt-semantics-placeholder").focus(
+            timeout=max(1, round((deadline - time.monotonic()) * 1_000))
+        )
+    except PlaywrightTimeoutError as error:
+        raise RuntimeError(failure_message) from error
     page.keyboard.press("Enter")
     page.evaluate("document.activeElement.blur()")
     while True:
@@ -22,9 +32,5 @@ def wait_for_flutter_render(
         ):
             return
         if time.monotonic() >= deadline:
-            raise RuntimeError(
-                f"Flutter Web did not render {expected_text!r} on a nonblank "
-                f"{expected_size} surface "
-                f"within {timeout} seconds"
-            )
+            raise RuntimeError(failure_message)
         page.wait_for_timeout(round(poll_interval * 1_000))
