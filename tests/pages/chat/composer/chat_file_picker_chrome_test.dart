@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,11 +108,20 @@ void _expectPickerTitleVisible(WidgetTester tester, String label) {
         matching: find.byType(ConstrainedText),
       )
       .first;
+  final titleText = find.descendant(of: title, matching: find.text(label));
+  expect(titleText, findsOneWidget);
   final appBarRect = tester.getRect(appBar);
   final titleRect = tester.getRect(title);
   expect(titleRect.width, greaterThan(0));
   expect(titleRect.height, greaterThan(0));
   expect(appBarRect.contains(titleRect.center), isTrue);
+  final textRect = tester.getRect(titleText);
+  final paragraph = tester.renderObject<RenderParagraph>(titleText);
+  expect(textRect.width, greaterThan(0));
+  expect(textRect.height, greaterThan(0));
+  expect(appBarRect.overlaps(textRect), isTrue);
+  expect(paragraph.size.width, greaterThan(0));
+  expect(paragraph.size.height, greaterThan(0));
 }
 
 void main() {
