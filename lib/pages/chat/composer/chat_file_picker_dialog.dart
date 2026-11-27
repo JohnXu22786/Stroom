@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsRole;
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
@@ -246,6 +247,20 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final cs = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final hasSelection = _selectedItems.isNotEmpty;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final expandedChrome =
+        textScale >= 2 && MediaQuery.sizeOf(context).width <= 600;
+    final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
+    final expandedTabRowHeight =
+        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8).clamp(
+          64.0,
+          80.0,
+        );
+    final clearRowHeight =
+        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16).clamp(
+          56.0,
+          100.0,
+        );
 
     return PopScope(
       // System back inside a subfolder navigates up one level; only at
@@ -270,7 +285,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             onPressed: () => Navigator.of(context).pop(null),
           ),
           actions: [
-            if (hasSelection)
+            if (hasSelection && !expandedChrome)
               TextButton(
                 key: const Key('file_picker_clear_btn'),
                 onPressed: _clearSelection,
@@ -283,23 +298,56 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
               ),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: false,
-              labelColor: cs.primary,
-              unselectedLabelColor: cs.onSurfaceVariant,
-              tabs: _FileTabType.values.map((type) {
-                return Tab(
-                  key: Key('file_picker_tab_${type.name}'),
-                  icon: Icon(_tabIcons[type]),
-                  child: ConstrainedText(
-                    _tabLabel(l10n, type),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            preferredSize: Size.fromHeight(
+              (expandedChrome ? expandedTabRowHeight * 2 : 48) +
+                  (expandedChrome && hasSelection ? clearRowHeight : 0),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (expandedChrome && hasSelection)
+                  SizedBox(
+                    height: clearRowHeight,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        key: const Key('file_picker_clear_btn'),
+                        onPressed: _clearSelection,
+                        child: ConstrainedText(
+                          l10n.appMediaClearSelection(_selectedItems.length),
+                          style: TextStyle(color: cs.primary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
+                if (expandedChrome)
+                  _buildExpandedTabBar(
+                    l10n,
+                    cs,
+                    tabLabelStyle,
+                    rowHeight: expandedTabRowHeight,
+                  )
+                else
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: false,
+                    labelColor: cs.primary,
+                    unselectedLabelColor: cs.onSurfaceVariant,
+                    tabs: _FileTabType.values.map((type) {
+                      return Tab(
+                        key: Key('file_picker_tab_${type.name}'),
+                        icon: Icon(_tabIcons[type]),
+                        child: ConstrainedText(
+                          _tabLabel(l10n, type),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
             ),
           ),
         ),
@@ -353,6 +401,94 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandedTabBar(
+    AppLocalizations l10n,
+    ColorScheme colorScheme,
+    TextStyle? labelStyle, {
+    required double rowHeight,
+  }) {
+    return Semantics(
+      role: SemanticsRole.tabBar,
+      explicitChildNodes: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var row = 0; row < 2; row++)
+            SizedBox(
+              height: rowHeight,
+              child: Row(
+                children: [
+                  for (var column = 0; column < 2; column++)
+                    Expanded(
+                      child: _buildExpandedTab(
+                        row * 2 + column,
+                        l10n,
+                        colorScheme,
+                        labelStyle,
+                        rowHeight: rowHeight,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandedTab(
+    int index,
+    AppLocalizations l10n,
+    ColorScheme colorScheme,
+    TextStyle? labelStyle, {
+    required double rowHeight,
+  }) {
+    final type = _FileTabType.values[index];
+    final selected = _tabController.index == index;
+    final label = _tabLabel(l10n, type);
+    final foregroundColor = selected
+        ? colorScheme.primary
+        : colorScheme.onSurfaceVariant;
+
+    return SizedBox(
+      height: rowHeight,
+      width: double.infinity,
+      child: Semantics(
+        role: SemanticsRole.tab,
+        label: label,
+        selected: selected,
+        onTap: () => _tabController.animateTo(index),
+        child: InkWell(
+          key: Key('file_picker_tab_${type.name}'),
+          onTap: () => _tabController.animateTo(index),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? colorScheme.primary : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Center(
+                child: ExcludeSemantics(
+                  child: ConstrainedText(
+                    label,
+                    style: labelStyle?.copyWith(color: foregroundColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
