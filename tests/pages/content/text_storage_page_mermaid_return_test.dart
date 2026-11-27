@@ -12,6 +12,7 @@ import 'package:stroom/pages/text_storage_page.dart';
 import 'package:stroom/providers/text_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _GatedTextRecordsNotifier extends TextRecordsNotifier {
   final returnReloadStarted = Completer<void>();
