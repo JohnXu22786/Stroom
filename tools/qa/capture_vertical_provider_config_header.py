@@ -12,6 +12,9 @@ from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tool" / "qa"))
+from capture_build_dependencies import needs_rebuild
+
 STATE = Path("/workspace/.cloud-profile-state/stroom-guideline-confirmed/round20/vertical-provider-header")
 TMP = STATE / "tmp"
 PUB_CACHE = STATE / "pub-cache"
@@ -34,14 +37,7 @@ environment["CXX"] = str(toolchain / "bin/clang++")
 environment["LD_LIBRARY_PATH"] = str(toolchain / "lib")
 environment["PATH"] = f"{toolchain / 'bin'}:{environment['PATH']}"
 capture_entrypoint = ROOT / "tool/qa/vertical_provider_config_header_capture.dart"
-capture_sources = [capture_entrypoint, ROOT / "lib/pages/provider_config_page.dart"]
-if (
-    not (WEB_BUILD / "index.html").exists()
-    or any(
-        source.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-        for source in capture_sources
-    )
-):
+if needs_rebuild(ROOT, capture_entrypoint, WEB_BUILD / "index.html"):
     subprocess.run(
         [
             "/workspace/sdks/flutter/bin/flutter",
