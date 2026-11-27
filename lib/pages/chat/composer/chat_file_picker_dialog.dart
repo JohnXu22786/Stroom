@@ -74,6 +74,7 @@ typedef _FileTabType = FileTabType;
 class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     with SingleTickerProviderStateMixin {
   Offset? _shortViewportPointerDown;
+  final _shortViewportScrollController = ScrollController();
   late final TabController _tabController;
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
@@ -105,6 +106,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
+        if (_shortViewportScrollController.hasClients) {
+          _shortViewportScrollController.jumpTo(0);
+        }
         setState(() {});
       }
     });
@@ -120,6 +124,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   @override
   void dispose() {
     _cleanupTempFiles();
+    _shortViewportScrollController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -397,43 +402,16 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
           ),
         ),
         body: shortViewportChrome
-            ? SingleChildScrollView(
-                key: const Key('file_picker_short_viewport_scroll'),
-                child: Column(
-                  children: [
-                    KeyedSubtree(
-                      key: const Key('file_picker_content'),
-                      child: Listener(
-                        onPointerDown: (event) {
-                          _shortViewportPointerDown = event.position;
-                        },
-                        onPointerCancel: (_) {
-                          _shortViewportPointerDown = null;
-                        },
-                        onPointerUp: (event) {
-                          final start = _shortViewportPointerDown;
-                          _shortViewportPointerDown = null;
-                          if (start == null) return;
-                          final delta = event.position - start;
-                          if (delta.dx.abs() < 50 ||
-                              delta.dx.abs() <= delta.dy.abs()) {
-                            return;
-                          }
-                          final nextIndex =
-                              _tabController.index + (delta.dx < 0 ? 1 : -1);
-                          if (nextIndex >= 0 &&
-                              nextIndex < _FileTabType.values.length) {
-                            _tabController.animateTo(nextIndex);
-                          }
-                        },
-                        child: _buildTabContent(
-                          _activeTabType,
-                          shortViewport: true,
-                        ),
-                      ),
-                    ),
-                    if (hasSelection) _buildPreviewBar(cs),
-                    confirmationButton,
+            ? KeyedSubtree(
+                key: const Key('file_picker_content'),
+                child: CustomScrollView(
+                  key: const Key('file_picker_short_viewport_scroll'),
+                  controller: _shortViewportScrollController,
+                  slivers: [
+                    ..._buildShortViewportTabSlivers(_activeTabType),
+                    if (hasSelection)
+                      SliverToBoxAdapter(child: _buildPreviewBar(cs)),
+                    SliverToBoxAdapter(child: confirmationButton),
                   ],
                 ),
               )
@@ -446,10 +424,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                       controller: _tabController,
                       children: _FileTabType.values
                           .map(
-                            (type) => _buildTabContent(
-                              type,
-                              shortViewport: false,
-                            ),
+                            (type) => _buildTabContent(type),
                           )
                           .toList(),
                     ),
@@ -557,10 +532,166 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // Tab content builder
   // ====================================================================
 
-  Widget _buildTabContent(
-    _FileTabType type, {
-    required bool shortViewport,
-  }) {
+  void _handleCompactPointerDown(PointerDownEvent event) {
+    _shortViewportPointerDown = event.position;
+  }
+
+  void _handleCompactPointerCancel(PointerCancelEvent event) {
+    _shortViewportPointerDown = null;
+  }
+
+  void _handleCompactPointerUp(PointerUpEvent event) {
+    final start = _shortViewportPointerDown;
+    _shortViewportPointerDown = null;
+    if (start == null) return;
+    final delta = event.position - start;
+    if (delta.dx.abs() < 50 || delta.dx.abs() <= delta.dy.abs()) return;
+    final nextIndex = _tabController.index + (delta.dx < 0 ? 1 : -1);
+    if (nextIndex >= 0 && nextIndex < _FileTabType.values.length) {
+      _tabController.animateTo(nextIndex);
+    }
+  }
+
+  Widget _withCompactSwipe(Widget child) {
+    return Listener(
+      onPointerDown: _handleCompactPointerDown,
+      onPointerCancel: _handleCompactPointerCancel,
+      onPointerUp: _handleCompactPointerUp,
+      child: child,
+    );
+  }
+
+  List<Widget> _buildShortViewportTabSlivers(_FileTabType type) {
+    final l10n = AppLocalizations.of(context)!;
+    final pageKey = Key('file_picker_tab_content_${type.name}');
+    if (_tabLoading[type] ?? true) {
+      return [
+        SliverFillRemaining(
+          key: pageKey,
+          hasScrollBody: false,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+
+    final data = _tabData[type];
+    if (data == null) {
+      return [
+        SliverFillRemaining(
+          key: pageKey,
+          hasScrollBody: false,
+          child: Center(child: Text(l10n.chatFilePickerLoadFailed)),
+        ),
+      ];
+    }
+
+    final cs = Theme.of(context).colorScheme;
+    final currentFolder = _currentFolders[type] ?? '';
+    final isRoot = currentFolder.isEmpty;
+    final subFolders = FolderPathUtils.getChildFolderPaths(
+      currentFolder,
+      data.allFolders,
+    )..sort();
+    final currentFiles = data.records
+        .where((record) =>
+            isRoot ? record.folder.isEmpty : record.folder == currentFolder)
+        .toList()
+      ..sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+    final itemCount =
+        subFolders.length + currentFiles.length + (isRoot ? 0 : 1);
+    Widget buildItem(int index) {
+      final Widget item;
+      if (!isRoot && index == 0) {
+        item = _buildBackItem(type, currentFolder);
+      } else {
+        if (!isRoot) index--;
+        item = index < subFolders.length
+            ? _buildFolderItem(type, subFolders[index], currentFolder)
+            : _buildFileItem(type, currentFiles[index - subFolders.length]);
+      }
+      return _withCompactSwipe(item);
+    }
+
+    final slivers = <Widget>[
+      if (!isRoot)
+        SliverToBoxAdapter(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.folder,
+                  size: 14,
+                  color: cs.primary.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: ConstrainedText(
+                    currentFolder,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ];
+
+    if (itemCount == 0) {
+      slivers.add(
+        SliverToBoxAdapter(
+          key: pageKey,
+          child: _withCompactSwipe(
+            SizedBox(
+              height: 200,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.folder_open_outlined,
+                      size: 48,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isRoot
+                          ? l10n.chatFilePickerEmpty
+                          : l10n.appMediaEmptyFolder,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: 8),
+          sliver: SliverList(
+            key: pageKey,
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => buildItem(index),
+              childCount: itemCount,
+            ),
+          ),
+        ),
+      );
+    }
+    return slivers;
+  }
+
+  Widget _buildTabContent(_FileTabType type) {
     final cs = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final loading = _tabLoading[type] ?? true;
@@ -651,29 +782,14 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             ),
           ),
 
-        // In the short viewport path, the enclosing dialog body owns the one
-        // vertical scroll position. Keeping this list non-scrollable lets
-        // gestures reach the preview and confirmation below it.
-        if (shortViewport)
-          if (!hasContent)
-            SizedBox(height: 200, child: emptyState)
-          else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: listItems,
-              ),
-            )
-        else
-          Expanded(
-            child: !hasContent
-                ? emptyState
-                : ListView(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    children: listItems,
-                  ),
-          ),
+        Expanded(
+          child: !hasContent
+              ? emptyState
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  children: listItems,
+                ),
+        ),
       ],
     );
   }

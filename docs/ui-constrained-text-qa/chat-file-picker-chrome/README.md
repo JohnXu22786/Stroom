@@ -45,7 +45,9 @@ remain reachable with a vertical drag and that a horizontal swipe still changes
 the active tab. A long text folder verifies that its row is hit-testable after
 scrolling, selection count changes on tap, and the scroll extent follows the
 active folder's natural rows before contracting after switching to an empty
-tab. Only the active tab's page is built in this compact scroll layout. The
+tab. Only the active tab's page is built in this compact scroll layout, with
+rows created lazily as the user scrolls; changing tabs returns the shared
+scroll position to the top. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.
