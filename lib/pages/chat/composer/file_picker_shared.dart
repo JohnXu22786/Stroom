@@ -72,7 +72,8 @@ class PreviewChip extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Container(
-              height: 72,
+              height: isImage ? 72 : null,
+              constraints: isImage ? null : const BoxConstraints(minHeight: 72),
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(8),
