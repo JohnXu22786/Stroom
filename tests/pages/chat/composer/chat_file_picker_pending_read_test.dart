@@ -599,24 +599,38 @@ void main() {
 }
 
 void _expectOnlyKnownScaleThreeChromeOverflows(WidgetTester tester) {
-  // Keep the 3× route regression focused on the selected chip while pinning
-  // the adjacent 72 dp tab strip and selected-state AppBar overflow for their
-  // separate follow-up. Assert the tab's actual overflowing child geometry;
-  // the test binding's aggregated exception does not retain its individual
-  // FlutterErrorDetails, so its count alone is not a sufficient allowlist.
+  // Keep the 3× route regression focused on the selected chip while checking
+  // that the responsive picker chrome now gives each tab enough height for
+  // its scaled label and keeps the Clear action inside the viewport.
   for (final name in ['text', 'image', 'video', 'audio']) {
     final tab = find.byKey(Key('file_picker_tab_$name'));
-    final tabContent = find.descendant(of: tab, matching: find.byType(Column));
     final label =
         find.descendant(of: tab, matching: find.byType(ConstrainedText));
     expect(tab, findsOneWidget);
-    expect(tester.getSize(tab).height, 72);
-    expect(tester.getSize(tabContent).height, 72);
-    expect(tester.getSize(label).height, 60);
-    expect(
-      tester.getRect(label).bottom - tester.getRect(tab).bottom,
-      closeTo(14, 0.01),
-    );
+    expect(label, findsOneWidget);
+    final labelWidget = tester.widget<ConstrainedText>(label);
+    final labelContext = tester.element(label);
+    final labelPainter = TextPainter(
+      text: TextSpan(
+        text: labelWidget.data,
+        style: DefaultTextStyle.of(labelContext).style.merge(
+              labelWidget.style,
+            ),
+      ),
+      textDirection: Directionality.of(labelContext),
+      textScaler: MediaQuery.textScalerOf(labelContext),
+      locale: Localizations.maybeLocaleOf(labelContext),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout();
+    final tabRect = tester.getRect(tab);
+    final labelRect = tester.getRect(label);
+    expect(labelWidget.maxLines, 1);
+    expect(tabRect.height, greaterThanOrEqualTo(labelPainter.height + 8));
+    expect(labelRect.left, greaterThanOrEqualTo(tabRect.left));
+    expect(labelRect.right, lessThanOrEqualTo(tabRect.right));
+    expect(labelRect.top, greaterThanOrEqualTo(tabRect.top));
+    expect(labelRect.bottom, lessThanOrEqualTo(tabRect.bottom));
   }
   final clearButton = find.byKey(const Key('file_picker_clear_btn'));
   if (clearButton.evaluate().isNotEmpty) {
@@ -629,26 +643,13 @@ void _expectOnlyKnownScaleThreeChromeOverflows(WidgetTester tester) {
     final clearButtonRect = tester.getRect(clearButton);
     final clearLabelRect = tester.getRect(clearLabel);
     expect(clearButton, findsOneWidget);
-    expect(
-      clearButtonRect.right - screenWidth,
-      closeTo(66.9, 0.1),
-    );
-    expect(
-      clearLabelRect.right - clearButtonRect.right,
-      closeTo(-4, 0.01),
-    );
+    expect(clearButtonRect.left, greaterThanOrEqualTo(0));
+    expect(clearButtonRect.right, lessThanOrEqualTo(screenWidth));
+    expect(clearLabelRect.left, greaterThanOrEqualTo(clearButtonRect.left));
+    expect(clearLabelRect.right, lessThanOrEqualTo(clearButtonRect.right));
+    expect(tester.widget<ConstrainedText>(clearLabel).data, 'Clear (1)');
   }
-  Object? exception;
-  while ((exception = tester.takeException()) != null) {
-    expect(
-      exception.toString(),
-      anyOf(
-        'A RenderFlex overflowed by 14 pixels on the bottom.',
-        'A RenderFlex overflowed by 67 pixels on the right.',
-        'Multiple exceptions (4) were detected during the running of the current test, and at least one was unexpected.',
-      ),
-    );
-  }
+  expect(tester.takeException(), isNull);
 }
 
 Future<void> _seedPdf(WidgetTester tester, String name) async {

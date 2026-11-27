@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsRole;
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
@@ -72,6 +73,10 @@ typedef _FileTabType = FileTabType;
 
 class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     with SingleTickerProviderStateMixin {
+  Offset? _shortViewportPointerDown;
+  final _shortViewportScrollController = ScrollController();
+  final _shortViewportPreviewBarKey = GlobalKey();
+  final _shortViewportConfirmBarKey = GlobalKey();
   late final TabController _tabController;
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
@@ -103,6 +108,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
+        if (_shortViewportScrollController.hasClients) {
+          _shortViewportScrollController.jumpTo(0);
+        }
         setState(() {});
       }
     });
@@ -118,6 +126,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   @override
   void dispose() {
     _cleanupTempFiles();
+    _shortViewportScrollController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -246,6 +255,86 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final cs = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final hasSelection = _selectedItems.isNotEmpty;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final expandedChrome =
+        textScale >= 2 && MediaQuery.sizeOf(context).width <= 600;
+    final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
+    final standardExpandedTabRowHeight = expandedChrome
+        ? (_FileTabType.values.fold<double>(
+                  0,
+                  (height, type) {
+                    final painter = TextPainter(
+                      text: TextSpan(
+                        text: _tabLabel(l10n, type),
+                        style: tabLabelStyle,
+                      ),
+                      textDirection: Directionality.of(context),
+                      textScaler: MediaQuery.textScalerOf(context),
+                      locale: Localizations.localeOf(context),
+                    )..layout();
+                    return painter.height > height ? painter.height : height;
+                  },
+                ) +
+                8)
+            .clamp(64.0, double.infinity)
+            .toDouble()
+        : 64.0;
+    final standardClearRowHeight =
+        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16)
+            .clamp(56.0, 100.0)
+            .toDouble();
+    final previewBarHeight = hasSelection ? _measurePreviewBarHeight(cs) : 0.0;
+    const confirmationBarHeight = kMinInteractiveDimension + 16.0;
+    final mediaSize = MediaQuery.sizeOf(context);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final estimatedBodyHeight = mediaSize.height -
+        viewPadding.top -
+        viewPadding.bottom -
+        viewInsets.bottom -
+        kToolbarHeight -
+        standardExpandedTabRowHeight * 2 -
+        (hasSelection ? standardClearRowHeight : 0) -
+        (hasSelection ? previewBarHeight : 0) -
+        confirmationBarHeight;
+    // Empty-state labels can wrap to multiple lines at these scales, so move
+    // the picker contents into the shared scroll view before its remaining
+    // body is too short to lay out them safely.
+    const minimumExpandedBodyHeight = 200.0;
+    final shortViewportChrome =
+        expandedChrome && estimatedBodyHeight < minimumExpandedBodyHeight;
+    final expandedTabRowHeight = standardExpandedTabRowHeight;
+    final clearRowHeight = standardClearRowHeight;
+    final confirmationButton = SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          border: Border(
+            top: BorderSide(color: cs.outlineVariant, width: 0.5),
+          ),
+        ),
+        child: FilledButton.icon(
+          key: const Key('file_picker_confirm_btn'),
+          onPressed: _pendingReadCount > 0
+              ? null
+              : () {
+                  final result = _selectedItems.values.toList();
+                  Navigator.of(context).pop(result);
+                },
+          icon: const Icon(Icons.check, size: 18),
+          label: ConstrainedText(
+            hasSelection
+                ? l10n.appMediaConfirmSelectionCount(_selectedItems.length)
+                : l10n.appMediaConfirmSelection,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
 
     return PopScope(
       // System back inside a subfolder navigates up one level; only at
@@ -270,7 +359,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             onPressed: () => Navigator.of(context).pop(null),
           ),
           actions: [
-            if (hasSelection)
+            if (hasSelection && !expandedChrome)
               TextButton(
                 key: const Key('file_picker_clear_btn'),
                 onPressed: _clearSelection,
@@ -283,76 +372,196 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
               ),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: false,
-              labelColor: cs.primary,
-              unselectedLabelColor: cs.onSurfaceVariant,
-              tabs: _FileTabType.values.map((type) {
-                return Tab(
-                  key: Key('file_picker_tab_${type.name}'),
-                  icon: Icon(_tabIcons[type]),
-                  child: ConstrainedText(
-                    _tabLabel(l10n, type),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            preferredSize: Size.fromHeight(
+              (expandedChrome ? expandedTabRowHeight * 2 : 48) +
+                  (expandedChrome && hasSelection ? clearRowHeight : 0),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (expandedChrome && hasSelection)
+                  SizedBox(
+                    height: clearRowHeight,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        key: const Key('file_picker_clear_btn'),
+                        onPressed: _clearSelection,
+                        child: ConstrainedText(
+                          l10n.appMediaClearSelection(_selectedItems.length),
+                          style: TextStyle(color: cs.primary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
+                if (expandedChrome)
+                  _buildExpandedTabBar(
+                    l10n,
+                    cs,
+                    tabLabelStyle,
+                    rowHeight: expandedTabRowHeight,
+                  )
+                else
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: false,
+                    labelColor: cs.primary,
+                    unselectedLabelColor: cs.onSurfaceVariant,
+                    tabs: _FileTabType.values.map((type) {
+                      return Tab(
+                        key: Key('file_picker_tab_${type.name}'),
+                        icon: Icon(_tabIcons[type]),
+                        child: ConstrainedText(
+                          _tabLabel(l10n, type),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
             ),
           ),
         ),
-        body: Column(
-          children: [
-            // Tab content
-            Expanded(
-              key: const Key('file_picker_content'),
-              child: TabBarView(
-                controller: _tabController,
-                children: _FileTabType.values.map((type) {
-                  return _buildTabContent(type);
-                }).toList(),
-              ),
-            ),
-
-            // Preview bar (bottom)
-            if (hasSelection) _buildPreviewBar(cs),
-
-            // Confirm button
-            SafeArea(
-              top: false,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  border: Border(
-                    top: BorderSide(color: cs.outlineVariant, width: 0.5),
+        body: shortViewportChrome
+            ? KeyedSubtree(
+                key: const Key('file_picker_content'),
+                child: Listener(
+                  onPointerDown: _handleCompactPointerDown,
+                  onPointerCancel: _handleCompactPointerCancel,
+                  onPointerUp: _handleCompactPointerUp,
+                  child: CustomScrollView(
+                    key: const Key('file_picker_short_viewport_scroll'),
+                    controller: _shortViewportScrollController,
+                    slivers: [
+                      ..._buildShortViewportTabSlivers(_activeTabType),
+                      if (hasSelection)
+                        SliverToBoxAdapter(
+                          child: KeyedSubtree(
+                            key: _shortViewportPreviewBarKey,
+                            child: _buildPreviewBar(cs),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: KeyedSubtree(
+                          key: _shortViewportConfirmBarKey,
+                          child: confirmationButton,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: FilledButton.icon(
-                  key: const Key('file_picker_confirm_btn'),
-                  onPressed: _pendingReadCount > 0
-                      ? null
-                      : () {
-                          final result = _selectedItems.values.toList();
-                          Navigator.of(context).pop(result);
-                        },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: ConstrainedText(
-                    hasSelection
-                        ? l10n.appMediaConfirmSelectionCount(
-                            _selectedItems.length,
+              )
+            : Column(
+                children: [
+                  // Tab content
+                  Expanded(
+                    key: const Key('file_picker_content'),
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: _FileTabType.values
+                          .map(
+                            (type) => _buildTabContent(type),
                           )
-                        : l10n.appMediaConfirmSelection,
+                          .toList(),
+                    ),
+                  ),
+
+                  // Preview bar (bottom)
+                  if (hasSelection) _buildPreviewBar(cs),
+
+                  // Confirm button
+                  confirmationButton,
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildExpandedTabBar(
+    AppLocalizations l10n,
+    ColorScheme colorScheme,
+    TextStyle? labelStyle, {
+    required double rowHeight,
+  }) {
+    return Semantics(
+      role: SemanticsRole.tabBar,
+      explicitChildNodes: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var row = 0; row < 2; row++)
+            SizedBox(
+              height: rowHeight,
+              child: Row(
+                children: [
+                  for (var column = 0; column < 2; column++)
+                    Expanded(
+                      child: _buildExpandedTab(
+                        row * 2 + column,
+                        l10n,
+                        colorScheme,
+                        labelStyle,
+                        rowHeight: rowHeight,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandedTab(
+    int index,
+    AppLocalizations l10n,
+    ColorScheme colorScheme,
+    TextStyle? labelStyle, {
+    required double rowHeight,
+  }) {
+    final type = _FileTabType.values[index];
+    final selected = _tabController.index == index;
+    final label = _tabLabel(l10n, type);
+    final foregroundColor =
+        selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+
+    return SizedBox(
+      height: rowHeight,
+      width: double.infinity,
+      child: Semantics(
+        role: SemanticsRole.tab,
+        label: label,
+        selected: selected,
+        onTap: () => _tabController.animateTo(index),
+        child: InkWell(
+          key: Key('file_picker_tab_${type.name}'),
+          onTap: () => _tabController.animateTo(index),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? colorScheme.primary : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Center(
+                child: ExcludeSemantics(
+                  child: ConstrainedText(
+                    label,
+                    style: labelStyle?.copyWith(color: foregroundColor),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -361,6 +570,163 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
   // Tab content builder
   // ====================================================================
+
+  void _handleCompactPointerDown(PointerDownEvent event) {
+    final boundaryKey = _shortViewportPreviewBarKey.currentContext == null
+        ? _shortViewportConfirmBarKey
+        : _shortViewportPreviewBarKey;
+    final boundaryContext = boundaryKey.currentContext;
+    final boundaryRenderObject = boundaryContext?.findRenderObject();
+    if (boundaryRenderObject is RenderBox &&
+        event.position.dy >=
+            boundaryRenderObject.localToGlobal(Offset.zero).dy) {
+      _shortViewportPointerDown = null;
+      return;
+    }
+    _shortViewportPointerDown = event.position;
+  }
+
+  void _handleCompactPointerCancel(PointerCancelEvent event) {
+    _shortViewportPointerDown = null;
+  }
+
+  void _handleCompactPointerUp(PointerUpEvent event) {
+    final start = _shortViewportPointerDown;
+    _shortViewportPointerDown = null;
+    if (start == null) return;
+    final delta = event.position - start;
+    if (delta.dx.abs() < 50 || delta.dx.abs() <= delta.dy.abs()) return;
+    final ltr = Directionality.of(context) == TextDirection.ltr;
+    final nextIndex = _tabController.index + ((delta.dx < 0) == ltr ? 1 : -1);
+    if (nextIndex >= 0 && nextIndex < _FileTabType.values.length) {
+      _tabController.animateTo(nextIndex);
+    }
+  }
+
+  List<Widget> _buildShortViewportTabSlivers(_FileTabType type) {
+    final l10n = AppLocalizations.of(context)!;
+    final pageKey = Key('file_picker_tab_content_${type.name}');
+    if (_tabLoading[type] ?? true) {
+      return [
+        SliverFillRemaining(
+          key: pageKey,
+          hasScrollBody: false,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+
+    final data = _tabData[type];
+    if (data == null) {
+      return [
+        SliverFillRemaining(
+          key: pageKey,
+          hasScrollBody: false,
+          child: Center(child: Text(l10n.chatFilePickerLoadFailed)),
+        ),
+      ];
+    }
+
+    final cs = Theme.of(context).colorScheme;
+    final currentFolder = _currentFolders[type] ?? '';
+    final isRoot = currentFolder.isEmpty;
+    final subFolders = FolderPathUtils.getChildFolderPaths(
+      currentFolder,
+      data.allFolders,
+    )..sort();
+    final currentFiles = data.records
+        .where((record) =>
+            isRoot ? record.folder.isEmpty : record.folder == currentFolder)
+        .toList()
+      ..sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+    final itemCount =
+        subFolders.length + currentFiles.length + (isRoot ? 0 : 1);
+    Widget buildItem(int index) {
+      final Widget item;
+      if (!isRoot && index == 0) {
+        item = _buildBackItem(type, currentFolder);
+      } else {
+        if (!isRoot) index--;
+        item = index < subFolders.length
+            ? _buildFolderItem(type, subFolders[index], currentFolder)
+            : _buildFileItem(type, currentFiles[index - subFolders.length]);
+      }
+      return item;
+    }
+
+    final slivers = <Widget>[
+      if (!isRoot)
+        SliverToBoxAdapter(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.folder,
+                  size: 14,
+                  color: cs.primary.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: ConstrainedText(
+                    currentFolder,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ];
+
+    if (itemCount == 0) {
+      slivers.add(
+        SliverToBoxAdapter(
+          key: pageKey,
+          child: SizedBox(
+            height: 200,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.folder_open_outlined,
+                    size: 48,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    isRoot
+                        ? l10n.chatFilePickerEmpty
+                        : l10n.appMediaEmptyFolder,
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: 8),
+          sliver: SliverList(
+            key: pageKey,
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => buildItem(index),
+              childCount: itemCount,
+            ),
+          ),
+        ),
+      );
+    }
+    return slivers;
+  }
 
   Widget _buildTabContent(_FileTabType type) {
     final cs = Theme.of(context).colorScheme;
@@ -397,9 +763,37 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     );
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
+    final listItems = <Widget>[
+      // Back button (when in subfolder)
+      if (!isRoot) _buildBackItem(type, currentFolder),
+
+      // Subfolders
+      for (final folder in subFolders)
+        _buildFolderItem(type, folder, currentFolder),
+
+      // Files
+      for (final record in currentFiles) _buildFileItem(type, record),
+    ];
+    final emptyState = Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.folder_open_outlined,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isRoot ? l10n.chatFilePickerEmpty : l10n.appMediaEmptyFolder,
+            style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
 
     return Column(
-      key: const Key('file_picker_tab_content'),
+      key: Key('file_picker_tab_content_${type.name}'),
       children: [
         // Folder path indicator
         if (!isRoot)
@@ -425,45 +819,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             ),
           ),
 
-        // File list
         Expanded(
           child: !hasContent
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.folder_open_outlined,
-                        size: 48,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        isRoot
-                            ? l10n.chatFilePickerEmpty
-                            : l10n.appMediaEmptyFolder,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+              ? emptyState
               : ListView(
                   padding: const EdgeInsets.only(bottom: 8),
-                  children: [
-                    // Back button (when in subfolder)
-                    if (!isRoot) _buildBackItem(type, currentFolder),
-
-                    // Subfolders
-                    for (final folder in subFolders)
-                      _buildFolderItem(type, folder, currentFolder),
-
-                    // Files
-                    for (final record in currentFiles)
-                      _buildFileItem(type, record),
-                  ],
+                  children: listItems,
                 ),
         ),
       ],
@@ -844,6 +1205,39 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
   // Preview bar
   // ====================================================================
+
+  double _measurePreviewBarHeight(ColorScheme cs) {
+    final items = _selectedItems.values.toList();
+    final chipHeight = items.fold<double>(72, (height, entry) {
+      final requiredHeight = PreviewChip.requiredHeight(
+        context,
+        fileName: entry.key,
+        isImage: isImageFileByExtension(entry.key),
+      );
+      return height > requiredHeight ? height : requiredHeight;
+    });
+    final headerPainter = TextPainter(
+      text: TextSpan(
+        text: AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
+        style: TextStyle(
+          fontSize: 11,
+          color: cs.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(
+        maxWidth: (MediaQuery.sizeOf(context).width - 24)
+            .clamp(0.0, double.infinity)
+            .toDouble(),
+      );
+    final requiredHeight = headerPainter.height + 8 + chipHeight + 0.5;
+    return requiredHeight > 106 ? requiredHeight : 106;
+  }
 
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.values.toList();
