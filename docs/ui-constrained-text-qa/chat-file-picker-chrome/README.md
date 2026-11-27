@@ -10,6 +10,7 @@ logical pixels.
 | Before | en-US | 320 × 640 | 1 | 3× | Light | [Before fix](chat-file-picker-en-320x640-scale3-before.png) |
 | After | en-US | 430 × 932 | 1 | 1× | Light | [Fitting layout](chat-file-picker-en-430x932-scale1-light.png) |
 | After | en-US | 320 × 640 | 1 | 3× | Light | [Narrow layout](chat-file-picker-en-320x640-scale3-light.png) |
+| After, keyboard inset | en-US | 320 × 640 | 1 | 3× | Light | [Keyboard-reduced layout](chat-file-picker-en-320x640-scale3-keyboard-light.png) |
 | After | en-US | 320 × 640 | 1 | 3× | Dark | [Dark theme](chat-file-picker-en-320x640-scale3-dark.png) |
 | After | en-US | 568 × 320 | 1 | 3× | Light | [Short landscape layout](chat-file-picker-en-568x320-scale3-light.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Longer German labels](chat-file-picker-de-DE-320x640-scale3-light.png) |
@@ -56,3 +57,10 @@ scroll position to the top. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.
+
+When the software keyboard consumes the bottom of a 320 × 640 viewport, the
+picker subtracts that inset from its available-height estimate and switches to
+the shared scroll layout. The Flutter test route applies a 320 logical px
+`viewInsets.bottom` at 3× text scale; the capture shows the resized app area and
+reserved keyboard inset, while the platform keyboard surface itself is not
+drawn by the test harness.

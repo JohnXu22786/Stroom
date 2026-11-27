@@ -35,6 +35,7 @@ Future<void> _openPicker(
   required ValueNotifier<double> textScale,
   required Locale locale,
   String fixtureName = 'picker-chrome-note.txt',
+  bool selectFile = true,
   bool disableAnimations = false,
   Duration tabDataWait = const Duration(milliseconds: 500),
 }) async {
@@ -73,9 +74,11 @@ Future<void> _openPicker(
   await tester.tap(find.text('Open picker'));
   await tester.pump();
   await tester.pump(tabDataWait);
-  await tester.tap(find.text(fixtureName));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 100));
+  if (selectFile) {
+    await tester.tap(find.text(fixtureName));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 Future<void> _expectScreenshot(WidgetTester tester, String path) async {
@@ -548,5 +551,55 @@ void main() {
     textScale.dispose();
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+  });
+
+  testWidgets('large text picker switches to scroll when keyboard is shown', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await TextManifest.writeText('picker-chrome-note.txt', 'safe fixture');
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'picker-chrome-note',
+          hash: 'picker-chrome-note',
+          size: 12,
+          createdAt: DateTime(2026, 11, 27),
+        ),
+      );
+      TextManifest.invalidateCache();
+    });
+
+    final textScale = ValueNotifier(3.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: textScale,
+      locale: const Locale('en', 'US'),
+      selectFile: false,
+    );
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_short_viewport_scroll')),
+      findsNothing,
+    );
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(() => tester.view.viewInsets = FakeViewPadding.zero);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('file_picker_short_viewport_scroll')),
+      findsOneWidget,
+    );
+    await _expectScreenshot(
+      tester,
+      '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-en-320x640-scale3-keyboard-light.png',
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    textScale.dispose();
   });
 }

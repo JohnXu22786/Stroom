@@ -287,9 +287,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     const confirmationBarHeight = kMinInteractiveDimension + 16.0;
     final mediaSize = MediaQuery.sizeOf(context);
     final viewPadding = MediaQuery.viewPaddingOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
     final estimatedBodyHeight = mediaSize.height -
         viewPadding.top -
         viewPadding.bottom -
+        viewInsets.bottom -
         kToolbarHeight -
         standardExpandedTabRowHeight * 2 -
         (hasSelection ? standardClearRowHeight : 0) -
