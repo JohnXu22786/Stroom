@@ -15,6 +15,7 @@ void main() {
       overrides: [
         conversationsProvider.overrideWith((ref) {
           final notifier = ConversationsNotifier(ref);
+          // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
           notifier.state = [
             for (var index = 0; index < 123; index++)
               Conversation(
