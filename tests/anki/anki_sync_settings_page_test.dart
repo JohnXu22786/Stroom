@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,157 @@ Widget _localizedApp({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+      'measures the self-hosted sync URL hint in the real settings page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const hint = 'https://anki.example.com/sync/';
+    final semantics = tester.ensureSemantics();
+    SharedPreferences.setMockInitialValues({
+      'anki_sync_mode': 'selfHosted',
+      'custom_sync_server_enabled': true,
+      'custom_sync_server_collection_url': '',
+    });
+    final config = AnkiSyncState(
+      mode: AnkiSyncMode.selfHosted,
+      selfHostedUrl: '',
+      isLoaded: true,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(
+            useMaterial3: true,
+            inputDecorationTheme: InputDecorationTheme(
+              hintStyle: WidgetStateTextStyle.resolveWith((states) {
+                return TextStyle(
+                  color: states.contains(WidgetState.focused)
+                      ? Colors.red
+                      : Colors.blue,
+                );
+              }),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: const AnkiSyncSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Serveradresse'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final field = find.byType(TextField).first;
+    await tester.ensureVisible(field);
+    await tester.pump();
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    );
+    final hintWidget = tester.widget<ConstrainedText>(hintFinder);
+    final hintContext = tester.element(hintFinder);
+    final naturalHint = TextPainter(
+      text: TextSpan(text: hint, style: hintWidget.style),
+      textDirection: Directionality.of(hintContext),
+      textScaler: MediaQuery.textScalerOf(hintContext),
+      locale: Localizations.localeOf(hintContext),
+    )..layout();
+    final slot = tester.getSize(hintFinder);
+    debugPrint(
+        'anki-sync hint=$hint slot=$slot intrinsic=${naturalHint.width}');
+    expect(naturalHint.width, greaterThan(slot.width));
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(field);
+    await tester.pump();
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(tester.widget<ConstrainedText>(hintFinder).style!.color, Colors.red);
+    await tester.enterText(field, 'https://example.test/sync/');
+    await tester.pump();
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(
+      tester
+          .widget<EditableText>(find.descendant(
+            of: field,
+            matching: find.byType(EditableText),
+          ))
+          .controller
+          .text,
+      'https://example.test/sync/',
+    );
+
+    final ankiL10n = AppLocalizations.of(
+      tester.element(find.byType(AnkiSyncSettingsPage)),
+    )!;
+    final certificateTitle = find.text(ankiL10n.ankiSyncCustomCaTitle);
+    final pageScrollable = find.descendant(
+      of: find.byType(ListView).first,
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      certificateTitle,
+      160,
+      scrollable: pageScrollable.first,
+    );
+    final certificateExpansion = find.ancestor(
+      of: find.text(ankiL10n.ankiSyncCustomCaTitle),
+      matching: find.byType(ExpansionTile),
+    );
+    await tester.ensureVisible(certificateExpansion);
+    await tester.pump();
+    await tester.tap(certificateExpansion);
+    await tester.pumpAndSettle();
+    const pemHint = '-----BEGIN CERTIFICATE-----';
+    await tester.scrollUntilVisible(
+      find.text(pemHint),
+      160,
+      scrollable: pageScrollable.first,
+    );
+    final certificateField = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.hintText == pemHint,
+    );
+    expect(certificateField, findsOneWidget);
+    final pemParagraph =
+        tester.renderObject<RenderParagraph>(find.text(pemHint));
+    final pemSlot = tester.getSize(find.text(pemHint));
+    final pemContext = tester.element(find.text(pemHint));
+    final pemNatural = TextPainter(
+      text: TextSpan(
+        text: pemHint,
+        style: Theme.of(pemContext).textTheme.bodyLarge,
+      ),
+      textDirection: Directionality.of(pemContext),
+      textScaler: MediaQuery.textScalerOf(pemContext),
+    )..layout();
+    debugPrint('anki PEM hint slot=$pemSlot intrinsic=${pemNatural.width} '
+        'exceeded=${pemParagraph.didExceedMaxLines} '
+        'field=${tester.getSize(certificateField)}');
+    expect(pemParagraph.didExceedMaxLines, isFalse);
+    expect(tester.widget<TextField>(certificateField).maxLines, 6);
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('constrains localized login labels according to measured fit', (
     tester,

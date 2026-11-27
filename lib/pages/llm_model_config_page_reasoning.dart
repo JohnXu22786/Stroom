@@ -219,43 +219,11 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   /// 添加附加参数值块（对话框输入，默认勾选，带删除按钮）。
   Future<void> _addAdditionalBlockWithDialog(ReasoningParam param) async {
-    final controller = TextEditingController();
     final value = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: ConstrainedText(
-          AppLocalizations.of(context)!.reasoningAddOptionValue,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.reasoningOptionExample,
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgConfirm,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (_) => _ReasoningOptionInputDialog(
+        title: AppLocalizations.of(context)!.reasoningAddOptionValue,
+        confirmLabel: AppLocalizations.of(context)!.batchDlgConfirm,
       ),
     );
     if (value == null || value.isEmpty || !mounted) return;
@@ -359,43 +327,11 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   /// 添加自定义参数选项值（对话框输入）。
   Future<void> _addCustomParamOptionWithDialog(CustomParam param) async {
-    final controller = TextEditingController();
     final value = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: ConstrainedText(
-          AppLocalizations.of(context)!.reasoningAddOptionValue,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.reasoningOptionExample,
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgConfirm,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (_) => _ReasoningOptionInputDialog(
+        title: AppLocalizations.of(context)!.reasoningAddOptionValue,
+        confirmLabel: AppLocalizations.of(context)!.batchDlgConfirm,
       ),
     );
     if (value == null || value.isEmpty || !mounted) return;
@@ -666,6 +602,82 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 }
 
+class _ReasoningOptionInputDialog extends StatefulWidget {
+  const _ReasoningOptionInputDialog({
+    required this.title,
+    required this.confirmLabel,
+  });
+
+  final String title;
+  final String confirmLabel;
+
+  @override
+  State<_ReasoningOptionInputDialog> createState() =>
+      _ReasoningOptionInputDialogState();
+}
+
+class _ReasoningOptionInputDialogState
+    extends State<_ReasoningOptionInputDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final MaterialStatesController _hintStatesController =
+      MaterialStatesController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _hintStatesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = AppLocalizations.of(context)!.reasoningOptionExample;
+    return AlertDialog(
+      title: ConstrainedText(
+        widget.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: Semantics(
+        hint: hint,
+        child: TextField(
+          controller: _controller,
+          statesController: _hintStatesController,
+          autofocus: true,
+          decoration: InputDecoration(
+            hint: ExcludeSemantics(
+              child: ConstrainedInputHint(
+                hint,
+                statesController: _hintStatesController,
+              ),
+            ),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.batchDlgCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: ConstrainedText(
+            widget.confirmLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _EditCustomParamOptionDialog extends StatefulWidget {
   final String initialValue;
 
@@ -681,10 +693,13 @@ class _EditCustomParamOptionDialogState
   late final TextEditingController _controller = TextEditingController(
     text: widget.initialValue,
   );
+  final MaterialStatesController _hintStatesController =
+      MaterialStatesController();
 
   @override
   void dispose() {
     _controller.dispose();
+    _hintStatesController.dispose();
     super.dispose();
   }
 
@@ -696,13 +711,22 @@ class _EditCustomParamOptionDialogState
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(
-          hintText: AppLocalizations.of(context)!.reasoningOptionExample,
-          border: OutlineInputBorder(),
-          isDense: true,
+      content: Semantics(
+        hint: AppLocalizations.of(context)!.reasoningOptionExample,
+        child: TextField(
+          controller: _controller,
+          statesController: _hintStatesController,
+          autofocus: true,
+          decoration: InputDecoration(
+            hint: ExcludeSemantics(
+              child: ConstrainedInputHint(
+                AppLocalizations.of(context)!.reasoningOptionExample,
+                statesController: _hintStatesController,
+              ),
+            ),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
         ),
       ),
       actions: [

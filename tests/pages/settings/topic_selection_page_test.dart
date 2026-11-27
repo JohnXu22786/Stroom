@@ -1,5 +1,6 @@
 // Merged from: topic_selection_drag_sort_test.dart, topic_selection_merged_test.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,8 @@ Widget createTestApp({
   List<Conversation>? conversations,
   String? activeConversationId,
   Locale locale = const Locale('zh', 'CN'),
+  double textScaleFactor = 1,
+  bool disableAnimations = false,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -48,6 +51,13 @@ Widget createTestApp({
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScaleFactor),
+          disableAnimations: disableAnimations,
+        ),
+        child: child!,
+      ),
       home: TopicSelectionPage(),
     ),
   );
@@ -768,6 +778,82 @@ void main() {
       expect(find.byType(ReorderableDelayedDragStartListener), findsOneWidget);
       expect(find.byType(Checkbox), findsNothing);
     });
+  });
+
+  testWidgets('rename dialog reveals the full hint on its editable field', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final conversation = Conversation(
+      id: 'rename-hint-conv',
+      title: '',
+      updatedAt: DateTime(2026, 6, 1),
+      assistantId: 'rename-hint-assistant',
+    );
+    await tester.pumpWidget(createTestApp(
+      assistants: [
+        Assistant(
+          id: 'rename-hint-assistant',
+          name: 'Assistant',
+          prompt: 'P',
+          emoji: '🤖',
+          description: 'Assistant',
+        ),
+      ],
+      selectedAssistantId: 'rename-hint-assistant',
+      conversations: [conversation],
+      locale: const Locale('de', 'DE'),
+      textScaleFactor: 1.8,
+      disableAnimations: true,
+    ));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(TopicSelectionPage)),
+    )!;
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.actionRename));
+    await tester.pumpAndSettle();
+
+    final field = find.byType(TextField).last;
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    final semantics = tester.ensureSemantics();
+    final hint = l10n.conversationRenameHint;
+    final hintWidget = tester.widget<ConstrainedText>(find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    ));
+    final hintSlot = tester.getSize(find.byType(ConstrainedInputHint));
+    final measuredHint = TextPainter(
+      text: TextSpan(text: hint, style: hintWidget.style),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(1.8),
+      maxLines: hintWidget.maxLines,
+    )..layout(maxWidth: hintSlot.width);
+    expect(measuredHint.didExceedMaxLines, isTrue);
+    debugPrint(
+      'topic rename hint=$hint slot=$hintSlot exceeded=${measuredHint.didExceedMaxLines}',
+    );
+    final fieldData = tester.getSemantics(editable).getSemanticsData();
+    final fieldHint = fieldData.hint;
+    expect(fieldHint, hint);
+    expect(hint.allMatches(fieldHint).length, 1);
+    expect(fieldData.hasAction(SemanticsAction.tap), isTrue);
+    expect(fieldData.hasAction(SemanticsAction.setText), isTrue);
+    expect(fieldData.hasAction(SemanticsAction.setSelection), isTrue);
+    await tester.enterText(field, 'Neuer Name');
+    await tester.pump();
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(tester.widget<EditableText>(editable).controller.text, 'Neuer Name');
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
   });
 
   group('Merged SelectConversationPage - Features', () {

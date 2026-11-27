@@ -49,6 +49,7 @@ class _AssistantRemoteSourceDialog extends StatefulWidget {
 class _AssistantRemoteSourceDialogState
     extends State<_AssistantRemoteSourceDialog> {
   late final TextEditingController _urlController;
+  final _urlHintStates = MaterialStatesController();
   RemoteAssistantCatalog? _catalog;
   int _catalogRequestGeneration = 0;
   bool _loadingCatalog = false;
@@ -76,6 +77,7 @@ class _AssistantRemoteSourceDialogState
   @override
   void dispose() {
     _urlController.dispose();
+    _urlHintStates.dispose();
     super.dispose();
   }
 
@@ -263,39 +265,48 @@ class _AssistantRemoteSourceDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _urlController,
-                keyboardType: TextInputType.url,
-                decoration: InputDecoration(
-                  label: ConstrainedText(
-                    _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  hintText: 'https://…/catalog.json',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    tooltip: _isZh ? '参数格式说明' : 'Parameter reference',
-                    icon: const Icon(Icons.info_outline),
-                    onPressed: () => showAssistantSchemaInfoDialog(
-                      context,
-                      supportedToolNames: supportedAssistantToolNames(
-                        widget.ref.read(providerEntriesProvider),
+              Semantics(
+                hint: 'https://…/catalog.json',
+                child: TextField(
+                  controller: _urlController,
+                  statesController: _urlHintStates,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    label: ConstrainedText(
+                      _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    hint: ExcludeSemantics(
+                      child: ConstrainedInputHint(
+                        'https://…/catalog.json',
+                        statesController: _urlHintStates,
+                      ),
+                    ),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      tooltip: _isZh ? '参数格式说明' : 'Parameter reference',
+                      icon: const Icon(Icons.info_outline),
+                      onPressed: () => showAssistantSchemaInfoDialog(
+                        context,
+                        supportedToolNames: supportedAssistantToolNames(
+                          widget.ref.read(providerEntriesProvider),
+                        ),
                       ),
                     ),
                   ),
+                  onChanged: (_) {
+                    _catalogRequestGeneration++;
+                    setState(() {
+                      if (_loadingCatalog) {
+                        _busy = false;
+                        _loadingCatalog = false;
+                      }
+                      _catalog = null;
+                      _error = null;
+                    });
+                  },
                 ),
-                onChanged: (_) {
-                  _catalogRequestGeneration++;
-                  setState(() {
-                    if (_loadingCatalog) {
-                      _busy = false;
-                      _loadingCatalog = false;
-                    }
-                    _catalog = null;
-                    _error = null;
-                  });
-                },
               ),
               const SizedBox(height: 10),
               SwitchListTile(

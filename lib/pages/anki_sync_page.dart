@@ -28,6 +28,7 @@ class AnkiSyncSettingsPage extends ConsumerStatefulWidget {
 
 class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
   final _urlController = TextEditingController();
+  final _urlHintStates = MaterialStatesController();
   final _certificateController = TextEditingController();
   AnkiSyncProtocolClient? _client;
   String? _clientIdentity;
@@ -49,6 +50,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       _client = null;
     }
     _urlController.dispose();
+    _urlHintStates.dispose();
     _certificateController.dispose();
     super.dispose();
   }
@@ -852,30 +854,39 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: _urlController,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) async {
-                      try {
-                        await _saveSelfHostedSettings();
-                      } catch (error) {
-                        if (mounted) {
-                          setState(
-                            () => _status = AppLocalizations.of(context)!
-                                .ankiSyncStatusSettingsNotSaved(
-                              _safeMessage(context, error),
-                            ),
-                          );
+                  Semantics(
+                    hint: 'https://anki.example.com/sync/',
+                    child: TextField(
+                      controller: _urlController,
+                      statesController: _urlHintStates,
+                      enabled: !_busy,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) async {
+                        try {
+                          await _saveSelfHostedSettings();
+                        } catch (error) {
+                          if (mounted) {
+                            setState(
+                              () => _status = AppLocalizations.of(context)!
+                                  .ankiSyncStatusSettingsNotSaved(
+                                _safeMessage(context, error),
+                              ),
+                            );
+                          }
                         }
-                      }
-                    },
-                    decoration: const InputDecoration(
-                      hintText: 'https://anki.example.com/sync/',
-                      filled: true,
-                      border: InputBorder.none,
-                      prefixIcon: Icon(Icons.link),
+                      },
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            'https://anki.example.com/sync/',
+                            statesController: _urlHintStates,
+                          ),
+                        ),
+                        filled: true,
+                        border: InputBorder.none,
+                        prefixIcon: Icon(Icons.link),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),

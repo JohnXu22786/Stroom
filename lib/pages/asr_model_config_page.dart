@@ -27,6 +27,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
   late final TextEditingController _modelIdController;
   late final TextEditingController _languageController;
   late final TextEditingController _promptController;
+  final _languageHintStates = MaterialStatesController();
+  final _promptHintStates = MaterialStatesController();
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
@@ -155,6 +157,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     _modelIdController.dispose();
     _languageController.dispose();
     _promptController.dispose();
+    _languageHintStates.dispose();
+    _promptHintStates.dispose();
     super.dispose();
   }
 
@@ -441,6 +445,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               onToggle: (v) => setState(() => _enableLanguage = v),
               hintText: AppLocalizations.of(context)!.asrLanguageExample,
               description: AppLocalizations.of(context)!.modelAsrLanguageHelp,
+              constrainedHint: true,
+              hintStatesController: _languageHintStates,
             ),
 
             // Response Format
@@ -470,6 +476,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               onToggle: (v) => setState(() => _enablePrompt = v),
               hintText: AppLocalizations.of(context)!.modelAsrPromptHint,
               description: AppLocalizations.of(context)!.modelAsrPromptHelp,
+              constrainedHint: true,
+              hintStatesController: _promptHintStates,
             ),
 
             const SizedBox(height: 24),
