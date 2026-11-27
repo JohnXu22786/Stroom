@@ -74,6 +74,72 @@ class ConstrainedText extends StatefulWidget {
   State<ConstrainedText> createState() => _ConstrainedTextState();
 }
 
+/// A measured static hint for a native text field.
+///
+/// The field and this widget share [statesController], so theme-provided
+/// focused, hovered, disabled, and error hint styles stay in sync with the
+/// `InputDecorator`. Keep this widget in `InputDecoration.hint` and leave the
+/// field's editable text as a regular `TextField`.
+class ConstrainedInputHint extends StatelessWidget {
+  const ConstrainedInputHint(
+    this.data, {
+    super.key,
+    required this.statesController,
+    this.baseStyle,
+    this.hintStyle,
+    this.maxLines = 1,
+    this.hasError = false,
+  });
+
+  final String data;
+  final MaterialStatesController statesController;
+  final TextStyle? baseStyle;
+  final TextStyle? hintStyle;
+  final int maxLines;
+  final bool hasError;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: statesController,
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final states = hasError
+            ? {...statesController.value, WidgetState.error}
+            : statesController.value;
+        final defaultTextStyle = (theme.useMaterial3
+                ? theme.textTheme.bodyLarge
+                : theme.textTheme.titleMedium) ??
+            const TextStyle();
+        final defaultColor = states.contains(WidgetState.disabled)
+            ? theme.useMaterial3
+                ? theme.colorScheme.onSurface.withOpacity(0.38)
+                : theme.disabledColor
+            : theme.useMaterial3
+                ? theme.colorScheme.onSurfaceVariant
+                : theme.hintColor;
+        final themeHintStyle = WidgetStateProperty.resolveAs(
+          InputDecorationTheme.of(context).hintStyle,
+          states,
+        );
+        final localHintStyle = WidgetStateProperty.resolveAs(hintStyle, states);
+        final resolvedStyle = defaultTextStyle
+            .merge(baseStyle)
+            .merge(TextStyle(color: defaultColor))
+            .merge(themeHintStyle)
+            .merge(localHintStyle);
+
+        return ConstrainedText(
+          data,
+          style: resolvedStyle,
+          maxLines: maxLines,
+          overflow: TextOverflow.ellipsis,
+        );
+      },
+    );
+  }
+}
+
 class _ConstrainedTextState extends State<ConstrainedText>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(

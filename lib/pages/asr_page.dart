@@ -1888,11 +1888,14 @@ class _UrlInputDialog extends StatefulWidget {
 
 class _UrlInputDialogState extends State<_UrlInputDialog> {
   final TextEditingController _controller = TextEditingController();
+  final MaterialStatesController _hintStatesController =
+      MaterialStatesController();
   String? _errorText;
 
   @override
   void dispose() {
     _controller.dispose();
+    _hintStatesController.dispose();
     super.dispose();
   }
 
@@ -1921,17 +1924,27 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
             style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            keyboardType: TextInputType.url,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: 'https://example.com/audio.mp3',
-              border: const OutlineInputBorder(),
-              isDense: true,
-              errorText: _errorText,
+          Semantics(
+            hint: 'https://example.com/audio.mp3',
+            child: TextField(
+              controller: _controller,
+              statesController: _hintStatesController,
+              keyboardType: TextInputType.url,
+              autofocus: true,
+              decoration: InputDecoration(
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    'https://example.com/audio.mp3',
+                    statesController: _hintStatesController,
+                    hasError: _errorText != null,
+                  ),
+                ),
+                border: const OutlineInputBorder(),
+                isDense: true,
+                errorText: _errorText,
+              ),
+              onSubmitted: (_) => _submit(),
             ),
-            onSubmitted: (_) => _submit(),
           ),
         ],
       ),

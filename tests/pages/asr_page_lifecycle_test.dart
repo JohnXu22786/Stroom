@@ -7,6 +7,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,7 @@ import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _AudioSelectionPicker extends FilePickerPlatform {
   _AudioSelectionPicker(
@@ -1290,6 +1292,99 @@ void main() {
     expect(find.text('输入公网音频链接'), findsOneWidget);
     expect(find.text('音频文件'), findsNothing);
     expect(serviceCalls, 0);
+  });
+
+  testWidgets('public audio URL hint stays on its native editable field', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 1800);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    providerEntries.state = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          name: 'ASR',
+          type: 'asr',
+          configs: [
+            ProviderConfigItem(
+              id: 'provider',
+              providerName: 'ASR',
+              host: 'https://api.test.com/audio/transcriptions',
+              key: 'test-key',
+              typeConfig: {'uploadMethod': 'url'},
+              models: [
+                ModelConfig(id: 'model', name: 'Test ASR', modelId: 'whisper'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith((ref) => providerEntries),
+          audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
+          backgroundTasksProvider.overrideWith((ref) => background),
+        ],
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(
+            useMaterial3: true,
+            inputDecorationTheme: InputDecorationTheme(
+              hintStyle: WidgetStateTextStyle.resolveWith((states) {
+                return TextStyle(
+                  color: states.contains(WidgetState.error)
+                      ? Colors.orange
+                      : states.contains(WidgetState.focused)
+                          ? Colors.red
+                          : Colors.blue,
+                );
+              }),
+            ),
+          ),
+          home: const AsrPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('Öffentliche Audio-URL eingeben'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    const hint = 'https://example.com/audio.mp3';
+    final field = find.byType(TextField).last;
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    final semantics = tester.ensureSemantics();
+    final fieldData = tester.getSemantics(editable).getSemanticsData();
+    expect(fieldData.hint, hint);
+    expect(hint.allMatches(fieldData.hint).length, 1);
+    expect(fieldData.hasAction(SemanticsAction.tap), isTrue);
+    expect(fieldData.hasAction(SemanticsAction.setText), isTrue);
+    expect(fieldData.hasAction(SemanticsAction.setSelection), isTrue);
+    final visualHint = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    );
+    expect(tester.widget<ConstrainedText>(visualHint).style!.color, Colors.red);
+    await tester.enterText(field, 'not a URL');
+    await tester.tap(find.text('Hinzufügen'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+        tester.widget<ConstrainedText>(visualHint).style!.color, Colors.orange);
+    final erroredHint = tester.getSemantics(editable).getSemanticsData().hint;
+    expect(erroredHint, contains(hint));
+    expect(hint.allMatches(erroredHint).length, 1);
+    expect(erroredHint, contains('Ungültige URL'));
+    expect(tester.widget<EditableText>(editable).controller.text, 'not a URL');
+    semantics.dispose();
   });
 
   testWidgets(
