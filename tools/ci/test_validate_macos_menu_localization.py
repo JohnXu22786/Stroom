@@ -146,13 +146,19 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
-        contents = '"menu.file.title" // comment\n= "File";\n'
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "MainMenu.strings"
-            path.write_text(contents, encoding="utf-8")
+        contents = (
+            '"menu.file.title" // comment\n= "File";\n',
+            '"menu.file.title" = "File" // comment\n;\n',
+        )
+        for value in contents:
+            with self.subTest(contents=value), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(value, encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
-                read_localized_titles(path)
+                with self.assertRaisesRegex(
+                    ValueError, r":1: invalid localized title entry"
+                ):
+                    read_localized_titles(path)
 
     def test_rejects_empty_semicolon_entries_but_accepts_blank_comments(self):
         from pathlib import Path
