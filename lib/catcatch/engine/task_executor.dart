@@ -786,6 +786,15 @@ class TaskExecutor {
         final parsed = await M3U8Parser.parsePlaylistWithDetails(
           content,
           pl.url,
+          headersForUrl: (url) {
+            final headers = <String, String>{};
+            if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+            final cookieHeader = task.browserCookieHeaderForUrl(url);
+            if (cookieHeader != null && cookieHeader.isNotEmpty) {
+              headers['Cookie'] = cookieHeader;
+            }
+            return headers;
+          },
         );
         segments = parsed.resources;
         playlistResources = parsed.playlistResources;
