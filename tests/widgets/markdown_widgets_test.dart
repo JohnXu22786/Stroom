@@ -793,6 +793,18 @@ $$
       expect(ordinarySpan.textSpan?.toPlainText(), ordinaryText);
       expect(parsedNodeCount, 0);
 
+      final unmatchedEmphasisCandidates = '__x ' * 2048;
+      final unmatchedEmphasisPreview = previewGenerator.buildPlainTextPreview([
+        unmatchedEmphasisCandidates,
+      ]);
+      expect(
+        ((unmatchedEmphasisPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unmatchedEmphasisCandidates,
+      );
+      expect(parsedNodeCount, 0);
+
       parsedNodeCount = 0;
       const inlineLinkDestination = '[link](https://example.com/__segment__)';
       final inlineLinkPreview = previewGenerator.buildPlainTextPreview([
@@ -3490,7 +3502,7 @@ $$
 class _UnexpectedParseSyntax extends m.InlineSyntax {
   _UnexpectedParseSyntax()
       : super(
-          r'普通文本|__literal__|\\__literal__|__start|end__|\[link\]\(https://example\.com/__segment__\)',
+          r'普通文本|__literal__|\\__literal__|__start|end__|__x|\[link\]\(https://example\.com/__segment__\)',
         );
 
   @override

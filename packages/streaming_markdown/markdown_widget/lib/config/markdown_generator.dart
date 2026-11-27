@@ -438,31 +438,69 @@ bool _isEscapedMarkdownCharacter(String source, int offset) {
 }
 
 bool _mayContainUnderscoreEmphasis(String source) {
-  final candidates = RegExp(
-    r'(?<![\p{L}\p{M}\p{N}_])__(?=\S).*?\S__(?![\p{L}\p{M}\p{N}_])',
-    dotAll: true,
-    unicode: true,
-  );
-  bool isEscaped(int offset) {
-    var backslashCount = 0;
-    for (var i = offset - 1; i >= 0 && source.codeUnitAt(i) == 92; i--) {
-      backslashCount++;
-    }
-    return backslashCount.isOdd;
-  }
-
   final paragraphs = source.split(
     RegExp(r'(?:\r\n|\r|\n)[ \t]*(?:(?:\r\n|\r|\n)[ \t]*)+'),
   );
   for (final paragraph in paragraphs) {
-    for (final candidate in candidates.allMatches(paragraph)) {
-      if (!isEscaped(candidate.start) && !isEscaped(candidate.end - 2)) {
-        return true;
+    var hasOpeningDelimiter = false;
+    var i = 0;
+    while (i + 1 < paragraph.length) {
+      if (paragraph.codeUnitAt(i) != 95 || paragraph.codeUnitAt(i + 1) != 95) {
+        i++;
+        continue;
       }
+
+      var runEnd = i + 2;
+      while (runEnd < paragraph.length && paragraph.codeUnitAt(runEnd) == 95) {
+        runEnd++;
+      }
+      final escaped = _isEscapedMarkdownCharacter(paragraph, i);
+      if (!escaped && runEnd - i >= 2) {
+        final before = _markdownCharacterBefore(paragraph, i);
+        final after = _markdownCharacterAfter(paragraph, runEnd);
+        final canOpen =
+            !_isMarkdownWordCharacter(before) && !_isMarkdownWhitespace(after);
+        final canClose =
+            !_isMarkdownWhitespace(before) && !_isMarkdownWordCharacter(after);
+        if (canClose && hasOpeningDelimiter) return true;
+        if (canOpen) hasOpeningDelimiter = true;
+      }
+      i = runEnd;
     }
   }
   return false;
 }
+
+String _markdownCharacterBefore(String source, int offset) {
+  if (offset == 0) return '';
+  final previous = source.codeUnitAt(offset - 1);
+  if (previous >= 0xdc00 && previous <= 0xdfff && offset > 1) {
+    final high = source.codeUnitAt(offset - 2);
+    if (high >= 0xd800 && high <= 0xdbff) {
+      return source.substring(offset - 2, offset);
+    }
+  }
+  return source.substring(offset - 1, offset);
+}
+
+String _markdownCharacterAfter(String source, int offset) {
+  if (offset >= source.length) return '';
+  final first = source.codeUnitAt(offset);
+  if (first >= 0xd800 && first <= 0xdbff && offset + 1 < source.length) {
+    final second = source.codeUnitAt(offset + 1);
+    if (second >= 0xdc00 && second <= 0xdfff) {
+      return source.substring(offset, offset + 2);
+    }
+  }
+  return source.substring(offset, offset + 1);
+}
+
+bool _isMarkdownWordCharacter(String character) =>
+    character.isNotEmpty &&
+    RegExp(r'[\p{L}\p{M}\p{N}_]', unicode: true).hasMatch(character);
+
+bool _isMarkdownWhitespace(String character) =>
+    character.isEmpty || RegExp(r'\s', unicode: true).hasMatch(character);
 
 bool _containsStrongEmphasis(Iterable<m.Node> nodes) {
   for (final node in nodes) {
