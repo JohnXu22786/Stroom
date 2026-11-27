@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:video_player/video_player.dart';
 
@@ -12,11 +13,19 @@ class MediaProbeResult {
 }
 
 class MediaProbe {
+  static const defaultTimeout = Duration(seconds: 10);
+
   /// Probe media metadata (duration, width, height) using VideoPlayerController.
   ///
   /// [url] can be a local file path or a network URL (http/https).
   /// Returns a [MediaProbeResult]; on failure returns empty result.
-  static Future<MediaProbeResult> probe(String url) async {
+  static Future<MediaProbeResult> probe(
+    String url, {
+    CancelToken? cancelToken,
+    Duration timeout = defaultTimeout,
+  }) async {
+    if (cancelToken?.isCancelled ?? false) return const MediaProbeResult();
+
     final isNetworkUrl =
         url.startsWith('http://') || url.startsWith('https://');
 
@@ -28,7 +37,15 @@ class MediaProbe {
     }
 
     try {
-      await controller.initialize();
+      final initialize = controller.initialize().timeout(timeout);
+      if (cancelToken == null) {
+        await initialize;
+      } else {
+        await Future.any<void>([
+          initialize,
+          cancelToken.whenCancel.then<void>((_) => throw _ProbeCancelled()),
+        ]);
+      }
       final result = MediaProbeResult(
         duration: controller.value.duration,
         width: controller.value.size.width.toInt(),
@@ -36,10 +53,20 @@ class MediaProbe {
       );
       return result;
     } catch (e) {
-      debugPrint('MediaProbe: failed to probe $url: $e');
+      if (e is! _ProbeCancelled) {
+        debugPrint('MediaProbe: failed to probe $url: $e');
+      }
       return const MediaProbeResult();
     } finally {
-      controller.dispose();
+      // A failed/abandoned initialize must not keep discovery blocked while
+      // the platform player is released.
+      try {
+        await controller.dispose().timeout(const Duration(seconds: 2));
+      } catch (e) {
+        debugPrint('MediaProbe: failed to dispose player for $url: $e');
+      }
     }
   }
 }
+
+class _ProbeCancelled implements Exception {}

@@ -1,8 +1,17 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/media_kind.dart';
 import '../models/media_resource.dart';
 import 'media_probe.dart';
 import 'executor_utils.dart';
+
+typedef MediaResourceProbe = Future<MediaProbeResult> Function(
+  String url, {
+  CancelToken? cancelToken,
+  required Duration timeout,
+});
 
 List<MediaResource> detectSplitTracks(List<MediaResource> media) {
   if (media.length < 2) return media;
@@ -138,19 +147,60 @@ String buildDurationFilterDetail(
 }
 
 Future<List<MediaResource>> probeMediaResources(
-    List<MediaResource> resources) async {
+  List<MediaResource> resources, {
+  CancelToken? cancelToken,
+  Duration probeTimeout = MediaProbe.defaultTimeout,
+  MediaResourceProbe? probe,
+}) async {
   if (kIsWeb) return resources;
 
+  final metadataProbe = probe ??
+      (String url, {CancelToken? cancelToken, required Duration timeout}) =>
+          MediaProbe.probe(url, cancelToken: cancelToken, timeout: timeout);
   final result = <MediaResource>[];
-  for (final res in resources) {
+  for (var index = 0; index < resources.length; index++) {
+    final res = resources[index];
+    if (cancelToken?.isCancelled ?? false) {
+      result.addAll(resources.skip(index));
+      break;
+    }
     if (res.isPlayable && (res.duration == null || res.width == null)) {
-      final probe = await MediaProbe.probe(res.url);
+      MediaProbeResult probeResult;
+      try {
+        final pending = metadataProbe(
+          res.url,
+          cancelToken: cancelToken,
+          timeout: probeTimeout,
+        ).timeout(probeTimeout);
+        if (cancelToken == null) {
+          probeResult = await pending;
+        } else {
+          probeResult = await Future.any<MediaProbeResult>([
+            pending,
+            cancelToken.whenCancel.then<MediaProbeResult>(
+              (_) => throw _MediaProbeCancelled(),
+            ),
+          ]);
+        }
+      } on TimeoutException {
+        probeResult = const MediaProbeResult();
+      } catch (_) {
+        if (cancelToken?.isCancelled ?? false) {
+          result.addAll(resources.skip(index));
+          break;
+        }
+        probeResult = const MediaProbeResult();
+      }
+      if (cancelToken?.isCancelled ?? false) {
+        result.addAll(resources.skip(index));
+        break;
+      }
       result.add(res.copyWith(
-        duration: probe.duration != null
-            ? formatExecutorDuration(probe.duration!)
+        duration: probeResult.duration != null
+            ? formatExecutorDuration(probeResult.duration!)
             : res.duration,
-        width: probe.width ?? res.width,
-        height: probe.height ?? res.height,
+        width: probeResult.width ?? res.width,
+        height: probeResult.height ?? res.height,
       ));
       continue;
     }
@@ -158,6 +208,8 @@ Future<List<MediaResource>> probeMediaResources(
   }
   return result;
 }
+
+class _MediaProbeCancelled implements Exception {}
 
 bool isSpecialFormat(String ext) {
   const specialFormats = {
