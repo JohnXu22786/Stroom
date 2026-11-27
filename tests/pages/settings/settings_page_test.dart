@@ -276,6 +276,61 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets(
+      'disposed notification settings page ignores pending permission request',
+      (tester) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    final permissionRequestStarted = Completer<void>();
+    final permissionRequest = Completer<Map<int, int>>();
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 0;
+      if (call.method == 'requestPermissions') {
+        permissionRequestStarted.complete();
+        return permissionRequest.future;
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(NotificationSettingsPage)),
+    )!;
+    await tester.tap(find.text(strings.notificationSettingsRequestPermission));
+    await permissionRequestStarted.future;
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    permissionRequest.complete(<int, int>{17: 1});
+    await tester.pump();
+
+    debugDefaultTargetPlatformOverride = null;
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('provisional iOS permission allows saving notification toggle',
       (tester) async {
     const permissionsChannel = MethodChannel(
