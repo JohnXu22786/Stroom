@@ -3,12 +3,16 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stroom/anki/apkg/apkg_importer.dart';
 import 'package:stroom/anki/apkg/apkg_result.dart';
 import 'package:stroom/anki/database/anki_database.dart';
+import 'package:stroom/anki/sync/anki_incremental_sync.dart';
+import 'package:stroom/anki/sync/anki_sync_destination_state.dart';
+import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -257,6 +261,78 @@ void main() {
       await documents.delete(recursive: true);
     }
   });
+
+  test(
+    'stores APKG collection modification time in sync epoch seconds',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_mod_seconds_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final sourcePath = '${documents.path}/source.anki2';
+      final collection = AnkiDatabase(basePath: documents.path);
+      final httpClient = _SingleResponseHttpClient();
+      final syncClient = AnkiSyncProtocolClient.ankiWeb(
+        client: httpClient,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await collection.open();
+        await _createCollection(sourcePath);
+        final packagePath = await _packageCollection(documents, sourcePath);
+
+        final importStartedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        await AnkiApkgImporter.import(packagePath);
+        final importFinishedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+        final col = (await collection.db.query('col')).single;
+        final modified = col['mod'] as int;
+        expect(modified, inInclusiveRange(importStartedAt, importFinishedAt));
+        final nowSeconds = importFinishedAt;
+
+        for (final field in ['models', 'decks']) {
+          final values =
+              jsonDecode(col[field] as String) as Map<String, dynamic>;
+          for (final value in values.values) {
+            if (value is Map) value['usn'] = 0;
+          }
+          await collection.db.update('col', {field: jsonEncode(values)});
+        }
+        await collection.db.update('deck_config', {'usn': 0});
+
+        await AnkiSyncDestinationState.mark(
+          collection.db,
+          syncClient.destinationIdentity,
+        );
+        httpClient.response = http.Response(
+          jsonEncode({
+            'mod': modified,
+            'scm': col['scm'],
+            'usn': col['usn'],
+            'ts': nowSeconds,
+            'msg': '',
+            'cont': true,
+            'hostNum': 1,
+            'empty': false,
+            'media_usn': 0,
+          }),
+          HttpStatus.ok,
+        );
+
+        final result = await AnkiIncrementalSync.sync(collection, syncClient);
+
+        expect(result.collectionChanged, isFalse);
+        expect(httpClient.requests, hasLength(1));
+      } finally {
+        syncClient.close();
+        await collection.close();
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
 
   test('links imported cards to newly imported notes', () async {
     final documents = await Directory.systemTemp.createTemp(
@@ -1423,6 +1499,26 @@ class _DocumentsPathProvider extends PathProviderPlatform {
 
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+class _SingleResponseHttpClient extends http.BaseClient {
+  http.Response? response;
+  final requests = <http.BaseRequest>[];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request);
+    final queuedResponse = response;
+    if (queuedResponse == null) {
+      throw StateError('No HTTP response was queued');
+    }
+    return http.StreamedResponse(
+      Stream<List<int>>.value(queuedResponse.bodyBytes),
+      queuedResponse.statusCode,
+      headers: queuedResponse.headers,
+      request: request,
+    );
+  }
 }
 
 Map<String, dynamic> _modelJson(
