@@ -613,6 +613,30 @@ void _expectOnlyKnownScaleThreeChromeOverflows(WidgetTester tester) {
     expect(tester.getSize(tab).height, 72);
     expect(tester.getSize(tabContent).height, 72);
     expect(tester.getSize(label).height, 60);
+    expect(
+      tester.getRect(label).bottom - tester.getRect(tab).bottom,
+      closeTo(14, 0.01),
+    );
+  }
+  final clearButton = find.byKey(const Key('file_picker_clear_btn'));
+  if (clearButton.evaluate().isNotEmpty) {
+    final clearLabel = find.descendant(
+      of: clearButton,
+      matching: find.byType(ConstrainedText),
+    );
+    final screenWidth =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final clearButtonRect = tester.getRect(clearButton);
+    final clearLabelRect = tester.getRect(clearLabel);
+    expect(clearButton, findsOneWidget);
+    expect(
+      clearButtonRect.right - screenWidth,
+      closeTo(66.9, 0.1),
+    );
+    expect(
+      clearLabelRect.right - clearButtonRect.right,
+      closeTo(-4, 0.01),
+    );
   }
   Object? exception;
   while ((exception = tester.takeException()) != null) {
