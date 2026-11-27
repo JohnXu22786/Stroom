@@ -514,10 +514,15 @@ void _resolveNameConflicts(
       results.where((r) => r.isChanged && r.error == null).toList();
   final keys = changing.map((r) => r.item.key).toSet();
   final occupied = <String>{};
-  String key(bool folder, String parent, String name) =>
-      '${folder ? 'd' : 'f'}\u0001$parent\u0001$name';
+  String key(bool folder, String parent, String name, {String format = ''}) {
+    final extension = folder ? '' : '\u0001${format.toLowerCase()}';
+    return '${folder ? 'd' : 'f'}\u0001$parent\u0001$name$extension';
+  }
+
   for (final f in allFiles) {
-    if (!keys.contains(f.key)) occupied.add(key(false, f.folder, f.name));
+    if (!keys.contains(f.key)) {
+      occupied.add(key(false, f.folder, f.name, format: f.format));
+    }
   }
   for (final f in allFolders) {
     if (!keys.contains('folder:$f'))
@@ -525,25 +530,54 @@ void _resolveNameConflicts(
           true, bridge.getParentFolderPath(f), bridge.getFolderBaseName(f)));
   }
   for (final r in results.where((r) => !keys.contains(r.item.key))) {
-    occupied.add(key(r.item.isFolder, r.item.folder, r.item.name));
+    occupied.add(key(
+      r.item.isFolder,
+      r.item.folder,
+      r.item.name,
+      format: r.item.format,
+    ));
   }
   // 优先保留本来无冲突的目标，避免新增后缀挤占另一个项目的目标。
   final reserved = changing
-      .map((r) => key(r.item.isFolder, r.item.folder, r.baseName))
+      .map((r) => key(
+            r.item.isFolder,
+            r.item.folder,
+            r.baseName,
+            format: r.item.format,
+          ))
       .toSet();
   for (final r in changing) {
     final base = r.baseName;
     var n = 2;
-    if (occupied.contains(key(r.item.isFolder, r.item.folder, r.baseName))) {
+    if (occupied.contains(key(
+      r.item.isFolder,
+      r.item.folder,
+      r.baseName,
+      format: r.item.format,
+    ))) {
       do {
         r.baseName = '$base (${n++})';
-      } while (occupied
-              .contains(key(r.item.isFolder, r.item.folder, r.baseName)) ||
-          reserved.contains(key(r.item.isFolder, r.item.folder, r.baseName)));
+      } while (occupied.contains(key(
+            r.item.isFolder,
+            r.item.folder,
+            r.baseName,
+            format: r.item.format,
+          )) ||
+          reserved.contains(key(
+            r.item.isFolder,
+            r.item.folder,
+            r.baseName,
+            format: r.item.format,
+          )));
       r.newDisplay = _displayName(r.item, r.baseName);
       r.error = _validateName(r.baseName, r.item.isFolder, bridge);
     }
-    occupied.add(key(r.item.isFolder, r.item.folder, r.baseName));
+    occupied.add(key(
+      r.item.isFolder,
+      r.item.folder,
+      r.baseName,
+      format: r.item.format,
+    ));
   }
 }
 
@@ -551,7 +585,8 @@ void _resolveNameConflicts(
 // 冲突检测
 // --------------------------------------------------------------------
 
-String _fileKey(String folder, String baseName) => '$folder\u0001$baseName';
+String _fileKey(String folder, String baseName, String format) =>
+    '$folder\u0001$baseName\u0001${format.toLowerCase()}';
 
 /// 计算全部文件夹的最终路径（键为原路径）。
 /// 改名的文件夹用新基础名；未改名的文件夹若祖先被改名则随级联移动。
@@ -597,20 +632,22 @@ void _detectFileConflicts(
   // 未选中文件按最终文件夹保留原有键
   for (final f in allFiles) {
     if (!selectedFileIds.contains(f.id)) {
-      countKey(_fileKey(resolvedFolder(f.folder), f.name));
+      countKey(_fileKey(resolvedFolder(f.folder), f.name, f.format));
     }
   }
   // 选中项的新键（未变化项即原键）
   for (final r in results) {
     if (!r.item.isFolder) {
-      countKey(_fileKey(resolvedFolder(r.item.folder), r.baseName));
+      countKey(
+          _fileKey(resolvedFolder(r.item.folder), r.baseName, r.item.format));
     }
   }
   // 只标记发生改名的项：未变化项不承担冲突提示（其名称保持有效）
   for (final r in results) {
     if (r.item.isFolder || !r.isChanged || r.error != null) continue;
-    if ((counts[_fileKey(resolvedFolder(r.item.folder), r.baseName)] ?? 0) >
-        1) {
+    final fileKey =
+        _fileKey(resolvedFolder(r.item.folder), r.baseName, r.item.format);
+    if ((counts[fileKey] ?? 0) > 1) {
       r.error = '同一文件夹内存在同名文件';
     }
   }
