@@ -398,6 +398,66 @@ void chatServiceStreamingGroup2() {
     });
   });
 
+  group('OpenAI audio attachment formats', () {
+    test('sends only MP3 and WAV input_audio parts', () async {
+      final attachments = [
+        for (final mimeType in [
+          'audio/mpeg',
+          'Audio/WAV; codecs=pcm',
+          'audio/ogg',
+          'audio/aac',
+          'audio/flac',
+          'audio/webm',
+          'audio/mp4',
+        ])
+          Attachment(
+            fileName: 'sample.${mimeType.split('/').last}',
+            mimeType: mimeType,
+            fileType: 'audio',
+            hash: mimeType,
+            storagePath: '/nonexistent',
+            fileSize: 4,
+          )..base64Data = 'AQIDBA==',
+      ];
+      final request = await const OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'user',
+            content: 'Listen',
+            attachments: attachments,
+          ),
+        ],
+      );
+
+      final parts = request.messages.single['content'] as List;
+      final audioParts = parts
+          .where((part) => (part as Map)['type'] == 'input_audio')
+          .cast<Map>()
+          .toList();
+      expect(audioParts, hasLength(2));
+      expect(audioParts.map((part) => (part['input_audio'] as Map)['format']), [
+        'mp3',
+        'wav',
+      ]);
+      final placeholders = parts
+          .where((part) => (part as Map)['type'] == 'text')
+          .cast<Map>()
+          .map((part) => part['text'] as String)
+          .where((text) => text.contains('不支持的音频格式'))
+          .toList();
+      expect(placeholders, hasLength(5));
+      for (final mimeType in [
+        'audio/ogg',
+        'audio/aac',
+        'audio/flac',
+        'audio/webm',
+        'audio/mp4',
+      ]) {
+        expect(placeholders.any((text) => text.contains(mimeType)), isTrue);
+      }
+    });
+  });
+
   group('imageExtension', () {
     test('returns correct extension for known MIME types', () {
       expect(imageExtension('image/png'), 'png');

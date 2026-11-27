@@ -98,6 +98,22 @@ class OpenAIProtocol implements ChatProtocol {
             });
           } else if (att.fileType == 'audio') {
             // ── Audio files: use input_audio format ──
+            final normalizedAudioMimeType =
+                att.mimeType.split(';').first.trim().toLowerCase();
+            if (!const {
+              'audio/mpeg',
+              'audio/mp3',
+              'audio/wav',
+              'audio/x-wav',
+              'audio/wave',
+            }.contains(normalizedAudioMimeType)) {
+              parts.add({
+                'type': 'text',
+                'text':
+                    '[OpenAI 不支持的音频格式已跳过: ${att.fileName} (${att.mimeType})]',
+              });
+              continue;
+            }
             final outcome = await readAttachmentBase64(att);
             switch (outcome.status) {
               case AttachmentReadStatus.tooLarge:
@@ -115,7 +131,8 @@ class OpenAIProtocol implements ChatProtocol {
               case AttachmentReadStatus.ok:
                 break;
             }
-            final audioFormat = audioFormatFromMimeType(att.mimeType);
+            final audioFormat =
+                audioFormatFromMimeType(normalizedAudioMimeType);
             parts.add({
               'type': 'input_audio',
               'input_audio': {

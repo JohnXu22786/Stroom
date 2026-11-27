@@ -297,7 +297,7 @@ void main() {
   });
 
   test(
-      'checkpoint audio MIME survives MP4 container classification and reaches input_audio',
+      'checkpoint audio MIME survives MP4 classification and is skipped by OpenAI',
       () async {
     final file =
         await File('${directory.path}/recording.mp4').writeAsBytes(_mp4Header);
@@ -315,13 +315,12 @@ void main() {
     final request =
         await const OpenAIProtocol().buildRequest(history: [message]);
     final parts = request.messages.single['content'] as List;
-    expect(parts.last['type'], 'input_audio');
-    expect(parts.last['input_audio']['format'], 'm4a');
-    expect(parts.last['input_audio']['data'], base64Encode(_mp4Header));
+    expect(parts.last['type'], 'text');
+    expect(parts.last['text'], contains('audio/mp4'));
+    expect(parts.last['text'], contains('不支持的音频格式'));
   });
 
-  test(
-      'CatCatch converted audio emits an audio MP4 payload for the chat pipeline',
+  test('CatCatch converted audio MP4 is skipped by the OpenAI protocol',
       () async {
     await ManifestDatabase.getAllAudioRecords();
     WebFileStore.disableTestMode();
@@ -375,8 +374,9 @@ void main() {
     final request =
         await const OpenAIProtocol().buildRequest(history: [message]);
     final parts = request.messages.single['content'] as List;
-    expect(parts.single['type'], 'input_audio');
-    expect(parts.single['input_audio']['format'], 'm4a');
+    expect(parts.single['type'], 'text');
+    expect(parts.single['text'], contains('audio/mp4'));
+    expect(parts.single['text'], contains('不支持的音频格式'));
   });
 
   test(
