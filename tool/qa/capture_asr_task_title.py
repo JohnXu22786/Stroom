@@ -30,7 +30,16 @@ def main():
         check=True,
     )
     server = subprocess.Popen(
-        ["python3", "-m", "http.server", "8878", "--directory", str(WEB)],
+        [
+            "python3",
+            "-m",
+            "http.server",
+            "8878",
+            "--bind",
+            "127.0.0.1",
+            "--directory",
+            str(WEB),
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
