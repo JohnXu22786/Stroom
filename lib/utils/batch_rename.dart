@@ -518,6 +518,7 @@ void _resolveNameConflicts(
     final extension = folder ? '' : '\u0001${format.toLowerCase()}';
     return '${folder ? 'd' : 'f'}\u0001$parent\u0001$name$extension';
   }
+
   for (final f in allFiles) {
     if (!keys.contains(f.key)) {
       occupied.add(key(false, f.folder, f.name, format: f.format));
@@ -556,13 +557,12 @@ void _resolveNameConflicts(
     ))) {
       do {
         r.baseName = '$base (${n++})';
-      } while (occupied
-              .contains(key(
-                r.item.isFolder,
-                r.item.folder,
-                r.baseName,
-                format: r.item.format,
-              )) ||
+      } while (occupied.contains(key(
+            r.item.isFolder,
+            r.item.folder,
+            r.baseName,
+            format: r.item.format,
+          )) ||
           reserved.contains(key(
             r.item.isFolder,
             r.item.folder,
@@ -645,8 +645,8 @@ void _detectFileConflicts(
   // 只标记发生改名的项：未变化项不承担冲突提示（其名称保持有效）
   for (final r in results) {
     if (r.item.isFolder || !r.isChanged || r.error != null) continue;
-    final fileKey = _fileKey(
-        resolvedFolder(r.item.folder), r.baseName, r.item.format);
+    final fileKey =
+        _fileKey(resolvedFolder(r.item.folder), r.baseName, r.item.format);
     if ((counts[fileKey] ?? 0) > 1) {
       r.error = '同一文件夹内存在同名文件';
     }
