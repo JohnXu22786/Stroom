@@ -94,11 +94,12 @@ class CustomTTSProvider extends BaseTTSProvider {
     String apiKey = '',
     String name = 'custom',
     Locale? locale,
+    @visibleForTesting Dio? dio,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
         _locale = locale,
-        _dio = Dio(BaseOptions(
+        _dio = dio ?? Dio(BaseOptions(
           baseUrl: '',
           headers: {
             'Content-Type': 'application/json',
@@ -222,6 +223,7 @@ class CustomTTSProvider extends BaseTTSProvider {
     final body = _buildBody(text, validated);
     body['stream'] = true;
 
+    var emittedData = false;
     try {
       final response = await _dio.post(
         _baseUrl,
@@ -230,9 +232,13 @@ class CustomTTSProvider extends BaseTTSProvider {
       );
       final stream = response.data.stream as Stream<Uint8List>;
       await for (final chunk in stream) {
-        if (chunk.isNotEmpty) yield chunk;
+        if (chunk.isNotEmpty) {
+          emittedData = true;
+          yield chunk;
+        }
       }
     } on DioException catch (e) {
+      if (emittedData) rethrow;
       debugPrint(
         'CustomTTSProvider: 流式失败，回退到非流式: ${e.message ?? e.toString()}',
       );
