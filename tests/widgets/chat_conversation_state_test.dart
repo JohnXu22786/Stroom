@@ -4,7 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/chat_conversation_state.dart';
 
-Widget _app(ChatConversationState state, {VoidCallback? onRetry}) =>
+Widget _app(
+  ChatConversationState state, {
+  VoidCallback? onRetry,
+  double height = 600,
+  double textScale = 1,
+}) =>
     MaterialApp(
       locale: const Locale('en'),
       supportedLocales: AppLocalizations.supportedLocales,
@@ -14,8 +19,17 @@ Widget _app(ChatConversationState state, {VoidCallback? onRetry}) =>
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
+      ),
       home: Scaffold(
-        body: ChatConversationStateView(state: state, onRetry: onRetry),
+        body: SizedBox(
+          height: height,
+          child: ChatConversationStateView(state: state, onRetry: onRetry),
+        ),
       ),
     );
 
@@ -50,6 +64,15 @@ void main() {
       );
       expect(indicatorSize.width, indicatorSize.height);
       expect(indicatorSize.width, lessThanOrEqualTo(40));
+      final stateRect = tester.getRect(find.byType(ChatConversationStateView));
+      final indicatorRect = tester.getRect(
+        find.byType(CircularProgressIndicator),
+      );
+      final labelRect = tester.getRect(find.text('Loading conversation…'));
+      expect(
+        (indicatorRect.top + labelRect.bottom) / 2,
+        closeTo(stateRect.center.dy, 1),
+      );
     },
   );
 
@@ -79,6 +102,62 @@ void main() {
       expect(find.text('Could not load this conversation.'), findsOneWidget);
       await tester.tap(find.text('Retry'));
       expect(retries, 1);
+    },
+  );
+
+  testWidgets(
+    'all chat states remain reachable in a short 4x text viewport',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      Future<void> pumpState(ChatConversationState state,
+          {VoidCallback? onRetry}) async {
+        await tester.pumpWidget(
+          _app(
+            state,
+            onRetry: onRetry,
+            height: 96,
+            textScale: 4,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.byType(SingleChildScrollView), findsOneWidget);
+      }
+
+      await pumpState(ChatConversationState.loading);
+      final loadingLabel = find.text('Loading conversation…');
+      await tester.ensureVisible(loadingLabel);
+      expect(loadingLabel, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await pumpState(ChatConversationState.empty);
+      final emptyLabel =
+          find.text('Start the conversation by sending a message.');
+      await tester.ensureVisible(emptyLabel);
+      expect(emptyLabel, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await pumpState(ChatConversationState.noConversation);
+      final noConversationLabel =
+          find.text('Choose or create a conversation to start chatting.');
+      await tester.ensureVisible(noConversationLabel);
+      expect(noConversationLabel, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      var retries = 0;
+      await pumpState(
+        ChatConversationState.loadFailed,
+        onRetry: () => retries++,
+      );
+      final retryButton = find.text('Retry');
+      await tester.ensureVisible(retryButton);
+      expect(find.text('Could not load this conversation.'), findsOneWidget);
+      await tester.tap(retryButton);
+      expect(retries, 1);
+      expect(tester.takeException(), isNull);
     },
   );
 }

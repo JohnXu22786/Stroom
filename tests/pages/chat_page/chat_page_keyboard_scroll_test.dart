@@ -76,6 +76,7 @@ Future<void> pumpChat(
   int messageCount = 60,
   TargetPlatform? platform,
   bool visible = true,
+  double textScale = 1,
 }) async {
   final messages = _testMessages(messageCount);
   SharedPreferences.setMockInitialValues({
@@ -117,6 +118,12 @@ Future<void> pumpChat(
           theme: platform == null
               ? null
               : ThemeData(platform: platform, useMaterial3: true),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: child!,
+          ),
           // In production ChatPage lives inside HomePage's Scaffold,
           // which strips viewInsets.bottom from the body's MediaQuery —
           // keyboard logic must therefore read the View directly. Keep
@@ -289,6 +296,34 @@ void main() {
         closeTo(saved, 1.0),
         reason: 'the keyboard closing must not move the list',
       );
+      await settle(tester);
+    });
+
+    testWidgets(
+        'the constrained large-text page layout keeps its chat position across keyboard insets',
+        (tester) async {
+      // Keep a 800x600 logical viewport as the test simulates a 300px keyboard.
+      tester.view.physicalSize = const Size(2400, 1800);
+      tester.view.devicePixelRatio = 3;
+      await pumpChat(tester, textScale: 4);
+
+      expect(find.byKey(const ValueKey('chat-page-header-scroll')),
+          findsOneWidget);
+      await scrollToBottom(tester);
+      await scrollUp(tester, amount: 400);
+      final savedPosition = _scrollPosition(tester).pixels;
+
+      await setKeyboardInset(tester, 300);
+      expect(find.byKey(const ValueKey('chat-page-header-scroll')),
+          findsOneWidget);
+      expect(_scrollPosition(tester).pixels, closeTo(savedPosition, 1));
+      expect(tester.takeException(), isNull);
+
+      await closeKeyboard(tester);
+      expect(find.byKey(const ValueKey('chat-page-header-scroll')),
+          findsOneWidget);
+      expect(_scrollPosition(tester).pixels, closeTo(savedPosition, 1));
+      expect(tester.takeException(), isNull);
       await settle(tester);
     });
 

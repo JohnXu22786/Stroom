@@ -635,6 +635,19 @@ extension _ChatPageUiExt on _ChatPageState {
         isTemporary ? conversation!.temporaryExpiresAt : null;
     final temporaryPausedRemaining =
         isTemporary ? conversation!.temporaryPausedRemainingMilliseconds : null;
+    final countdownText = temporaryPausedRemaining == null
+        ? formatTemporaryCountdown(
+            temporaryExpiresAt?.difference(DateTime.now()) ?? Duration.zero,
+          )
+        : formatTemporaryCountdown(
+            Duration(milliseconds: temporaryPausedRemaining));
+    final topBarInlineWidth = MediaQuery.sizeOf(context).width -
+        24 -
+        (Navigator.of(context).canPop() ? 48 : 0) -
+        96;
+    final stackCountdown = temporaryExpiresAt != null &&
+        TemporaryCountdownCapsule.measuredWidth(context, countdownText) + 64 >
+            topBarInlineWidth;
     final titleText = ConstrainedText(
       title,
       maxLines: 1,
@@ -661,7 +674,7 @@ extension _ChatPageUiExt on _ChatPageState {
             ? (_chatScrollController.offset / 160).clamp(0.0, 1.0).toDouble()
             : 0.0;
         return Container(
-          height: 48,
+          height: stackCountdown ? null : 48,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: Color.lerp(
@@ -673,7 +686,20 @@ extension _ChatPageUiExt on _ChatPageState {
               bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
             ),
           ),
-          child: child,
+          child: temporaryExpiresAt == null
+              ? child
+              : ResponsiveTemporaryCountdownHeader(
+                  row: child ?? const SizedBox.shrink(),
+                  stackCountdown: stackCountdown,
+                  countdown: TemporaryCountdownCapsule(
+                    key: ValueKey(conversation!.id),
+                    expiresAt: temporaryExpiresAt,
+                    pausedRemainingMilliseconds: temporaryPausedRemaining,
+                    animationKey: conversation!.temporaryExpiryRevision,
+                    animateOnMount: activatedTemporary,
+                    animateOnChange: true,
+                  ),
+                ),
         );
       },
       child: Row(
@@ -697,12 +723,12 @@ extension _ChatPageUiExt on _ChatPageState {
               child: Row(
                 children: [
                   // 临时对话倒计时胶囊（标题前）
-                  if (temporaryExpiresAt != null)
+                  if (temporaryExpiresAt != null && !stackCountdown)
                     TemporaryCountdownCapsule(
                       key: ValueKey(conversation!.id),
                       expiresAt: temporaryExpiresAt,
                       pausedRemainingMilliseconds: temporaryPausedRemaining,
-                      animationKey: conversation!.temporaryExpiryRevision,
+                      animationKey: conversation.temporaryExpiryRevision,
                       animateOnMount: activatedTemporary,
                       animateOnChange: true,
                     ),

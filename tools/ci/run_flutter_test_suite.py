@@ -105,6 +105,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/chat_conversation_state_test.dart",
         "widgets/temporary_conversation_confirmation_test.dart",
         "widgets/temporary_conversations_page_test.dart",
+        "qa/temporary_countdown_capture_test.dart",
         "widgets/reasoning*_test.dart",
         "widgets/tool_call_card_test.dart",
         "widgets/message_attachment_preview_test.dart",
