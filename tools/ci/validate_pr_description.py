@@ -171,6 +171,34 @@ def _contains_template_placeholder(content: str) -> bool:
     )
 
 
+def _ui_prose(content: str) -> str:
+    prose_lines: list[str] = []
+    for line in content.splitlines():
+        line = re.sub(r"^[ \t]*[-*+][ \t]+\[[ xX]\][ \t]*", "", line)
+        for template_sentence in (
+            "Searched shared widgets and all `lib/` / `packages/streaming_markdown/` "
+            "call sites; updated affected callers.",
+            "Added a representative screenshot/state when practical; preserved "
+            "intentional feature accents and the external math ownership boundary.",
+        ):
+            if line.startswith(template_sentence):
+                line = line[len(template_sentence) :].strip()
+                break
+        for template_label in (
+            "Screens/components affected:",
+            "Checked relevant validation and light/dark or responsive/layout state:",
+        ):
+            if line.startswith(template_label):
+                line = line[len(template_label) :]
+                break
+        prose_lines.append(line)
+
+    prose = "\n".join(prose_lines)
+    prose = PLACEHOLDER_PATTERN.sub("", prose)
+    prose = TEMPLATE_INSTRUCTION_PATTERN.sub("", prose)
+    return prose.strip()
+
+
 def validate_pr_body(body: str) -> list[str]:
     """Return formatting errors for a PR body; an empty list means it is valid."""
     if not body.strip():
@@ -281,6 +309,13 @@ def validate_pr_body(body: str) -> list[str]:
         ):
             errors.append(
                 f'The "{OPTIONAL_HEADING}" section must be written in English.'
+            )
+
+    if optional_ui_indices:
+        ui_content = _ui_prose(_section_content(lines, optional_ui_indices[0]))
+        if ui_content and not _is_english_prose(ui_content):
+            errors.append(
+                f'The "{OPTIONAL_UI_HEADING}" section must be written in English.'
             )
 
     return errors
