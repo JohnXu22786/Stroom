@@ -154,6 +154,14 @@ extension _HomePageNavigationExt on _HomePageState {
     }
   }
 
+  /// Resets any open folder in the Files tabs to the Files page root.
+  void _resetFilesFolders() {
+    ref.read(filesPageCurrentFolderProvider.notifier).state = '';
+    for (var tabIndex = 0; tabIndex < 4; tabIndex++) {
+      ref.read(fileTabFolderResetSignalProvider(tabIndex).notifier).state++;
+    }
+  }
+
   /// 构建侧边栏导航（用于较宽的横向屏幕）
   Widget _buildNavigationRail(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
@@ -168,6 +176,8 @@ extension _HomePageNavigationExt on _HomePageState {
           // Double-tap on same page → go to page's home/main state
           if (newPage == AppPage.chat) {
             _resetChatNavigator();
+          } else if (newPage == AppPage.files) {
+            _resetFilesFolders();
           }
         } else {
           // Different page → switch, preserving state
@@ -231,6 +241,8 @@ extension _HomePageNavigationExt on _HomePageState {
           // Double-tap on same page → go to page's home/main state
           if (newPage == AppPage.chat) {
             _resetChatNavigator();
+          } else if (newPage == AppPage.files) {
+            _resetFilesFolders();
           }
         } else {
           // Different page → switch, preserving state
