@@ -97,6 +97,23 @@ TextPainter _measureConstrainedText(WidgetTester tester, Finder finder) {
   )..layout();
 }
 
+void _expectPickerTitleVisible(WidgetTester tester, String label) {
+  final appBar = find.byType(AppBar);
+  expect(appBar, findsOneWidget);
+  expect(find.bySemanticsLabel(label), findsOneWidget);
+  final title = find
+      .descendant(
+        of: appBar,
+        matching: find.byType(ConstrainedText),
+      )
+      .first;
+  final appBarRect = tester.getRect(appBar);
+  final titleRect = tester.getRect(title);
+  expect(titleRect.width, greaterThan(0));
+  expect(titleRect.height, greaterThan(0));
+  expect(appBarRect.contains(titleRect.center), isTrue);
+}
+
 void main() {
   setUpAll(_loadCaptureFonts);
 
@@ -152,6 +169,7 @@ void main() {
         tester,
         '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-en-320x640-scale3-$name.png',
       );
+      _expectPickerTitleVisible(tester, 'Choose files');
 
       for (final (type, label) in [
         ('image', 'Images'),
@@ -338,7 +356,7 @@ void main() {
       '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-de-DE-320x640-scale3-light.png',
     );
 
-    expect(find.bySemanticsLabel('Dateien auswählen'), findsOneWidget);
+    _expectPickerTitleVisible(tester, 'Dateien auswählen');
     const germanClearLabel = 'Auswahl aufheben (1)';
     expect(find.bySemanticsLabel(germanClearLabel), findsOneWidget);
     final clearButton = find.byKey(const Key('file_picker_clear_btn'));
@@ -553,6 +571,76 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   });
 
+  testWidgets('German picker title reveals its trailing text at large scale', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await TextManifest.writeText('picker-chrome-note.txt', 'safe fixture');
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'picker-chrome-note',
+          hash: 'picker-chrome-note',
+          size: 12,
+          createdAt: DateTime(2026, 11, 27),
+        ),
+      );
+      TextManifest.invalidateCache();
+    });
+
+    final textScale = ValueNotifier(1.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: textScale,
+      locale: const Locale('de', 'DE'),
+      selectFile: false,
+    );
+    tester.view.physicalSize = const Size(320, 640);
+    textScale.value = 3;
+    await tester.pumpAndSettle();
+
+    const titleTextLabel = 'Dateien auswählen';
+    _expectPickerTitleVisible(tester, titleTextLabel);
+    final appBar = find.byType(AppBar);
+    final title = find
+        .descendant(
+          of: appBar,
+          matching: find.byType(ConstrainedText),
+        )
+        .first;
+    final titleText = find.descendant(
+      of: title,
+      matching: find.text(titleTextLabel),
+    );
+    expect(titleText, findsOneWidget);
+    final titlePainter = _measureConstrainedText(tester, title);
+    final titleSlotWidth = tester.getSize(title).width;
+    expect(titlePainter.width, greaterThan(titleSlotWidth));
+
+    final initialTextX = tester.getTopLeft(titleText).dx;
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.getTopLeft(titleText).dx, closeTo(initialTextX, 0.01));
+    final titleTravel = Duration(
+      milliseconds: ((titlePainter.width - titleSlotWidth) / 24 * 1000).round(),
+    );
+    await tester.pump(titleTravel + const Duration(milliseconds: 20));
+
+    final titleClip =
+        find.ancestor(of: titleText, matching: find.byType(ClipRect)).first;
+    expect(
+      tester.getRect(titleText).right,
+      closeTo(tester.getRect(titleClip).right, 2),
+    );
+    await _expectScreenshot(
+      tester,
+      '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-de-DE-320x640-scale3-title-end.png',
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    textScale.dispose();
+  });
+
   testWidgets('large text picker switches to scroll when keyboard is shown', (
     tester,
   ) async {
@@ -594,6 +682,7 @@ void main() {
       find.byKey(const Key('file_picker_short_viewport_scroll')),
       findsOneWidget,
     );
+    _expectPickerTitleVisible(tester, 'Choose files');
     await _expectScreenshot(
       tester,
       '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-en-320x640-scale3-keyboard-light.png',

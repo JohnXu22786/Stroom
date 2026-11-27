@@ -14,6 +14,7 @@ logical pixels.
 | After | en-US | 320 × 640 | 1 | 3× | Dark | [Dark theme](chat-file-picker-en-320x640-scale3-dark.png) |
 | After | en-US | 568 × 320 | 1 | 3× | Light | [Short landscape layout](chat-file-picker-en-568x320-scale3-light.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Longer German labels](chat-file-picker-de-DE-320x640-scale3-light.png) |
+| After, title reveal endpoint | de-DE | 320 × 640 | 1 | 3× | Light | [Title tail endpoint](chat-file-picker-de-DE-320x640-scale3-title-end.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Clear label at full-text endpoint](chat-file-picker-de-DE-320x640-scale3-clear-end.png) |
 | Browser route | de-DE | 320 × 640 | 1 | 3× | Light | [Clear head/start](chat-file-picker-de-DE-320x640-scale3-clear-head-browser.png) · [tail endpoint](chat-file-picker-de-DE-320x640-scale3-clear-tail-browser.png) · [return to head](chat-file-picker-de-DE-320x640-scale3-clear-return-browser.png) |
 
@@ -41,7 +42,14 @@ At 1×, the original inline AppBar actions and icon tab layout remain in place.
 At 3× on a narrow viewport, the clear action gets its own row and the four tabs
 reflow to a text-first two-column layout. The full tab labels fit without
 motion; the selected tab keeps its primary-color underline. The production
-route test checks all four labels and their semantics, verifies tab selection
+route test verifies that the title is visibly rendered inside the AppBar at
+320 × 640/3×, including after applying the keyboard inset; the normal and
+keyboard captures both show the title above the tabs. The en-US title fits the
+slot in these frames. The longer German title remains visibly in the AppBar,
+retains its full semantics, and reveals through the existing bounded
+`ConstrainedText` behavior; the title-tail capture and route test verify the
+trailing text reaches the clip edge. The route test checks all four labels and
+their semantics, verifies tab selection
 and the active page after each tap, clears the selection, and checks that the
 layout reports no rendering exception. Short 568 × 320 and 568 × 401 landscape
 cases check that the selected file list, Clear action, preview and confirmation
