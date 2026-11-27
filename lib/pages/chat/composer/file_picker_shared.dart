@@ -120,11 +120,6 @@ class PreviewChip extends StatelessWidget {
             Container(
               height: isImage ? 72 : null,
               constraints: isImage ? null : const BoxConstraints(minHeight: 72),
-              padding: isImage
-                  ? null
-                  : const EdgeInsets.symmetric(
-                      vertical: _fileChipBorderWidth,
-                    ),
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(8),
