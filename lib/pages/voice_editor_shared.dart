@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -115,46 +117,126 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                 itemBuilder: (context, i) {
                   final dupIdx = _pending[i];
                   final entry = _working[dupIdx];
+                  final indexText = '${i + 1}.';
+                  final theme = Theme.of(context);
+                  final buttonStyle = TextButtonTheme.of(context).style;
+                  final buttonStates = const <WidgetState>{};
+                  final buttonTextStyle =
+                      buttonStyle?.textStyle?.resolve(buttonStates) ??
+                      theme.textTheme.labelLarge ??
+                      const TextStyle(fontSize: 14);
+                  final buttonPadding =
+                      buttonStyle?.padding?.resolve(buttonStates) ??
+                      const EdgeInsets.symmetric(horizontal: 16);
+                  final buttonMinWidth =
+                      buttonStyle?.minimumSize?.resolve(buttonStates)?.width ??
+                      64;
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  double buttonWidth(String label) {
+                    final painter = TextPainter(
+                      text: TextSpan(text: label, style: buttonTextStyle),
+                      textDirection: Directionality.of(context),
+                      textScaler: textScaler,
+                    )..layout();
+                    return math.max(
+                      buttonMinWidth,
+                      painter.width + buttonPadding.horizontal,
+                    );
+                  }
+
+                  final indexPainter = TextPainter(
+                    text: TextSpan(
+                      text: indexText,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    textDirection: Directionality.of(context),
+                    textScaler: textScaler,
+                  )..layout();
+                  final minInlineWidth =
+                      math.max(28, indexPainter.width) +
+                      buttonWidth(l10n.update) +
+                      buttonWidth(l10n.skip) +
+                      8 +
+                      48;
+
+                  Widget indexLabel() => ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 28),
+                    child: Text(
+                      indexText,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  );
+
+                  Widget voiceIdLabel() => Text(
+                    entry.id,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  );
+
+                  List<Widget> actionButtonChildren() => [
+                    TextButton(
+                      onPressed: () => _handleUpdate(i),
+                      child: ConstrainedText(
+                        l10n.update,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton(
+                      onPressed: () => _handleSkip(i),
+                      child: ConstrainedText(
+                        l10n.skip,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ];
+
+                  Widget actionButtons() => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: actionButtonChildren(),
+                  );
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 28),
-                          child: Text(
-                            '${i + 1}.',
-                            maxLines: 1,
-                            softWrap: false,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            entry.id,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _handleUpdate(i),
-                          child: ConstrainedText(
-                            l10n.update,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        TextButton(
-                          onPressed: () => _handleSkip(i),
-                          child: ConstrainedText(
-                            l10n.skip,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < minInlineWidth) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  indexLabel(),
+                                  const SizedBox(width: 4),
+                                  Expanded(child: voiceIdLabel()),
+                                ],
+                              ),
+                              Align(
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: OverflowBar(
+                                  alignment: MainAxisAlignment.end,
+                                  spacing: 4,
+                                  overflowAlignment: OverflowBarAlignment.end,
+                                  children: actionButtonChildren(),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            indexLabel(),
+                            Expanded(child: voiceIdLabel()),
+                            actionButtons(),
+                          ],
+                        );
+                      },
                     ),
                   );
                 },

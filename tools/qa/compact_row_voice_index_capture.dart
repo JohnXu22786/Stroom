@@ -15,6 +15,9 @@ class _CaptureApp extends StatelessWidget {
     final locale = Locale(query['locale'] ?? 'fr');
     final count = int.tryParse(query['count'] ?? '') ?? 1;
     final scale = double.tryParse(query['scale'] ?? '') ?? 1;
+    final brightness = query['theme'] == 'dark'
+        ? Brightness.dark
+        : Brightness.light;
     return MaterialApp(
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -24,7 +27,11 @@ class _CaptureApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
+      theme: ThemeData(
+        colorSchemeSeed: Colors.blue,
+        useMaterial3: true,
+        brightness: brightness,
+      ),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context)
             .copyWith(textScaler: TextScaler.linear(scale)),

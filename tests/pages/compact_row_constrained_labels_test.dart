@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -124,13 +126,14 @@ void main() {
         .ancestor(of: index, matching: find.byType(ConstrainedBox))
         .first;
     expect(tester.getSize(prefix).width, closeTo(28, 1));
+    expect(find.byType(OverflowBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('large duplicate index stays on one line and grows past 28dp', (
     tester,
   ) async {
-    _setViewport(tester, const Size(1000, 1200), scale: 2);
+    _setViewport(tester, const Size(440, 932), scale: 2);
     await tester.pumpWidget(_voiceDialog(count: 1234));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -152,6 +155,33 @@ void main() {
     expect(tester.getSize(index).height, lessThan(60));
     expect(find.text('Mettre à jour'), findsWidgets);
     expect(find.text('Ignorer'), findsWidgets);
+    expect(find.byType(OverflowBar), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow Arabic duplicate actions stay on the RTL trailing edge', (
+    tester,
+  ) async {
+    _setViewport(tester, const Size(440, 932), scale: 2);
+    await tester.pumpWidget(_voiceDialog(count: 1, locale: const Locale('ar')));
+    await tester.pumpAndSettle();
+
+    final actionBar = find.byType(OverflowBar).first;
+    expect(actionBar, findsOneWidget);
+    expect(find.byType(TextButton), findsNWidgets(2));
+    final actionButtons = find.byType(TextButton);
+    final left = math.min(
+      tester.getRect(actionButtons.at(0)).left,
+      tester.getRect(actionButtons.at(1)).left,
+    );
+    final right = math.max(
+      tester.getRect(actionButtons.at(0)).right,
+      tester.getRect(actionButtons.at(1)).right,
+    );
+    expect(
+      (left + right) / 2,
+      lessThan(tester.getCenter(find.byType(DuplicateResolveDialog)).dx),
+    );
     expect(tester.takeException(), isNull);
   });
 }

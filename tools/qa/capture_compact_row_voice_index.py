@@ -72,26 +72,52 @@ try:
         page = browser.new_page(
             viewport={"width": 600, "height": 640},
             device_scale_factor=1,
-            reduced_motion="no-preference",
+            reduced_motion="reduce",
         )
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.goto(f"{URL}?locale=fr&scale=1&count=1", wait_until="load", timeout=120_000)
-        wait_for_rendered_flutter(page)
-        page.wait_for_timeout(300)
-        (OUTPUT / "voice-index-fitting-1x.png").write_bytes(page.screenshot())
+        for theme in ("light", "dark"):
+            page.set_viewport_size({"width": 600, "height": 640})
+            page.goto(
+                f"{URL}?locale=fr&scale=1&count=1&theme={theme}",
+                wait_until="load",
+                timeout=120_000,
+            )
+            wait_for_rendered_flutter(page)
+            page.wait_for_timeout(300)
+            suffix = "-dark" if theme == "dark" else ""
+            (OUTPUT / f"voice-index-fitting-1x{suffix}.png").write_bytes(
+                page.screenshot()
+            )
 
-        page.set_viewport_size({"width": 1000, "height": 1200})
-        page.goto(
-            f"{URL}?locale=fr&scale=2&count=1234",
-            wait_until="load",
-            timeout=120_000,
-        )
-        wait_for_rendered_flutter(page)
-        page.wait_for_timeout(300)
-        page.mouse.move(500, 600)
-        page.mouse.wheel(0, 2_000_000)
-        page.wait_for_timeout(1000)
-        (OUTPUT / "voice-index-scaled-high-count-2x.png").write_bytes(page.screenshot())
+            page.set_viewport_size({"width": 1000, "height": 1200})
+            page.goto(
+                f"{URL}?locale=fr&scale=2&count=1234&theme={theme}",
+                wait_until="load",
+                timeout=120_000,
+            )
+            wait_for_rendered_flutter(page)
+            page.wait_for_timeout(300)
+            page.mouse.move(500, 600)
+            page.mouse.wheel(0, 2_000_000)
+            page.wait_for_timeout(1000)
+            (OUTPUT / f"voice-index-scaled-high-count-2x{suffix}.png").write_bytes(
+                page.screenshot()
+            )
+
+            page.set_viewport_size({"width": 440, "height": 932})
+            page.goto(
+                f"{URL}?locale=fr&scale=2&count=1234&theme={theme}",
+                wait_until="load",
+                timeout=120_000,
+            )
+            wait_for_rendered_flutter(page)
+            page.wait_for_timeout(300)
+            page.mouse.move(220, 460)
+            page.mouse.wheel(0, 2_000_000)
+            page.wait_for_timeout(1000)
+            (OUTPUT / f"voice-index-scaled-narrow-2x{suffix}.png").write_bytes(
+                page.screenshot()
+            )
         browser.close()
 
     if errors:
@@ -102,4 +128,4 @@ finally:
     server_log.close()
     SERVER_LOG.unlink(missing_ok=True)
 
-print("Captured French voice duplicate resolution at 1× fitting and 2× high count.")
+print("Captured French voice duplicate resolution at fitting, wide, and narrow scales in light and dark themes.")
