@@ -369,29 +369,93 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: task.progress / 100.0,
-                          strokeWidth: 3,
-                          color: statusColor,
-                          backgroundColor: colorScheme.outlineVariant,
-                        ),
-                        Text(
-                          '${task.progress}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Builder(builder: (context) {
+                    final progressLabel = '${task.progress}%';
+                    final progressLabelStyle = TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    );
+                    final labelPainter = TextPainter(
+                      text: TextSpan(
+                        text: progressLabel,
+                        style: progressLabelStyle,
+                      ),
+                      textDirection: Directionality.of(context),
+                      textScaler: MediaQuery.textScalerOf(context),
+                    )..layout();
+                    final labelNeedsRoom =
+                        labelPainter.width > 40 || labelPainter.height > 40;
+                    final indicatorWidth =
+                        labelNeedsRoom ? 42 + labelPainter.width : 40.0;
+                    final indicatorHeight =
+                        labelPainter.height > 40 ? labelPainter.height : 40.0;
+                    final animateSize =
+                        !MediaQuery.disableAnimationsOf(context) &&
+                            TickerMode.valuesOf(context).enabled;
+
+                    return AnimatedSize(
+                      alignment: Alignment.centerRight,
+                      duration: animateSize
+                          ? const Duration(milliseconds: 180)
+                          : Duration.zero,
+                      curve: Curves.easeOut,
+                      clipBehavior: Clip.none,
+                      child: SizedBox(
+                        width: indicatorWidth,
+                        height: indicatorHeight,
+                        child: labelNeedsRoom
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: CircularProgressIndicator(
+                                      value: task.progress / 100.0,
+                                      strokeWidth: 3,
+                                      color: statusColor,
+                                      backgroundColor:
+                                          colorScheme.outlineVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  SizedBox(
+                                    width: labelPainter.width,
+                                    child: Text(
+                                      progressLabel,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: progressLabelStyle,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: CircularProgressIndicator(
+                                      value: task.progress / 100.0,
+                                      strokeWidth: 3,
+                                      color: statusColor,
+                                      backgroundColor:
+                                          colorScheme.outlineVariant,
+                                    ),
+                                  ),
+                                  Text(
+                                    progressLabel,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: progressLabelStyle,
+                                  ),
+                                ],
+                              ),
+                      ),
+                    );
+                  }),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0.0,
