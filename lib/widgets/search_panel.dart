@@ -22,8 +22,25 @@ class SearchPanel extends StatefulWidget {
 
 class _SearchPanelState extends State<SearchPanel> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   bool _searchByContent = false;
+  bool _searchHovered = false;
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(_handleSearchFocusChange);
+  }
+
+  void _handleSearchFocusChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _handleSearchHover(bool hovered) {
+    if (_searchHovered == hovered) return;
+    setState(() => _searchHovered = hovered);
+  }
 
   List<Conversation> _filteredConversations(String query) {
     if (query.isEmpty) return [];
@@ -48,12 +65,40 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode
+      ..removeListener(_handleSearchFocusChange)
+      ..dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final searchHint = AppLocalizations.of(context)!.searchPanelHint;
+    final searchHintStates = <WidgetState>{
+      if (_searchFocusNode.hasFocus) WidgetState.focused,
+      if (_searchHovered) WidgetState.hovered,
+    };
+    final searchHintBaseStyle = theme.useMaterial3
+        ? theme.textTheme.bodyLarge ??
+            theme.textTheme.bodyMedium ??
+            const TextStyle()
+        : theme.textTheme.titleMedium ??
+            theme.textTheme.bodyMedium ??
+            const TextStyle();
+    final searchHintStyle = searchHintBaseStyle
+        .merge(
+          TextStyle(
+            color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
+          ),
+        )
+        .merge(
+          WidgetStateProperty.resolveAs(
+            InputDecorationTheme.of(context).hintStyle,
+            searchHintStates,
+          ),
+        );
     final query = _query.trim().toLowerCase();
     final filtered = _filteredConversations(query);
 
@@ -106,25 +151,44 @@ class _SearchPanelState extends State<SearchPanel> {
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: AppLocalizations.of(context)!.searchPanelHint,
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(
-                      alpha: 0.3,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                child: Semantics(
+                  hint: searchHint,
+                  child: MouseRegion(
+                    onEnter: (_) => _handleSearchHover(true),
+                    onExit: (_) => _handleSearchHover(false),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: TickerMode(
+                            enabled: _query.isEmpty,
+                            child: ConstrainedText(
+                              searchHint,
+                              key: ValueKey(_query.isEmpty),
+                              style: searchHintStyle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        filled: true,
+                        fillColor: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.3,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
                     ),
                   ),
-                  onChanged: (value) => setState(() => _query = value),
                 ),
               ),
               const SizedBox(height: 12),
