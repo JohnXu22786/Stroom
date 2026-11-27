@@ -6,6 +6,11 @@ lines. The chip keeps its original 72 dp minimum size, width, centering, and
 remove action. Text beyond three lines continues to use the existing vertical
 `ConstrainedText` reveal.
 
+These production captures were refreshed after syncing the candidate with
+`main` at `b4772e1735ea5b37c16889f64d2eaa6647322e16`. The 33 focused media
+picker widget tests, targeted analyzer, Dart 3.0 format check, Python capture
+script compile, and diff check passed on that synced candidate.
+
 The captures use a 320 × 640 CSS-pixel viewport, DPR 1, light Material 3 theme,
 and local in-memory records only:
 
@@ -27,8 +32,9 @@ The 27-second WebM starts with the label stationary, shows the forward reveal,
 the two-second endpoint pause, and the reverse reveal back to the start. The
 static 2× image shows the clipped state with reduced motion enabled.
 
-The before capture uses the unchanged base commit and the same `one two three`
-fixture. It shows only `one` and `two` in the 72 dp chip. The after capture
+The before capture uses base `fa9e99c7` and the same `one two three` fixture.
+The production media-picker source in current `main` is unchanged from that
+base. The capture shows only `one` and `two` in the 72 dp chip. The after capture
 shows all three lines in a 96 dp surface. At 2×, the measured line boxes total
 87 dp; 4 dp of vertical padding on both sides plus a 1 dp border allowance
 leaves 87 dp for the text. The chip remains 72 dp wide and its remove action

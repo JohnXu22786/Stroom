@@ -74,8 +74,15 @@ def open_selected_picker(browser, fixture, scale, static):
             "element => element.click()"
         )
     page.mouse.click(160, 320)
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(1500)
     page.mouse.click(160, 95)
+    page.wait_for_timeout(400)
+    selected_capture = Image.open(BytesIO(page.screenshot())).convert("RGB")
+    if (
+        selected_capture.getpixel((310, 500))
+        == selected_capture.getpixel((310, 430))
+    ):
+        raise RuntimeError("The local record was not selected before capture")
     page.mouse.move(300, 520)
     page.wait_for_timeout(150)
     if page.evaluate("devicePixelRatio") != 1:
