@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -732,9 +733,19 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
     // File icon builder
     Widget fileIconBuilder(TextRecord file) {
+      const textStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12);
+      final painter = TextPainter(
+        text: TextSpan(text: file.format.toUpperCase(), style: textStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: 44);
       return Container(
+        key: Key('text-storage-format-badge-${file.id}'),
         width: 44,
-        height: 44,
+        constraints: BoxConstraints(minHeight: math.max(44, painter.height)),
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
@@ -745,10 +756,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             file.format.toUpperCase(),
             textAlign: TextAlign.center,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+            overflow: TextOverflow.clip,
+            style: textStyle.copyWith(
               color: Theme.of(context).colorScheme.primary,
             ),
           ),
@@ -759,6 +768,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     // FileManagerConfig
     final config = FileManagerConfig<TextRecord>(
       title: AppLocalizations.of(context)!.textStorageTitle,
+      allowFileIconExpansion: true,
       topActionBar: topActionBar,
       showThumbnailToggle: false,
       fileIconBuilder: fileIconBuilder,

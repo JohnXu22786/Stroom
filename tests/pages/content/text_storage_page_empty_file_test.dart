@@ -183,31 +183,29 @@ void main() {
       id: 'format-label',
       name: 'format-label',
       hash: 'format-label-hash',
-      format: 'mmd',
+      format: 'html',
       createdAt: DateTime.utc(2024),
       size: 0,
     );
     await TextManifest.addRecord(record);
 
-    await tester.pumpWidget(
-      _buildApp(),
-    );
+    await tester.pumpWidget(_buildApp());
     await tester.pumpAndSettle();
 
     final label = find.byWidgetPredicate(
-      (widget) => widget is ConstrainedText && widget.data == 'MMD',
+      (widget) => widget is ConstrainedText && widget.data == 'HTML',
     );
     expect(label, findsOneWidget);
-    expect(tester.getSize(label).width, lessThan(44));
-    expect(find.text('MMD'), findsOneWidget);
+    expect(tester.getSize(label).width, lessThanOrEqualTo(44));
+    expect(find.text('HTML'), findsOneWidget);
     expect(find.byType(FittedBox), findsNothing);
-    final start = tester.getTopLeft(find.text('MMD'));
+    final start = tester.getTopLeft(find.text('HTML'));
     await tester.pump(const Duration(seconds: 3));
-    expect(tester.getTopLeft(find.text('MMD')), start);
+    expect(tester.getTopLeft(find.text('HTML')), start);
 
     for (final locale in [const Locale('en'), const Locale('de')]) {
       for (final themeMode in [ThemeMode.light, ThemeMode.dark]) {
-        for (final scale in [1.0, 2.0]) {
+        for (final scale in [1.0, 2.0, 4.0]) {
           await tester.pumpWidget(
             _buildApp(
               locale: locale,
@@ -217,7 +215,36 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(label, findsOneWidget);
-          expect(find.text('MMD'), findsOneWidget);
+          expect(find.text('HTML'), findsOneWidget);
+          final badge = find.byKey(
+            const Key('text-storage-format-badge-format-label'),
+          );
+          expect(badge, findsOneWidget);
+          final badgeSize = tester.getSize(badge);
+          if (scale == 1) {
+            expect(badgeSize, const Size(60, 60));
+          } else if (scale == 4) {
+            final text = tester.widget<Text>(find.text('HTML'));
+            expect(text.overflow, TextOverflow.clip);
+            final painter = TextPainter(
+              text: TextSpan(text: 'HTML', style: text.style),
+              textDirection: TextDirection.ltr,
+              textScaler: TextScaler.linear(scale),
+              locale: locale,
+              maxLines: 1,
+              ellipsis: '…',
+            )..layout(maxWidth: 44);
+            expect(badgeSize.width, 60);
+            expect(badgeSize.height, greaterThanOrEqualTo(painter.height + 16));
+
+            final badgeRect = tester.getRect(badge);
+            final nameRect = tester.getRect(find.text('format-label.html'));
+            final actionRect = tester.getRect(
+              find.byKey(const Key('fm_file_popup_format-label')),
+            );
+            expect(nameRect.left, greaterThanOrEqualTo(badgeRect.right));
+            expect(nameRect.right, lessThanOrEqualTo(actionRect.left));
+          }
         }
       }
     }
