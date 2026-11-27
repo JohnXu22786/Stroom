@@ -761,6 +761,109 @@ $$
   });
 
   group('MarkdownGenerator.buildPlainTextPreview - Markdown constructs', () {
+    test('renders underscore bold while preserving ordinary long text', () {
+      final emphasized = markdownGenerator.buildPlainTextPreview([
+        'prefix ' * 1000 + '__important__',
+      ]);
+      final emphasizedSpans = [
+        for (final widget in emphasized)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      final boldSpan = emphasizedSpans
+          .map((span) => _leafSpanWithText(span, 'important'))
+          .whereType<TextSpan>()
+          .firstOrNull;
+
+      expect(boldSpan?.style?.fontWeight, FontWeight.bold);
+      expect(
+        emphasizedSpans.map((span) => span.toPlainText()).join(),
+        isNot(contains('__')),
+      );
+
+      final ordinaryText =
+          'ordinary module__name `__module__` `a `` __nested__ b` ' *
+              1000;
+      var parsedNodeCount = 0;
+      final previewGenerator = MarkdownGenerator(
+        onNodeAccepted: (node, index) => parsedNodeCount++,
+      );
+      final ordinary = previewGenerator.buildPlainTextPreview([ordinaryText]);
+      final ordinarySpan = (ordinary.single as Padding).child as Text;
+      expect(ordinarySpan.textSpan?.toPlainText(), ordinaryText);
+      expect(parsedNodeCount, 0);
+
+      const unclosedFence = '```\n__fenced__';
+      final fencedPreview = previewGenerator.buildPlainTextPreview([
+        unclosedFence,
+      ]);
+      expect(
+        ((fencedPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unclosedFence,
+      );
+      expect(parsedNodeCount, 0);
+
+      const escapedBackticks = r'\` __escaped__ \`';
+      final escapedPreview = previewGenerator.buildPlainTextPreview([
+        escapedBackticks,
+      ]);
+      final escapedSpan = (_unwrapLinkRecognizerLifecycle(
+        (escapedPreview.single as Padding).child!,
+      ) as Text)
+          .textSpan!;
+      expect(
+        _leafSpanWithText(escapedSpan, 'escaped')?.style?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      const escapedDelimiterInCode = r'`foo\` __inside__`';
+      final escapedDelimiterPreview = previewGenerator.buildPlainTextPreview([
+        escapedDelimiterInCode,
+      ]);
+      final escapedDelimiterSpan = _unwrapLinkRecognizerLifecycle(
+        (escapedDelimiterPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(escapedDelimiterSpan.textSpan!, 'inside')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      const invalidFenceInfo = '```lang`\n__valid__';
+      final invalidFencePreview = previewGenerator.buildPlainTextPreview([
+        invalidFenceInfo,
+      ]);
+      final invalidFenceSpan = _unwrapLinkRecognizerLifecycle(
+        (invalidFencePreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(invalidFenceSpan.textSpan!, 'valid')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
+      const quotedCode =
+          '>     __literal__\n>\n> ```\n> __quoted__\n> ```';
+      final quotedCodePreview = previewGenerator.buildPlainTextPreview([
+        quotedCode,
+      ]);
+      expect(
+        ((quotedCodePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        quotedCode,
+      );
+      expect(parsedNodeCount, 0);
+    });
+
     test('renders display math and bold in the bounded streaming preview', () {
       final widgets = markdownGenerator.buildPlainTextPreview(
         [
