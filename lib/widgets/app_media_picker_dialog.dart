@@ -741,6 +741,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     final style = DefaultTextStyle.of(context).style.merge(
           TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
         );
+    // The 0.5 dp border and 4 dp padding leave 63 dp from the 72 dp chip.
     final painter = TextPainter(
       text: TextSpan(text: label, style: style),
       textDirection: Directionality.of(context),

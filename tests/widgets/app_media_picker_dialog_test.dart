@@ -199,6 +199,7 @@ void main() {
         )..layout(maxWidth: 63);
         final threeLineMetrics = threeLinePainter.computeLineMetrics();
         expect(threeLineMetrics.length, greaterThanOrEqualTo(3));
+        expect(tester.getSize(threeLineText).width, 63);
         final fittingText = find.descendant(
           of: previewList,
           matching: find.byWidgetPredicate(
