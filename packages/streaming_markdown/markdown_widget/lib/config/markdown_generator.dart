@@ -246,6 +246,20 @@ String _withoutMarkdownCode(String source) {
 
   final sourceWithoutFences = String.fromCharCodes(codeUnits);
   final runs = RegExp(r'`+').allMatches(sourceWithoutFences).toList();
+  final paragraphBreaks = RegExp(
+    r'(?:\r\n|\r|\n)[ \t]*(?:(?:\r\n|\r|\n)[ \t]*)+',
+  ).allMatches(sourceWithoutFences).toList();
+  var paragraphIndex = 0;
+  var paragraphBreakIndex = 0;
+  final paragraphForRun = <int>[];
+  for (final run in runs) {
+    while (paragraphBreakIndex < paragraphBreaks.length &&
+        run.start >= paragraphBreaks[paragraphBreakIndex].end) {
+      paragraphIndex++;
+      paragraphBreakIndex++;
+    }
+    paragraphForRun.add(paragraphIndex);
+  }
   final runIndicesByLength = <int, List<int>>{};
   for (var i = 0; i < runs.length; i++) {
     final run = runs[i];
@@ -283,7 +297,8 @@ String _withoutMarkdownCode(String source) {
     }
 
     final closingRunIndex = nextRunOfLength(openingLength, runIndex);
-    if (closingRunIndex == -1) {
+    if (closingRunIndex == -1 ||
+        paragraphForRun[closingRunIndex] != paragraphForRun[runIndex]) {
       runIndex++;
       continue;
     }
@@ -328,31 +343,91 @@ String _withoutMarkdownLinkDestinations(String source) {
 }
 
 int _inlineLinkDestinationEnd(String source, int start) {
-  var depth = 1;
-  var inAngleDestination = false;
   var i = start;
+  while (i < source.length && _isLinkWhitespace(source.codeUnitAt(i))) {
+    i++;
+  }
+  if (i >= source.length || source.codeUnitAt(i) == 41) return -1;
+
+  if (source.codeUnitAt(i) == 60) {
+    i++;
+    while (i < source.length) {
+      final codeUnit = source.codeUnitAt(i);
+      if (codeUnit == 10 || codeUnit == 13) return -1;
+      if (codeUnit == 92) {
+        i += 2;
+      } else if (codeUnit == 62) {
+        i++;
+        break;
+      } else if (codeUnit == 60) {
+        return -1;
+      } else {
+        i++;
+      }
+    }
+    if (i > source.length || source.codeUnitAt(i - 1) != 62) return -1;
+  } else {
+    var depth = 0;
+    while (i < source.length) {
+      final codeUnit = source.codeUnitAt(i);
+      if (codeUnit == 10 || codeUnit == 13) return -1;
+      if (codeUnit == 92) {
+        i += 2;
+      } else if (_isLinkWhitespace(codeUnit)) {
+        break;
+      } else if (codeUnit == 40) {
+        depth++;
+        i++;
+      } else if (codeUnit == 41) {
+        if (depth == 0) break;
+        depth--;
+        i++;
+      } else if (codeUnit == 60) {
+        return -1;
+      } else {
+        i++;
+      }
+    }
+    if (depth != 0) return -1;
+  }
+
+  while (i < source.length && _isLinkWhitespace(source.codeUnitAt(i))) {
+    i++;
+  }
+  if (i >= source.length) return -1;
+  if (source.codeUnitAt(i) == 41) return i;
+
+  final titleDelimiter = source.codeUnitAt(i);
+  final titleEndDelimiter = switch (titleDelimiter) {
+    34 => 34,
+    39 => 39,
+    40 => 41,
+    _ => -1,
+  };
+  if (titleEndDelimiter == -1) return -1;
+  i++;
   while (i < source.length) {
     final codeUnit = source.codeUnitAt(i);
-    // Inline link destinations cannot cross a line ending. Let the scanner
-    // resume after malformed link syntax so later emphasis remains visible.
     if (codeUnit == 10 || codeUnit == 13) {
       return -1;
     } else if (codeUnit == 92) {
       i++;
-    } else if (inAngleDestination) {
-      if (codeUnit == 62) inAngleDestination = false;
-    } else if (codeUnit == 60 && depth == 1) {
-      inAngleDestination = true;
-    } else if (codeUnit == 40) {
-      depth++;
-    } else if (codeUnit == 41) {
-      depth--;
-      if (depth == 0) return i;
+    } else if (codeUnit == titleEndDelimiter) {
+      i++;
+      while (i < source.length && _isLinkWhitespace(source.codeUnitAt(i))) {
+        i++;
+      }
+      return i < source.length && source.codeUnitAt(i) == 41 ? i : -1;
+    } else if (titleDelimiter == 40 && codeUnit == 41) {
+      return -1;
     }
     i++;
   }
   return -1;
 }
+
+bool _isLinkWhitespace(int codeUnit) =>
+    codeUnit == 32 || codeUnit == 9 || codeUnit == 11 || codeUnit == 12;
 
 bool _isEscapedMarkdownCharacter(String source, int offset) {
   var backslashCount = 0;

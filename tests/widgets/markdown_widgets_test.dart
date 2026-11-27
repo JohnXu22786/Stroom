@@ -819,6 +819,43 @@ $$
         FontWeight.bold,
       );
 
+      const malformedLinkDestination = '[x](url __bold__)';
+      final malformedLinkPreview = markdownGenerator.buildPlainTextPreview([
+        malformedLinkDestination,
+      ]);
+      final malformedLinkSpans = [
+        for (final widget in malformedLinkPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        malformedLinkSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const inlineCodeAcrossParagraphs = '`unclosed\n\n__bold__`';
+      final inlineCodeAcrossParagraphsPreview =
+          markdownGenerator.buildPlainTextPreview([inlineCodeAcrossParagraphs]);
+      final inlineCodeAcrossParagraphsSpans = [
+        for (final widget in inlineCodeAcrossParagraphsPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        inlineCodeAcrossParagraphsSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
       final unmatchedLinkMarkers = '](' * 1024;
       final unmatchedLinkPreview = previewGenerator.buildPlainTextPreview([
         unmatchedLinkMarkers,
