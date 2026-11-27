@@ -435,7 +435,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           child: DropdownButton<String>(
                             dropdownColor: StroomMenuStyle.surface(context),
                             borderRadius: StroomMenuStyle.borderRadius,
-                            value: param.type,
+                            value:
+                                ParamType.values.any(
+                                  (t) => t.value == param.type,
+                                )
+                                ? param.type
+                                : 'string',
                             isDense: true,
                             isExpanded: true,
                             items: ParamType.values

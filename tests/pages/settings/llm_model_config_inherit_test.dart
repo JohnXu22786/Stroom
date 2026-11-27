@@ -1412,6 +1412,51 @@ void main() {
       expect(saved!.customParams.single.options, ['balanced', 'creative']);
     });
 
+    testWidgets('unknown custom param type survives opening and saving', (
+      tester,
+    ) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'future_param',
+            defaultValue: 'preserve me',
+            type: 'future-type',
+            options: ['preserve me'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('future_param'));
+          expect(tester.takeException(), isNull);
+
+          final card = find
+              .ancestor(
+                of: find.text('future_param'),
+                matching: find.byType(Card),
+              )
+              .first;
+          final typeDropdown = tester.widget<DropdownButton<String>>(
+            find.descendant(
+              of: card,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          );
+          expect(typeDropdown.value, 'string');
+          expect(model.customParams.single.type, 'future-type');
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.type, 'future-type');
+    });
+
     testWidgets('json custom param keeps the default value input', (
       tester,
     ) async {
