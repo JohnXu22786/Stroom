@@ -5,6 +5,7 @@ const int defaultSampleRate = 24000;
 
 /// 魔数字节
 const _magicWav = [0x52, 0x49, 0x46, 0x46]; // "RIFF"
+const _magicRifx = [0x52, 0x49, 0x46, 0x58]; // "RIFX"
 const _magicMp3Id3 = [0x49, 0x44, 0x33]; // "ID3"
 
 /// 检测音频实际格式（基于文件头魔数）
@@ -13,10 +14,14 @@ const _magicMp3Id3 = [0x49, 0x44, 0x33]; // "ID3"
 String _detectFormat(Uint8List data) {
   if (data.length < 4) return 'pcm';
 
-  if (data[0] == _magicWav[0] &&
-      data[1] == _magicWav[1] &&
-      data[2] == _magicWav[2] &&
-      data[3] == _magicWav[3]) {
+  if ((data[0] == _magicWav[0] &&
+          data[1] == _magicWav[1] &&
+          data[2] == _magicWav[2] &&
+          data[3] == _magicWav[3]) ||
+      (data[0] == _magicRifx[0] &&
+          data[1] == _magicRifx[1] &&
+          data[2] == _magicRifx[2] &&
+          data[3] == _magicRifx[3])) {
     return 'wav';
   }
 
