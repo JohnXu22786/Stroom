@@ -1,8 +1,11 @@
 import asyncio
 from email.parser import BytesHeaderParser
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 import time
 from urllib.parse import urlsplit
 
@@ -13,17 +16,31 @@ URL = "http://127.0.0.1:8878"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 
-def wait_for_fixture_server(server, fixture_bundle, url, timeout=10):
+class QuietSimpleHTTPRequestHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+
+def start_fixture_server(directory=WEB, host="127.0.0.1", port=8878):
+    handler = partial(QuietSimpleHTTPRequestHandler, directory=str(directory))
+    try:
+        server = ThreadingHTTPServer((host, port), handler)
+    except OSError as error:
+        raise RuntimeError(
+            f"Could not bind ASR fixture server to {host}:{port}; "
+            "the port may already be in use"
+        ) from error
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    return server
+
+
+def wait_for_fixture_server(fixture_bundle, url, timeout=10):
     expected_bundle = fixture_bundle.read_bytes()
     deadline = time.monotonic() + timeout
     parsed_url = urlsplit(url)
     bundle_path = f"{parsed_url.path.rstrip('/')}/main.dart.js"
     while True:
-        if server.poll() is not None:
-            raise RuntimeError(
-                "Local ASR fixture server exited before becoming ready; "
-                "port 8878 may already be in use"
-            )
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -41,8 +58,6 @@ def wait_for_fixture_server(server, fixture_bundle, url, timeout=10):
                 raise RuntimeError(
                     "Port 8878 is serving a different fixture; refusing to capture"
                 )
-            if server.poll() is not None:
-                raise _port_conflict()
             return
         except TimeoutError:
             raise _readiness_timeout(timeout) from None
@@ -50,13 +65,6 @@ def wait_for_fixture_server(server, fixture_bundle, url, timeout=10):
             if time.monotonic() >= deadline:
                 raise _readiness_timeout(timeout) from None
             time.sleep(min(0.1, deadline - time.monotonic()))
-
-
-def _port_conflict():
-    return RuntimeError(
-        "Local ASR fixture server exited before becoming ready; "
-        "port 8878 may already be in use"
-    )
 
 
 def _readiness_timeout(timeout):
@@ -126,23 +134,10 @@ def main():
         cwd=ROOT,
         check=True,
     )
-    server = subprocess.Popen(
-        [
-            "python3",
-            "-m",
-            "http.server",
-            "8878",
-            "--bind",
-            "127.0.0.1",
-            "--directory",
-            str(WEB),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    server = start_fixture_server()
     errors = []
     try:
-        wait_for_fixture_server(server, WEB / "main.dart.js", URL)
+        wait_for_fixture_server(WEB / "main.dart.js", URL)
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
@@ -188,8 +183,8 @@ def main():
         if errors:
             raise RuntimeError(f"Browser reported runtime errors: {errors}")
     finally:
-        server.terminate()
-        server.wait(timeout=10)
+        server.shutdown()
+        server.server_close()
     print({"viewport": "320x640", "device_scale_factor": 1, "locale": "en-US", "theme": "light", "text_scale": 1, "page_errors": errors})
 
 

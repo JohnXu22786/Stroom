@@ -4,9 +4,12 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from urllib.parse import urlsplit
 
-from tool.qa.capture_asr_task_title import wait_for_fixture_server
+from tool.qa.capture_asr_task_title import (
+    start_fixture_server as start_fixture_web_server,
+    wait_for_fixture_server,
+)
 
 
 class FixtureRequestHandler(socketserver.BaseRequestHandler):
@@ -65,56 +68,44 @@ class CaptureAsrTaskTitleServerTest(unittest.TestCase):
         self.addCleanup(http_server.shutdown)
         return f"http://127.0.0.1:{http_server.server_address[1]}"
 
-    def test_waits_until_intended_fixture_bundle_is_served(self):
-        server = Mock()
-        server.poll.return_value = None
-        url = self.start_server(b"intended fixture")
+    def start_fixture_web(self, port=0):
+        server = start_fixture_web_server(self.temp_dir.name, port=port)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server, f"http://127.0.0.1:{server.server_address[1]}"
 
-        wait_for_fixture_server(server, self.fixture_bundle, url)
+    def test_waits_until_intended_fixture_bundle_is_served(self):
+        _, url = self.start_fixture_web()
+
+        wait_for_fixture_server(self.fixture_bundle, url)
 
     def test_rejects_a_different_fixture_on_the_port(self):
-        server = Mock()
-        server.poll.return_value = None
         url = self.start_server(b"another service")
 
         with self.assertRaisesRegex(RuntimeError, "different fixture"):
-            wait_for_fixture_server(server, self.fixture_bundle, url)
+            wait_for_fixture_server(self.fixture_bundle, url)
 
-    def test_reports_server_exit_before_readiness(self):
-        server = Mock()
-        server.poll.return_value = 1
-
-        with self.assertRaisesRegex(RuntimeError, "port 8878 may already be in use"):
-            wait_for_fixture_server(
-                server, self.fixture_bundle, "http://127.0.0.1:8878"
-            )
-
-    def test_rejects_identical_response_when_launched_server_exits(self):
-        server = Mock()
-        server.poll.side_effect = [None, 1]
+    def test_reports_port_conflict_even_when_other_server_serves_identical_bundle(self):
         url = self.start_server(b"intended fixture")
+        port = urlsplit(url).port
 
-        with self.assertRaisesRegex(RuntimeError, "port 8878 may already be in use"):
-            wait_for_fixture_server(server, self.fixture_bundle, url)
+        with self.assertRaisesRegex(RuntimeError, "port may already be in use"):
+            start_fixture_web_server(self.temp_dir.name, port=port)
 
     def test_stops_reading_slow_headers_at_the_readiness_deadline(self):
-        server = Mock()
-        server.poll.return_value = None
         url = self.start_server(slow_headers=True)
         started = time.monotonic()
 
         with self.assertRaisesRegex(RuntimeError, "did not become ready within 0.1 seconds"):
-            wait_for_fixture_server(server, self.fixture_bundle, url, timeout=0.1)
+            wait_for_fixture_server(self.fixture_bundle, url, timeout=0.1)
 
         self.assertLess(time.monotonic() - started, 0.5)
 
     def test_rejects_a_server_that_closes_during_headers(self):
-        server = Mock()
-        server.poll.return_value = None
         url = self.start_server(incomplete_headers=True)
 
         with self.assertRaisesRegex(RuntimeError, "different fixture"):
-            wait_for_fixture_server(server, self.fixture_bundle, url)
+            wait_for_fixture_server(self.fixture_bundle, url)
 
 
 if __name__ == "__main__":
