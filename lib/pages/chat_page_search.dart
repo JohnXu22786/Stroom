@@ -1,5 +1,98 @@
 part of 'chat_page.dart';
 
+class _ChatPageSearchField extends StatefulWidget {
+  const _ChatPageSearchField({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ChatPageSearchField> createState() => _ChatPageSearchFieldState();
+}
+
+class _ChatPageSearchFieldState extends State<_ChatPageSearchField> {
+  late final FocusNode _focusNode = FocusNode()
+    ..addListener(_handleFocusChange);
+  bool _isHovered = false;
+
+  void _handleFocusChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final baseHintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge
+            : theme.textTheme.titleMedium) ??
+        theme.textTheme.bodyMedium ??
+        const TextStyle();
+    final hintStyle = baseHintStyle
+        .merge(const TextStyle(fontSize: 13))
+        .copyWith(
+          color: theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+        )
+        .merge(
+          WidgetStateProperty.resolveAs(
+            InputDecorationTheme.of(context).hintStyle,
+            <WidgetState>{
+              if (_focusNode.hasFocus) WidgetState.focused,
+              if (_isHovered) WidgetState.hovered,
+            },
+          ),
+        );
+
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_isHovered) setState(() => _isHovered = true);
+      },
+      onExit: (_) {
+        if (_isHovered) setState(() => _isHovered = false);
+      },
+      child: SizedBox(
+        height: 32,
+        child: TextField(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          autofocus: true,
+          // Same tap-region group as the message list: tapping a search result
+          // must not blur the search field while browsing matches.
+          groupId: chatComposerTapRegionGroupId,
+          onChanged: widget.onChanged,
+          decoration: InputDecoration(
+            hint: ConstrainedText(
+              widget.hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: hintStyle,
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 6,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          style: const TextStyle(fontSize: 13),
+        ),
+      ),
+    );
+  }
+}
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -364,28 +457,6 @@ extension _ChatPageSearchExt on _ChatPageState {
   /// keyboard stays up while browsing results, matching the pre-fix
   /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
-    final theme = Theme.of(context);
-    final baseHintStyle = (theme.useMaterial3
-            ? theme.textTheme.bodyLarge
-            : theme.textTheme.titleMedium) ??
-        theme.textTheme.bodyMedium ??
-        const TextStyle();
-    final hintStyle = baseHintStyle
-        .merge(const TextStyle(fontSize: 13))
-        .copyWith(
-          color: theme.useMaterial3
-              ? theme.colorScheme.onSurfaceVariant
-              : theme.hintColor,
-        )
-        .merge(
-          WidgetStateProperty.resolveAs(
-            InputDecorationTheme.of(context).hintStyle,
-            <WidgetState>{
-              if (_searchFocusNode.hasFocus) WidgetState.focused,
-              if (_isSearchFieldHovered) WidgetState.hovered,
-            },
-          ),
-        );
     final isCurrentSearch = _searchMode == SearchMode.current;
     final currentSearchHint = AppLocalizations.of(context)!.chatSearchCurrent;
     final allSearchHint = AppLocalizations.of(context)!.chatSearchAll;
@@ -417,52 +488,17 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: MouseRegion(
-                    onEnter: (_) {
-                      if (!_isSearchFieldHovered) {
-                        setState(() => _isSearchFieldHovered = true);
+                  child: _ChatPageSearchField(
+                    controller: _searchTextController,
+                    hint: hint,
+                    onChanged: (query) {
+                      if (_searchMode == SearchMode.current) {
+                        _performSearch(query);
+                      } else if (query.isNotEmpty) {
+                        // Global mode: defer to full search page
+                        _openGlobalSearch();
                       }
                     },
-                    onExit: (_) {
-                      if (_isSearchFieldHovered) {
-                        setState(() => _isSearchFieldHovered = false);
-                      }
-                    },
-                    child: SizedBox(
-                      height: 32,
-                      child: TextField(
-                        controller: _searchTextController,
-                        focusNode: _searchFocusNode,
-                        autofocus: true,
-                        // Same tap-region group as the message list: tapping a
-                        // search result (in the list) must not blur the search
-                        // field — the keyboard stays up while browsing results.
-                        groupId: chatComposerTapRegionGroupId,
-                        onChanged: (query) {
-                          if (_searchMode == SearchMode.current) {
-                            _performSearch(query);
-                          } else if (query.isNotEmpty) {
-                            // Global mode: defer to full search page
-                            _openGlobalSearch();
-                          }
-                        },
-                        decoration: InputDecoration(
-                          hint: ConstrainedText(
-                            hint,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: hintStyle,
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
-                          ),
-                          border: OutlineInputBorder(),
-                        ),
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
                   ),
                 ),
                 if (_searchMode == SearchMode.current &&

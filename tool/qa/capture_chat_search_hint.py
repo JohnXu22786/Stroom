@@ -85,22 +85,22 @@ with sync_playwright() as playwright:
     context.close()
 
     context, page, errors = open_page('fr-FR', 2, 'light', motion='on')
+    cycle_duration = 28.0
+    frame_rate = 4
+    cycle_started = time.monotonic()
     page.get_by_role('button', name='Rechercher dans les messages').evaluate(
             'element => element.click()'
         )
     page.mouse.move(8, 632)
-    page.wait_for_timeout(200)
+    page.get_by_role('textbox').last.wait_for(state='visible')
     frames = ROOT / 'motion-frames'
     frames.mkdir(exist_ok=True)
-    # The French 2× label travels about nine seconds in each direction.
-    # Capture through the full reveal, endpoint holds, and complete return.
+    # Capture through the full reveal, endpoint holds, and complete return
+    # from the instant the search control is triggered.
     # Schedule screenshots at 4 Hz against monotonic deadlines, then encode
     # their measured timestamps as variable frame durations so screenshot time
-    # does not speed up motion. 27.76 seconds includes the full 2-second hold
+    # does not speed up motion. 28 seconds includes the full 2-second hold
     # after the label returns to its leading position.
-    cycle_duration = 27.76
-    frame_rate = 4
-    cycle_started = time.monotonic()
     frame_paths = []
     frame_times = []
     for index in range(int(cycle_duration * frame_rate)):

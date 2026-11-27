@@ -4,6 +4,7 @@
 // lazy pagination has not loaded yet.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -184,6 +185,34 @@ void main() {
       final hint = field.decoration!.hint as ConstrainedText;
       expect(field.focusNode!.hasFocus, isTrue);
       expect(hint.style!.color, Colors.purple);
+    });
+
+    testWidgets('search focus and hover do not rebuild the chat message list',
+        (tester) async {
+      await _pumpChat(tester, messages: _messages());
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+      await tester.pump();
+
+      final chatFinder = find.byType(Chat);
+      final initialChat = tester.widget<Chat>(chatFinder);
+      final fieldFinder = find.byType(TextField).first;
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer();
+      await mouse.moveTo(tester.getCenter(fieldFinder));
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await mouse.moveTo(const Offset(0, 0));
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+
+      FocusScope.of(tester.element(fieldFinder)).unfocus();
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await tester.tap(fieldFinder);
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await mouse.removePointer();
     });
 
     testWidgets('German current-search hint keeps its full semantic label',

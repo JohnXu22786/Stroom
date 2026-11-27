@@ -5,6 +5,6 @@ These focused crops show the search controls from the production `ChatPage` with
 - French at 320 × 640 CSS px, 2× text scale, light and dark theme: `chat-search-hint-fr-320x640-scale2-{light,dark}.png`.
 - German at 320 × 640 CSS px, 1× text scale, light theme: `chat-search-hint-de-320x640-scale1-light.png`.
 - Fitting English at 1000 × 700 CSS px, 1× text scale, light theme: `chat-search-hint-en-1000x700-scale1-light.png`.
-- `chat-search-hint-fr-reveal-return.webm` is a 27.76-second real-time crop that records the French 1-second initial delay, complete reveal, both 2-second endpoint holds, and complete return using the production component at 24 logical px/s. Frames are captured on monotonic 250 ms deadlines and encoded with their measured variable durations, so screenshot work does not compress the motion timeline.
+- `chat-search-hint-fr-reveal-return.webm` is a 28-second real-time crop that records the post-layout pause before movement, complete reveal, both 2-second endpoint holds, and complete return using the production component at 24 logical px/s. Capture timing starts immediately before the search control is triggered. Frames are captured on monotonic 250 ms deadlines and encoded with their measured variable durations, so screenshot work does not compress the motion timeline.
 
 The static images use `MediaQuery.disableAnimations` so the initial clipped position is stable. The video uses regular motion. The production capture fixture and Chromium script are `tool/qa/chat_search_hint_capture.dart` and `tool/qa/capture_chat_search_hint.py`.

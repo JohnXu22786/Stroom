@@ -346,8 +346,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, int> _searchMatchFirstIndexByMessageId = {};
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  bool _isSearchFieldHovered = false;
   final Map<String, GlobalKey> _messageKeys = {};
   final ValueNotifier<int> _streamingBubbleRevision = ValueNotifier(0);
 
@@ -436,7 +434,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void initState() {
     super.initState();
-    _searchFocusNode.addListener(_handleSearchFocusChanged);
     WidgetsBinding.instance.addObserver(this);
     _currentUser = User(id: 'user1', name: 'You');
     _aiUser = User(id: 'ai1', name: 'Stroom');
@@ -472,9 +469,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _searchFocusNode
-      ..removeListener(_handleSearchFocusChanged)
-      ..dispose();
     // 使进行中的加载失效：卡在 0.5 秒最少显示延迟里的加载在延迟结束后
     // 不得再向已 dispose 的控制器插入消息。
     _loadMoreGeneration++;
@@ -491,10 +485,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _streamingBubbleRevision.dispose();
     _detachStreamPage(clearIfCompleted: true);
     super.dispose();
-  }
-
-  void _handleSearchFocusChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
