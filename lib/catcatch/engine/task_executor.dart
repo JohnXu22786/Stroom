@@ -773,6 +773,7 @@ class TaskExecutor {
     }
     var parsedMedia = List<MediaResource>.from(media);
     final parsedM3u8Playlists = <({String url, bool hasInitializationMap})>[];
+    var skippedEncryptedPlaylist = false;
     for (final pl in playlist) {
       final dio = playlistDioFactory?.call() ?? Dio();
       cancelToken?.whenCancel.then((_) {
@@ -802,19 +803,35 @@ class TaskExecutor {
       List<MpdRepresentation>? dashRepresentations;
       var mediaSegmentCount = 0;
       if (pl.isM3U8) {
-        final parsed = await M3U8Parser.parsePlaylistWithDetails(
-          content,
-          pl.url,
-          headersForUrl: (url) {
-            final headers = <String, String>{};
-            if (pl.initiator != null) headers['Referer'] = pl.initiator!;
-            final cookieHeader = task.browserCookieHeaderForUrl(url);
-            if (cookieHeader != null && cookieHeader.isNotEmpty) {
-              headers['Cookie'] = cookieHeader;
-            }
-            return headers;
-          },
-        );
+        late final ({
+          List<String> resources,
+          List<M3U8PlaylistResource> playlistResources,
+          int mediaSegmentCount,
+          bool hasInitializationMap,
+        }) parsed;
+        try {
+          parsed = await M3U8Parser.parsePlaylistWithDetails(
+            content,
+            pl.url,
+            headersForUrl: (url) {
+              final headers = <String, String>{};
+              if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+              final cookieHeader = task.browserCookieHeaderForUrl(url);
+              if (cookieHeader != null && cookieHeader.isNotEmpty) {
+                headers['Cookie'] = cookieHeader;
+              }
+              return headers;
+            },
+          );
+        } on UnsupportedError {
+          skippedEncryptedPlaylist = true;
+          parsedMedia.removeWhere(
+            (resource) =>
+                (resource.isPlaylist && resource.url == pl.url) ||
+                (!resource.isPlaylist && resource.initiator == pl.url),
+          );
+          continue;
+        }
         segments = parsed.resources;
         playlistResources = parsed.playlistResources;
         mediaSegmentCount = parsed.mediaSegmentCount;
@@ -929,6 +946,9 @@ class TaskExecutor {
         detail: '获取到$totalCount个资源（播放列表$mediaSegmentCount个分段）',
       );
       parsedMedia = [...enrichedMedia, ...segmentMedia];
+    }
+    if (skippedEncryptedPlaylist && parsedMedia.isEmpty) {
+      throw UnsupportedError('Encrypted HLS playlists are not supported');
     }
     markExecutorStep(steps, 2, done: true);
     final mergedExtensions =

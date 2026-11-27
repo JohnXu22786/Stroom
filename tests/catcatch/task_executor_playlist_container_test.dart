@@ -121,6 +121,63 @@ encrypted-segment.ts
   );
 
   test(
+    'keeps direct media selectable when an initial HLS option is encrypted',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      const directUrl = 'https://example.com/direct.mp4';
+      final task = CatCatchTask(
+        id: 'encrypted-hls-with-direct-media',
+        url: 'https://example.com/page',
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          const MediaResource(
+            url: directUrl,
+            name: 'direct',
+            ext: 'mp4',
+          ),
+        ],
+        metadata: const {'deferSingleResourceSelection': 'true'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.parsingPlaylist)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.parsingPlaylist,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({
+            playlistUrl: '''
+#EXTM3U
+#EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+#EXTINF:4.0,
+encrypted-segment.ts
+#EXT-X-ENDLIST
+''',
+          }),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.running);
+      expect(finalTask!.error, isNull);
+      expect(finalTask!.selectedMedia, isNull);
+      expect(finalTask!.detectedMedia.map((media) => media.url), [directUrl]);
+    },
+  );
+
+  test(
     'rejects saved encrypted HLS segments when retry starts at download',
     () async {
       const playlistUrl = 'https://example.com/encrypted.m3u8';
@@ -354,6 +411,70 @@ encrypted-segment.ts
         fromStep: StepType.downloading,
         playlistDioFactory: () => Dio()
           ..httpClientAdapter = _PlaylistAdapter({playlistUrl: '#EXTM3U'}),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('no media resources'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'rejects an HLS map without media segments when retrying saved segments',
+    () async {
+      const playlistUrl = 'https://example.com/playlist.m3u8';
+      const segmentUrl = 'https://example.com/stale-segment.ts';
+      final staleSegment = MediaResource(
+        url: segmentUrl,
+        name: 'stale-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'hls-map-only-retry-with-stale-segment',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'playlist',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          staleSegment,
+        ],
+        selectedMedia: staleSegment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({
+            playlistUrl: '''
+#EXTM3U
+#EXT-X-MAP:URI="init.mp4"
+#EXT-X-ENDLIST
+''',
+          }),
         onUpdate: (updated) => finalTask = updated,
       );
 

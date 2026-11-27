@@ -166,7 +166,7 @@ class M3U8Parser {
       }
     }
 
-    if (segments.isEmpty) {
+    if (mediaSegmentCount == 0) {
       throw FormatException('Invalid HLS media playlist: no media resources');
     }
     debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
