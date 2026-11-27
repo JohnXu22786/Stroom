@@ -7,6 +7,7 @@ typedef M3U8PlaylistResource = ({
   int? rangeStart,
   int? rangeLength,
 });
+typedef M3U8HeadersForUrl = Map<String, String> Function(String url);
 
 /// M3U8 / HLS 播放列表解析器
 ///
@@ -30,9 +31,14 @@ class M3U8Parser {
   /// 如果遇到多码率播放列表，递归解析最高码率的子播放列表。
   static Future<List<String>> parsePlaylist(
     String content,
-    String baseUrl,
-  ) async {
-    final parsed = await parsePlaylistWithDetails(content, baseUrl);
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+  }) async {
+    final parsed = await parsePlaylistWithDetails(
+      content,
+      baseUrl,
+      headersForUrl: headersForUrl,
+    );
     return parsed.resources;
   }
 
@@ -46,8 +52,9 @@ class M3U8Parser {
         bool hasInitializationMap,
       })> parsePlaylistWithDetails(
     String content,
-    String baseUrl,
-  ) async {
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+  }) async {
     final lines = _normalizeLines(content);
     final segments = <M3U8PlaylistResource>[];
     var mediaSegmentCount = 0;
@@ -75,8 +82,12 @@ class M3U8Parser {
       final selectedUrl = _resolveUrl(variants.first.url, baseUrl);
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
-      final subContent = await _fetchUrl(selectedUrl);
-      return parsePlaylistWithDetails(subContent, selectedUrl);
+      final subContent = await _fetchUrl(selectedUrl, headersForUrl);
+      return parsePlaylistWithDetails(
+        subContent,
+        selectedUrl,
+        headersForUrl: headersForUrl,
+      );
     }
 
     for (int i = 0; i < lines.length; i++) {
@@ -169,8 +180,9 @@ class M3U8Parser {
   /// 如果是多码率播放列表（#EXT-X-STREAM-INF），自动选择最高码率的子播放列表并递归解析。
   static Future<List<({String url, double duration})>> parseSegments(
     String content,
-    String baseUrl,
-  ) async {
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+  }) async {
     // 检测多码率播放列表
     if (content.contains('#EXT-X-STREAM-INF:')) {
       final lines = _normalizeLines(content);
@@ -195,8 +207,12 @@ class M3U8Parser {
       if (bestUrl != null) {
         debugPrint(
             '[M3U8Parser] parseSegments selected variant: bandwidth=$bestBandwidth');
-        final subContent = await _fetchUrl(bestUrl);
-        return parseSegments(subContent, bestUrl);
+        final subContent = await _fetchUrl(bestUrl, headersForUrl);
+        return parseSegments(
+          subContent,
+          bestUrl,
+          headersForUrl: headersForUrl,
+        );
       }
       return [];
     }
@@ -321,12 +337,18 @@ class M3U8Parser {
   }
 
   /// 通过 HTTP 获取 URL 内容（用于递归解析子播放列表）
-  static Future<String> _fetchUrl(String url) async {
+  static Future<String> _fetchUrl(
+    String url,
+    M3U8HeadersForUrl? headersForUrl,
+  ) async {
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(url));
       request.headers.set('User-Agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+      headersForUrl?.call(url).forEach((name, value) {
+        request.headers.set(name, value);
+      });
       final response = await request.close();
       if (response.statusCode != 200) {
         throw HttpException(
