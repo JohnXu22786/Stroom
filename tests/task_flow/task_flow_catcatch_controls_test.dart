@@ -62,8 +62,15 @@ class _Downloads extends CatCatchNotifier {
   void skipConversion(String id) => rawSaves++;
 }
 
-Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
-    {bool flowManaged = true}) async {
+Future<_Downloads> _pump(
+  WidgetTester tester,
+  CatCatchTask task, {
+  bool flowManaged = true,
+  double textScale = 1,
+  bool darkTheme = false,
+  bool disableAnimations = false,
+  bool tickerEnabled = true,
+}) async {
   late _Downloads downloads;
   final actions = _FlowActions(() => downloads);
   await tester.pumpWidget(ProviderScope(
@@ -80,6 +87,16 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
           locale: const Locale('zh', 'CN'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: darkTheme
+              ? ThemeData.dark(useMaterial3: true)
+              : ThemeData.light(useMaterial3: true),
+          builder: (context, child) => TickerMode(
+              enabled: tickerEnabled,
+              child: MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(textScale),
+                      disableAnimations: disableAnimations),
+                  child: child!)),
           home: Scaffold(
               body: SingleChildScrollView(
             child: Consumer(
@@ -141,6 +158,132 @@ CatCatchTask _task(List<MediaResource> media, {bool confirmation = false}) =>
 void main() {
   const one = MediaResource(url: 'https://x/one.mp4', name: 'one', ext: 'mp4');
   const two = MediaResource(url: 'https://x/two.mp4', name: 'two', ext: 'mp4');
+  testWidgets('100 percent progress label stays on one line at 3x scale',
+      (tester) async {
+    tester.view.physicalSize = const Size(960, 1920);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pump(tester, _task([]).copyWith(progress: 100), textScale: 3);
+
+    final progressLabel = find.text('100%').last;
+    final progressSlot = find
+        .ancestor(
+          of: progressLabel,
+          matching: find.byType(AnimatedSize),
+        )
+        .first;
+    final naturalLabel = TextPainter(
+      text: const TextSpan(
+        text: '100%',
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(3),
+    )..layout();
+    expect(naturalLabel.computeLineMetrics(), hasLength(1));
+    expect(tester.getSize(progressSlot).width,
+        closeTo(42 + naturalLabel.width, 0.01));
+
+    final title = find.byKey(const ValueKey('catcatch_task_title_download'));
+    final row = find.ancestor(of: title, matching: find.byType(Row)).first;
+    final expectedTitleWidth = tester.getSize(row).width -
+        36 - // Running status icon and its gap.
+        8 - // Gap between the title and progress indicator.
+        tester.getSize(progressSlot).width -
+        28; // Gap and trailing expand icon.
+    expect(tester.getSize(title).width, closeTo(expectedTitleWidth, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'progress labels fit their measured slot across values and themes',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    for (final textScale in [1.0, 3.0]) {
+      for (final darkTheme in [false, true]) {
+        for (final progress in [0, 45, 99, 100]) {
+          await _pump(
+            tester,
+            _task([]).copyWith(progress: progress),
+            textScale: textScale,
+            darkTheme: darkTheme,
+          );
+
+          final progressLabel = find.text('$progress%').last;
+          final progressSlot = find
+              .ancestor(
+                of: progressLabel,
+                matching: find.byType(AnimatedSize),
+              )
+              .first;
+          final naturalLabel = TextPainter(
+            text: TextSpan(
+              text: '$progress%',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+            textScaler: TextScaler.linear(textScale),
+          )..layout();
+          final slotSize = tester.getSize(progressSlot);
+          final ringSize = tester.getSize(
+            find.descendant(
+              of: progressSlot,
+              matching: find.byType(CircularProgressIndicator),
+            ),
+          );
+
+          expect(naturalLabel.computeLineMetrics(), hasLength(1));
+          expect(slotSize.width, greaterThanOrEqualTo(naturalLabel.width));
+          expect(slotSize.height, greaterThanOrEqualTo(naturalLabel.height));
+          if (textScale == 1) expect(slotSize, const Size(40, 40));
+          if (textScale == 3) {
+            expect(
+              slotSize.width,
+              closeTo(42 + naturalLabel.width, 0.01),
+            );
+          }
+          expect(ringSize, const Size(40, 40));
+          expect(
+            tester.getSemantics(progressLabel).label,
+            contains('$progress%'),
+          );
+          expect(find.byIcon(Icons.expand_more), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }
+      }
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('progress slot resizing follows reduced-motion and TickerMode',
+      (tester) async {
+    for (final settings in [(true, true), (false, false)]) {
+      await _pump(
+        tester,
+        _task([]).copyWith(progress: 100),
+        textScale: 3,
+        disableAnimations: settings.$1,
+        tickerEnabled: settings.$2,
+      );
+
+      final progressLabel = find.text('100%').last;
+      final animatedSize = tester.widget<AnimatedSize>(
+        find
+            .ancestor(
+              of: progressLabel,
+              matching: find.byType(AnimatedSize),
+            )
+            .first,
+      );
+      expect(animatedSize.duration, Duration.zero);
+    }
+  });
+
   testWidgets('resource selection is titled with the source page title',
       (tester) async {
     final task = _task([one]).copyWith(
