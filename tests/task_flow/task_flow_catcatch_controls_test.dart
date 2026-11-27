@@ -184,7 +184,16 @@ void main() {
     )..layout();
     expect(naturalLabel.computeLineMetrics(), hasLength(1));
     expect(tester.getSize(progressSlot).width,
-        greaterThanOrEqualTo(44 + naturalLabel.width));
+        closeTo(42 + naturalLabel.width, 0.01));
+
+    final title = find.byKey(const ValueKey('catcatch_task_title_download'));
+    final row = find.ancestor(of: title, matching: find.byType(Row)).first;
+    final expectedTitleWidth = tester.getSize(row).width -
+        36 - // Running status icon and its gap.
+        8 - // Gap between the title and progress indicator.
+        tester.getSize(progressSlot).width -
+        28; // Gap and trailing expand icon.
+    expect(tester.getSize(title).width, closeTo(expectedTitleWidth, 0.01));
     expect(tester.takeException(), isNull);
   });
 
@@ -235,7 +244,7 @@ void main() {
           if (textScale == 3) {
             expect(
               slotSize.width,
-              greaterThanOrEqualTo(44 + naturalLabel.width),
+              closeTo(42 + naturalLabel.width, 0.01),
             );
           }
           expect(ringSize, const Size(40, 40));
