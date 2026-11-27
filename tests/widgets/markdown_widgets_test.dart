@@ -898,6 +898,31 @@ $$
       expect(parsedNodeCount, 0);
 
       parsedNodeCount = 0;
+      const indentedListCode = '-     __literal__';
+      final indentedListPreview = previewGenerator.buildPlainTextPreview([
+        indentedListCode,
+      ]);
+      expect(
+        ((indentedListPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        indentedListCode,
+      );
+      expect(parsedNodeCount, 0);
+
+      const escapedLiteral = r'\__literal__';
+      final escapedLiteralPreview = previewGenerator.buildPlainTextPreview([
+        escapedLiteral,
+      ]);
+      expect(
+        ((escapedLiteralPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        escapedLiteral,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
       const unclosedListFence = '- ```\n  __literal__';
       final listFencePreview = previewGenerator.buildPlainTextPreview([
         unclosedListFence,
@@ -3343,7 +3368,7 @@ $$
 
 
 class _UnexpectedParseSyntax extends m.InlineSyntax {
-  _UnexpectedParseSyntax() : super('普通文本');
+  _UnexpectedParseSyntax() : super(r'普通文本|__literal__|\\__literal__');
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {

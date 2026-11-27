@@ -133,11 +133,8 @@ class MarkdownGenerator {
       return buildWidgets(source, config: mdConfig);
     }
     final sourceWithoutCode = _withoutMarkdownCode(source);
-    final mayContainUnderscoreEmphasis = RegExp(
-      r'(?<![\p{L}\p{M}\p{N}_])__(?=\S).*?\S__(?![\p{L}\p{M}\p{N}_])',
-      dotAll: true,
-      unicode: true,
-    ).hasMatch(sourceWithoutCode);
+    final mayContainUnderscoreEmphasis =
+        _mayContainUnderscoreEmphasis(sourceWithoutCode);
     if (mayContainUnderscoreEmphasis) {
       final nodes = _parseNodes(source);
       if (_containsStrongEmphasis(nodes)) {
@@ -170,7 +167,7 @@ String _withoutMarkdownCode(String source) {
   final fenceStart = RegExp(r'^ {0,3}(`{3,}|~{3,})');
   final fenceEnd = RegExp(r'^ {0,3}(`{3,}|~{3,})[ \t]*$');
   final quotePrefix = RegExp(r'^ {0,3}>[ \t]?');
-  final listPrefix = RegExp(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])[ \t]+');
+  final listPrefix = RegExp(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])[ \t]');
   var fenceCharacter = 0;
   var fenceLength = 0;
   var fenceQuoteDepth = 0;
@@ -285,6 +282,28 @@ String _withoutMarkdownCode(String source) {
     runIndex = closingRunIndex + 1;
   }
   return String.fromCharCodes(codeUnits);
+}
+
+bool _mayContainUnderscoreEmphasis(String source) {
+  final candidates = RegExp(
+    r'(?<![\p{L}\p{M}\p{N}_])__(?=\S).*?\S__(?![\p{L}\p{M}\p{N}_])',
+    dotAll: true,
+    unicode: true,
+  );
+  bool isEscaped(int offset) {
+    var backslashCount = 0;
+    for (var i = offset - 1; i >= 0 && source.codeUnitAt(i) == 92; i--) {
+      backslashCount++;
+    }
+    return backslashCount.isOdd;
+  }
+
+  for (final candidate in candidates.allMatches(source)) {
+    if (!isEscaped(candidate.start) && !isEscaped(candidate.end - 2)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool _containsStrongEmphasis(Iterable<m.Node> nodes) {
