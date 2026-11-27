@@ -295,7 +295,24 @@ Map<String, dynamic> _decodeStructured(String source) {
   }
   if (value is! Map)
     throw const FormatException('Expected a JSON/YAML object.');
-  return Map<String, dynamic>.from(_normalizeYaml(value) as Map);
+  final normalized = _normalizeYaml(value);
+  _rejectNonFiniteNumbers(normalized);
+  return Map<String, dynamic>.from(normalized as Map);
+}
+
+void _rejectNonFiniteNumbers(dynamic value) {
+  if (value is num && !value.isFinite) {
+    throw const FormatException('Numbers must be finite.');
+  }
+  if (value is Map) {
+    for (final nestedValue in value.values) {
+      _rejectNonFiniteNumbers(nestedValue);
+    }
+  } else if (value is List) {
+    for (final item in value) {
+      _rejectNonFiniteNumbers(item);
+    }
+  }
 }
 
 dynamic _normalizeYaml(dynamic value) {
