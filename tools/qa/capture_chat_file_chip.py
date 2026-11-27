@@ -2,6 +2,7 @@ from io import BytesIO
 import math
 from pathlib import Path
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -15,16 +16,20 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/chat-file-chip"
 FRAMES = OUTPUT / "frames"
-WEB_BUILD = ROOT / "build/qa-chat-file-chip-web"
+WEB_BUILD = ROOT / "build/qa-chat-file-chip-web-r10-01"
 ENTRYPOINT = ROOT / "tools/qa/chat_file_chip_capture.dart"
 PRODUCTION_FILE = ROOT / "lib/pages/chat/composer/file_picker_shared.dart"
+PRODUCTION_DIALOG = ROOT / "lib/pages/chat/composer/chat_file_picker_dialog.dart"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 FRAMES.mkdir(parents=True, exist_ok=True)
+for frame in FRAMES.glob("frame-*.png"):
+    frame.unlink()
 
 if (
     not (WEB_BUILD / "index.html").exists()
     or ENTRYPOINT.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
     or PRODUCTION_FILE.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
+    or PRODUCTION_DIALOG.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
 ):
     subprocess.run(
         [
@@ -40,6 +45,15 @@ if (
         cwd=ROOT,
         check=True,
     )
+
+# Flutter's custom `--output` build omits web root files referenced by the
+# generated index. Copy the tracked static web assets without replacing the
+# generated index or Flutter bootstrap so a clean QA build is self-contained.
+for source in (ROOT / "web").rglob("*"):
+    if source.is_file() and source.name != "index.html":
+        destination = WEB_BUILD / source.relative_to(ROOT / "web")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
 
 with socket.socket() as listener:
     listener.bind(("127.0.0.1", 0))
@@ -97,31 +111,55 @@ try:
                     # build, just before layout starts the one-second timer.
                     metric_times["long"] = time.monotonic()
             elif message.type == "error":
-                errors.append(f"console {message.type}: {message.text}")
+                errors.append(
+                    f"console {message.type}: {message.text} ({message.location.get('url')})"
+                )
 
         page.on("console", record_console)
 
-        def navigate(name: str, scale: int, theme: str, extra: dict | None = None):
+        def navigate(
+            name: str,
+            scale: int,
+            theme: str,
+            extra: dict | None = None,
+            *,
+            capture_first_frame: bool = False,
+        ):
             before = len(metrics)
             params = {"name": name, "scale": scale, "theme": theme}
             params.update(extra or {})
             query = "&".join(f"{key}={value}" for key, value in params.items())
-            page.goto(f"{URL}?{query}", wait_until="load", timeout=120_000)
+            # For the motion route wait only for navigation commit. Waiting
+            # for all Flutter web startup work can consume its one-second
+            # initial pause before the first rendered frame is captured.
+            page.goto(
+                f"{URL}?{query}",
+                wait_until="domcontentloaded" if capture_first_frame else "load",
+                timeout=120_000,
+            )
             render_deadline = time.monotonic() + 60
             screenshot = b""
             while time.monotonic() < render_deadline:
                 screenshot = page.screenshot()
                 rendered = Image.open(BytesIO(screenshot)).convert("RGB")
-                if max(ImageStat.Stat(rendered).stddev) > 1:
+                if (
+                    max(ImageStat.Stat(rendered).stddev) > 1
+                    and len(metrics) > before
+                ):
                     break
-                page.wait_for_timeout(250)
+                page.wait_for_timeout(50)
             else:
                 raise TimeoutError(f"Flutter Web did not render {name} at {scale}×")
+            first_frame_time = time.monotonic()
             if rendered.size != (320, 640):
                 raise RuntimeError(f"Unexpected screenshot size: {rendered.size}")
             if page.evaluate("devicePixelRatio") != 1:
                 raise RuntimeError("Capture device pixel ratio was not 1")
-            page.wait_for_timeout(150)
+            if not capture_first_frame:
+                page.wait_for_timeout(150)
+            if capture_first_frame:
+                metric = metrics[-1] if len(metrics) > before else None
+                return metric, screenshot, first_frame_time
             return metrics[-1] if len(metrics) > before else None
 
         def capture_picker(scale: int):
@@ -134,19 +172,24 @@ try:
             query = "&".join(f"{key}={value}" for key, value in params.items())
             page.goto(f"{URL}?{query}", wait_until="load", timeout=120_000)
             page.wait_for_timeout(2_500)
-            # The fixture's only record is the first text row. Click its
-            # checkbox directly so the production dialog loads the file and
+            # The fixture's only record is the first text row. Click the file
+            # row directly so the production dialog loads the file and
             # shows the real chip at both text scales.
             checkbox_y = 140 if scale == 1 else 165
-            page.mouse.click(38, checkbox_y)
-            page.wait_for_timeout(500)
+            page.mouse.click(140, checkbox_y)
             screenshot = page.screenshot()
-            if Image.open(BytesIO(screenshot)).size != (320, 640):
-                raise RuntimeError("Unexpected production dialog screenshot size")
-            checkbox_color = Image.open(BytesIO(screenshot)).convert("RGB").getpixel(
-                (30, checkbox_y)
-            )
-            if checkbox_color[2] - checkbox_color[0] < 40:
+            checkbox_color = (0, 0, 0)
+            selection_deadline = time.monotonic() + 5
+            while time.monotonic() < selection_deadline:
+                image = Image.open(BytesIO(screenshot)).convert("RGB")
+                if image.size != (320, 640):
+                    raise RuntimeError("Unexpected production dialog screenshot size")
+                checkbox_color = image.getpixel((30, checkbox_y))
+                if checkbox_color[2] - checkbox_color[0] >= 40:
+                    break
+                page.wait_for_timeout(100)
+                screenshot = page.screenshot()
+            else:
                 raise RuntimeError(
                     f"Production route did not select annual.pdf at scale {scale}×; "
                     f"checkbox pixel was {checkbox_color}"
@@ -198,7 +241,9 @@ try:
         )
         screenshots.append("chat-file-chip-two-line-320x640-scale3-light.png")
 
-        long_metric = navigate("long", 3, "light", {"motion": "on"})
+        long_metric, start_frame, first_frame_time = navigate(
+            "long", 3, "light", {"motion": "on"}, capture_first_frame=True
+        )
         if "long" not in metric_times:
             raise RuntimeError(
                 "Missing the first long-name layout timestamp; "
@@ -217,8 +262,6 @@ try:
             long_metric = "Console diagnostic unavailable; using the verified 22.92 s cycle."
             travel_seconds = 8.96
 
-        page.wait_for_timeout(150)
-        start_frame = page.screenshot()
         (OUTPUT / "chat-file-chip-long-name-start-320x640-scale3-light.png").write_bytes(
             start_frame
         )
@@ -233,13 +276,15 @@ try:
         # rather than emit an invalid preview if capture starts after motion.
         elapsed_before_capture = max(
             0,
-            time.monotonic() - metric_times.get("long", time.monotonic()),
+            first_frame_time - metric_times.get("long", first_frame_time),
         )
         if elapsed_before_capture >= 1:
             raise RuntimeError(
                 "Motion capture started after the long-name initial pause"
             )
-        initial_hold_frames = math.ceil(elapsed_before_capture * frame_rate)
+        initial_hold_frames = math.ceil(
+            max(elapsed_before_capture, 1 - elapsed_before_capture) * frame_rate
+        )
         # The rounded-up still frames can add up to (1/fps) more time than
         # the measured delay. Include that excess in the recorded cycle so
         # the final endpoint still receives its full two-second pause.

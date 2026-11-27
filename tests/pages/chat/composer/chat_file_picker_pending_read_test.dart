@@ -601,15 +601,27 @@ void main() {
 void _expectOnlyKnownScaleThreeChromeOverflows(WidgetTester tester) {
   // Keep the 3× route regression focused on the selected chip while pinning
   // the adjacent 72 dp tab strip and selected-state AppBar overflow for their
-  // separate follow-up. Do not broaden this allowlist to other diagnostics.
+  // separate follow-up. Assert the tab's actual overflowing child geometry;
+  // the test binding's aggregated exception does not retain its individual
+  // FlutterErrorDetails, so its count alone is not a sufficient allowlist.
+  for (final name in ['text', 'image', 'video', 'audio']) {
+    final tab = find.byKey(Key('file_picker_tab_$name'));
+    final tabContent = find.descendant(of: tab, matching: find.byType(Column));
+    final label =
+        find.descendant(of: tab, matching: find.byType(ConstrainedText));
+    expect(tab, findsOneWidget);
+    expect(tester.getSize(tab).height, 72);
+    expect(tester.getSize(tabContent).height, 72);
+    expect(tester.getSize(label).height, 60);
+  }
   Object? exception;
   while ((exception = tester.takeException()) != null) {
     expect(
       exception.toString(),
-      matches(
-        RegExp(
-          r'(Multiple exceptions \(4\) were detected|A RenderFlex overflowed by (14 pixels on the bottom|67 pixels on the right)\.)',
-        ),
+      anyOf(
+        'A RenderFlex overflowed by 14 pixels on the bottom.',
+        'A RenderFlex overflowed by 67 pixels on the right.',
+        'Multiple exceptions (4) were detected during the running of the current test, and at least one was unexpected.',
       ),
     );
   }
