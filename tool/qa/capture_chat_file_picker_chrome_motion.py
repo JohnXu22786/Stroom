@@ -74,25 +74,59 @@ def main():
             page.wait_for_timeout(250)
             row = page.locator('flt-semantics[aria-label^="picker-chrome-note.txt"]')
             row.wait_for(timeout=30_000)
+            page.evaluate('''() => {
+              window.__clearFirstRenderedAt = null;
+              const recordFirstRender = () => {
+                if (window.__clearFirstRenderedAt !== null) return;
+                const clear = [...document.querySelectorAll('flt-semantics[role="button"]')]
+                    .find(element => element.innerText.includes('Auswahl aufheben (1)'));
+                if (clear) window.__clearFirstRenderedAt = performance.now();
+              };
+              new MutationObserver(recordFirstRender).observe(document.body, {
+                subtree: true,
+                childList: true,
+                characterData: true,
+                attributes: true,
+              });
+              recordFirstRender();
+            }''')
             row.evaluate('element => element.click()')
             clear = page.locator('flt-semantics[role="button"]').filter(
                 has_text='Auswahl aufheben (1)',
             )
             clear.wait_for(timeout=30_000)
 
-            started = time.monotonic()
             frame_count = math.ceil(CYCLE_SECONDS * FRAME_RATE) + 1
             tail_index = math.ceil((1 + TRAVEL_SECONDS) * FRAME_RATE)
             return_head_index = round((1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS) * FRAME_RATE)
-            for index in range(frame_count):
-                target = started + index / FRAME_RATE
+            render_clock = page.evaluate('''() => ({
+              firstRenderedAt: window.__clearFirstRenderedAt,
+              now: performance.now(),
+            })''')
+            if render_clock['firstRenderedAt'] is None:
+                raise RuntimeError('Clear first-render timestamp was not recorded')
+            elapsed = (
+                render_clock['now'] - render_clock['firstRenderedAt']
+            ) / 1000
+            if elapsed >= 0.5:
+                raise RuntimeError(
+                    f'Clear screenshot was too late to align its initial still: {elapsed:.3f}s'
+                )
+            timeline_started = time.monotonic() - elapsed
+            first_frame = FRAMES / 'frame-0000.png'
+            page.screenshot(path=str(first_frame))
+            first_frame_index = int(elapsed * FRAME_RATE)
+            shutil.copyfile(first_frame, HEAD_CAPTURE)
+            for index in range(1, first_frame_index + 1):
+                shutil.copyfile(first_frame, FRAMES / f'frame-{index:04d}.png')
+
+            for index in range(first_frame_index + 1, frame_count):
+                target = timeline_started + index / FRAME_RATE
                 delay = target - time.monotonic()
                 if delay > 0:
                     time.sleep(delay)
                 frame_path = FRAMES / f'frame-{index:04d}.png'
                 page.screenshot(path=str(frame_path))
-                if index == 0:
-                    shutil.copyfile(frame_path, HEAD_CAPTURE)
                 if index == tail_index:
                     shutil.copyfile(frame_path, TAIL_CAPTURE)
                 if index == return_head_index:
@@ -130,6 +164,7 @@ def main():
             'frame_rate': FRAME_RATE,
             'frames': frame_count,
             'duration_seconds': round(duration, 2),
+            'first_render_capture_delay_seconds': round(elapsed, 3),
             'page_errors': page_errors,
         })
     finally:
