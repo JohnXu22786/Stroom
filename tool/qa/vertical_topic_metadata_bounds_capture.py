@@ -1,8 +1,11 @@
 from pathlib import Path
 import shutil
 import subprocess
+import time
 
 from playwright.sync_api import sync_playwright
+
+from capture_render_readiness import wait_for_flutter_render
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/qa/vertical_topic_metadata_bounds"
@@ -27,8 +30,8 @@ with sync_playwright() as playwright:
     )
     screenshot_page = screenshot_context.new_page()
     screenshot_page.on("pageerror", lambda error: errors.append(str(error)))
-    screenshot_page.goto(SCREENSHOT_URL, wait_until="load")
-    screenshot_page.wait_for_timeout(8_000)
+    screenshot_page.goto(SCREENSHOT_URL, wait_until="load", timeout=120_000)
+    wait_for_flutter_render(screenshot_page, (320, 640), "Topic")
     screenshot_page.screenshot(path=str(CAPTURE))
     screenshot_page.close()
     screenshot_context.close()
@@ -39,10 +42,13 @@ with sync_playwright() as playwright:
         record_video_dir=str(VIDEO_DIR),
         record_video_size={"width": 320, "height": 640},
     )
+    recording_started = time.monotonic()
     video_page = video_context.new_page()
     video_page.on("pageerror", lambda error: errors.append(str(error)))
-    video_page.goto(PREVIEW_URL, wait_until="load")
-    video_page.wait_for_timeout(8_000)
+    video_page.goto(PREVIEW_URL, wait_until="load", timeout=120_000)
+    wait_for_flutter_render(video_page, (320, 640), "Topic")
+    motion_started_at = time.monotonic()
+    readiness_offset_seconds = motion_started_at - recording_started
     await_motion_seconds = 15
     video_page.wait_for_timeout(await_motion_seconds * 1_000)
     video_path = video_page.video.path()
@@ -54,7 +60,7 @@ with sync_playwright() as playwright:
             "ffmpeg",
             "-y",
             "-ss",
-            "15",
+            f"{readiness_offset_seconds:.3f}",
             "-i",
             video_path,
             "-t",
