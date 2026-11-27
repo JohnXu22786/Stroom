@@ -46,12 +46,13 @@ route checks focused and validation-error colors on the production field.
 
 ## Browser captures
 
-Captures use production Flutter routes/widgets, not a static mock, and were refreshed on base `fa9e99c7`:
+Captures use production Flutter routes/widgets, not a static mock. Reasoning/model-fit captures were refreshed on exact candidate `c800bb54` (base `cf77979a`). MCP and ASR captures were rendered on `fa9e99c7` before rebasing; the rebase added unrelated CatCatch changes and the scoped production routes remained byte-for-byte unchanged.
 
 - `mcp-config-en-320x640-1x.png`: clipped MCP form hints.
 - `asr-audio-url-de-DE-320x900-2x.png`: clipped audio URL hint and focused field.
 - `asr-audio-url-reveal-de-DE-320x900-2x.png` and the matching `.webm`: reveal in progress.
 - `llm-model-name-fit-fr-FR-360x900-1.8x.png`: naturally multiline fitting model-name hint, left unchanged.
+- `llm-reasoning-options-fr-FR-360x900-1.8x.png`: production LLM page showing the reasoning options area.
 - `reasoning-option-fr-FR-360x900-1.8x.png`: reasoning-option dialog's clipped example.
 
 The ASR URL web route renders one full `aria-description="https://example.com/audio.mp3"` on the native input, without a duplicate placeholder or aria-label. The recording shows the hint moving through the bounded field at the reported viewport and locale.
