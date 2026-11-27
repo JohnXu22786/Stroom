@@ -8,8 +8,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/pages/assistant/assistant_remote_source_dialog.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/assistant_catalog_service.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
@@ -272,6 +274,118 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('persists remote model identity and tool defaults on import', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        providerEntriesProvider.overrideWith(
+          (ref) => _ProviderEntriesNotifier(
+            ProviderEntriesState(
+              entries: [
+                ProviderEntry(
+                  type: 'llm',
+                  name: 'LLM providers',
+                  configs: [
+                    ProviderConfigItem(
+                      providerName: 'Provider A',
+                      host: 'https://api.example.test',
+                      key: 'test-key',
+                      models: [
+                        ModelConfig(
+                          name: 'Friendly Model',
+                          modelId: 'model-xyz',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(assistantProvider.notifier).ready;
+    const assistantJson = '''
+{
+  "schemaVersion": 1,
+  "id": "stroom.remote-defaults",
+  "name": "Remote defaults",
+  "version": "1.0.0",
+  "prompt": "Use the supplied defaults.",
+  "defaultModelId": "model-xyz",
+  "defaultModelName": "Friendly Model",
+  "defaultProviderName": "Provider A",
+  "defaultToolNames": ["web_search"]
+}
+''';
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: TextButton(
+                onPressed: () => showAssistantRemoteSourceDialog(
+                  context,
+                  ref,
+                  serviceFactory: () => AssistantCatalogService.testing(
+                    client: MockClient(
+                      (request) async => http.Response.bytes(
+                        utf8.encode(assistantJson),
+                        200,
+                        request: request,
+                      ),
+                    ),
+                    addressLookup: _publicAddressLookup,
+                  ),
+                ),
+                child: const Text('open remote source'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open remote source'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://example.com/assistant.json',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Import file'));
+    await tester.pumpAndSettle();
+    expect(
+      container
+          .read(assistantProvider)
+          .where(
+            (assistant) =>
+                assistant.remoteAssistantId == 'stroom.remote-defaults',
+          ),
+      hasLength(1),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    final savedRows = jsonDecode(preferences.getString('assistants')!) as List;
+    final savedAssistant = Assistant.fromMap(
+      Map<String, dynamic>.from(
+        savedRows.cast<Map>().firstWhere(
+          (row) => row['remoteAssistantId'] == 'stroom.remote-defaults',
+        ),
+      ),
+    );
+    expect(savedAssistant.defaultModelName, 'Friendly Model | Provider A');
+    expect(savedAssistant.defaultModelId, 'model-xyz');
+    expect(savedAssistant.defaultProviderName, 'Provider A');
+    expect(savedAssistant.defaultToolNames, {'web_search'});
+  });
+
   testWidgets('does not import after the dialog is dismissed during download', (
     tester,
   ) async {
@@ -430,3 +544,9 @@ void main() {
 
 Future<List<String>> _publicAddressLookup(String _) async =>
     const ['93.184.216.34'];
+
+class _ProviderEntriesNotifier extends ProviderEntriesNotifier {
+  _ProviderEntriesNotifier(ProviderEntriesState initialState) {
+    state = initialState;
+  }
+}
