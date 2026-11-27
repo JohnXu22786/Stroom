@@ -40,14 +40,14 @@ const int _ltCharCode = 0x3C;
 /// avoids false positives.
 class BrSyntax extends m.InlineSyntax {
   BrSyntax()
-      : super(
-          // Optional leading "/" for </br>, optional whitespace before an
-          // optional self-closing "/". Case-insensitive: models also output
-          // <BR> or <Br>.
-          r'</?br\s*/?>',
-          startCharacter: _ltCharCode,
-          caseSensitive: false,
-        );
+    : super(
+        // Optional leading "/" for </br>, optional whitespace before an
+        // optional self-closing "/". Case-insensitive: models also output
+        // <BR> or <Br>.
+        r'</?br\s*/?>',
+        startCharacter: _ltCharCode,
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
@@ -78,13 +78,13 @@ class BrSyntax extends m.InlineSyntax {
 /// normally.
 class USyntax extends m.InlineSyntax {
   USyntax()
-      : super(
-          // Case-insensitive: models also output <U> or </U>. The inner
-          // group is re-parsed by [m.Document.parseInline] in [onMatch].
-          r'<u>([\s\S]*?)</u>',
-          startCharacter: _ltCharCode,
-          caseSensitive: false,
-        );
+    : super(
+        // Case-insensitive: models also output <U> or </U>. The inner
+        // group is re-parsed by [m.Document.parseInline] in [onMatch].
+        r'<u>([\s\S]*?)</u>',
+        startCharacter: _ltCharCode,
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
@@ -215,7 +215,8 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
 class LatexSyntax extends m.InlineSyntax {
   /// Matches existing dollar forms and the common LaTeX display/inline
   /// delimiters. Markdown handles code spans and fences before this syntax.
-  static const String latexPattern = r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
+  static const String latexPattern =
+      r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
       r'(\\\((?:(?:\\.)|[^\\])+?\\\))|'
       r'(\\\[(?:(?:\\.)|[^\\])+?\\\])|'
       r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
@@ -372,7 +373,8 @@ class LatexNode extends SpanNode {
     final mathTextStyle = isInline
         ? style
         : style.copyWith(
-            fontSize: (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
+            fontSize:
+                (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
                 _displayMathScaleFactor,
           );
 
@@ -719,7 +721,7 @@ class _NormalizedContainerTailSource {
   final int fenceIndent;
   final _SegmentedText _completeLines = _SegmentedText();
   final _SegmentedText _pendingPrefix = _SegmentedText();
-  _SegmentedText _pendingLine = _SegmentedText();
+  final _SegmentedText _pendingLine = _SegmentedText();
   String _transformedPendingPrefix = '';
   bool _pendingPrefixResolved = false;
   int _pendingQuoteMarkers = 0;
@@ -906,12 +908,14 @@ _MermaidFenceInfo _unclosedFenceInfo(
   _FenceScanCheckpoint? resume,
   String? resumeText,
 }) {
-  final normalized = normalizedText ??
+  final normalized =
+      normalizedText ??
       (resume == null
           ? text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
           : resumeText!);
-  final normalizedLength =
-      resume == null ? normalized.length : resume.offset + normalized.length;
+  final normalizedLength = resume == null
+      ? normalized.length
+      : resume.offset + normalized.length;
   final lines = normalized.split('\n');
   var inFence = resume?.inFence ?? false;
   String? fenceChar = resume?.fenceChar;
@@ -1058,8 +1062,9 @@ _MermaidFenceInfo _unclosedFenceInfo(
       listInnerQuoteDepth = 0;
       if (!lazyParagraphContinuation) paragraphOpen = false;
     }
-    var listContainerIndent =
-        listContentIndents.isEmpty ? 0 : listContentIndents.last;
+    var listContainerIndent = listContentIndents.isEmpty
+        ? 0
+        : listContentIndents.last;
     var listContent = quotedLine.line;
     if (!_isMarkdownBlankLine(listContent)) {
       final lineIndent = _leadingIndentColumns(listContent);
@@ -1072,8 +1077,9 @@ _MermaidFenceInfo _unclosedFenceInfo(
               ))) {
         listContentIndents.removeLast();
       }
-      listContainerIndent =
-          listContentIndents.isEmpty ? 0 : listContentIndents.last;
+      listContainerIndent = listContentIndents.isEmpty
+          ? 0
+          : listContentIndents.last;
       listContent = _stripListItemIndent(listContent, listContainerIndent);
     }
     final listLine = _stripListItemPrefix(
@@ -1149,7 +1155,8 @@ _MermaidFenceInfo _unclosedFenceInfo(
       // Content starts after the fence line and its newline.
       tailStart = offset + line.length + 1;
     } else {
-      paragraphOpen = !_isParagraphBoundaryLine(
+      paragraphOpen =
+          !_isParagraphBoundaryLine(
             innerQuotedLine.line,
             paragraphOpen: paragraphOpen,
           ) &&
@@ -1186,35 +1193,36 @@ _MermaidFenceInfo _unclosedFenceInfo(
     );
   }
   final shouldCacheTail = !includeTail && hasUnfencedIndentedCode;
-  final needsContainerTransform = openMermaidFenceIndex != null &&
+  final needsContainerTransform =
+      openMermaidFenceIndex != null &&
       (openMermaidFenceQuoteDepth != 0 ||
           openMermaidFenceListIndent != 0 ||
           openMermaidFenceInnerQuoteDepth != 0 ||
           openMermaidFenceIndent != 0);
   final normalizedTail = includeTail || shouldCacheTail
       ? tailStart >= normalizedLength
-          ? ''
-          : resume == null
-              ? normalized.substring(tailStart)
-              : tailStart >= resume.offset
-                  ? normalized.substring(tailStart - resume.offset)
-                  : null
+            ? ''
+            : resume == null
+            ? normalized.substring(tailStart)
+            : tailStart >= resume.offset
+            ? normalized.substring(tailStart - resume.offset)
+            : null
       : null;
   final tail = includeTail ? normalizedTail : null;
   final normalizedTailSource =
       shouldCacheTail && !needsContainerTransform && normalizedTail != null
-          ? _SegmentedText(normalizedTail)
-          : null;
+      ? _SegmentedText(normalizedTail)
+      : null;
   final normalizedContainerTailSource =
       shouldCacheTail && needsContainerTransform && normalizedTail != null
-          ? _NormalizedContainerTailSource(
-              normalizedTail,
-              openMermaidFenceQuoteDepth,
-              openMermaidFenceListIndent,
-              openMermaidFenceInnerQuoteDepth,
-              openMermaidFenceIndent,
-            )
-          : null;
+      ? _NormalizedContainerTailSource(
+          normalizedTail,
+          openMermaidFenceQuoteDepth,
+          openMermaidFenceListIndent,
+          openMermaidFenceInnerQuoteDepth,
+          openMermaidFenceIndent,
+        )
+      : null;
   return (
     tail: tail,
     tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
@@ -1283,15 +1291,18 @@ class StreamingFenceInfoCache {
       // The CR was already normalized at the previous chunk boundary.
       appended = appended.substring(1);
     }
-    final normalizedAppended =
-        appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final normalizedAppended = appended
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
     final checkpoint = cached.scanCheckpoint!;
-    final canReuseFenceState = cached.fenceChar == null ||
+    final canReuseFenceState =
+        cached.fenceChar == null ||
         (checkpoint.inFence &&
             cached.fenceQuoteDepth == 0 &&
             cached.fenceListIndent == 0 &&
             cached.fenceInnerQuoteDepth == 0);
-    final markerCannotCloseFence = cached.fenceChar != null &&
+    final markerCannotCloseFence =
+        cached.fenceChar != null &&
         checkpoint.inFence &&
         cached.fenceQuoteDepth == 0 &&
         cached.fenceListIndent == 0 &&
@@ -1421,7 +1432,8 @@ class StreamingFenceInfoCache {
       resume: resume,
       resumeText: resumeText,
     );
-    final continuesSameFence = cached != null &&
+    final continuesSameFence =
+        cached != null &&
         info.openFenceIndex == cached.openFenceIndex &&
         info.tailStart == cached.tailStart &&
         info.fenceChar != null;
@@ -1500,8 +1512,9 @@ class StreamingFenceInfoCache {
 
   static String _suffixAfterAppend(String suffix, String appended) {
     final newline = appended.lastIndexOf('\n');
-    final currentLine =
-        newline == -1 ? '$suffix$appended' : appended.substring(newline + 1);
+    final currentLine = newline == -1
+        ? '$suffix$appended'
+        : appended.substring(newline + 1);
     return currentLine.length <= 2
         ? currentLine
         : currentLine.substring(currentLine.length - 2);
@@ -1526,8 +1539,9 @@ class StreamingFenceInfoCache {
   ) {
     final lastLineFeed = appended.lastIndexOf('\n');
     final lastCarriageReturn = appended.lastIndexOf('\r');
-    final lastLineBreak =
-        lastLineFeed > lastCarriageReturn ? lastLineFeed : lastCarriageReturn;
+    final lastLineBreak = lastLineFeed > lastCarriageReturn
+        ? lastLineFeed
+        : lastCarriageReturn;
     return lastLineBreak < 0
         ? previousLineStart
         : previousTextLength + lastLineBreak + 1;
@@ -1687,8 +1701,8 @@ bool _isMermaidFenceLanguage(
     // same Mermaid blocks as the builder. Keep the source fence marker because
     // CommonMark allows backticks in a tilde-fence info string.
     final fenceMarker = List.filled(fenceLength, fenceChar).join();
-    final parsed =
-        m.Document(encodeHtml: false).parseLines(['$fenceMarker$info']);
+    final parsed = m.Document(encodeHtml: false)
+        .parseLines(['$fenceMarker$info']);
     for (final node in parsed) {
       if (node is! m.Element || node.tag != 'pre') continue;
       final children = node.children;
@@ -1739,7 +1753,7 @@ final _standaloneHtmlTag = RegExp(
 );
 
 ({RegExp? terminator, bool untilBlank, bool canInterruptParagraph})?
-    _htmlBlockStart(String line) {
+_htmlBlockStart(String line) {
   if (_htmlRawTagStart.hasMatch(line)) {
     return (
       terminator: RegExp(
@@ -1844,18 +1858,21 @@ String _stripFenceContainerPrefix(
       fenceIndent == 0) {
     return text;
   }
-  return text.split('\n').map((line) {
-    final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
-    final listStripped = _stripListItemIndent(
-      outerQuoteStripped,
-      listIndent,
-    );
-    final innerQuoteStripped = _stripBlockQuoteDepth(
-      listStripped,
-      innerQuoteDepth,
-    );
-    return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
-  }).join('\n');
+  return text
+      .split('\n')
+      .map((line) {
+        final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+        final listStripped = _stripListItemIndent(
+          outerQuoteStripped,
+          listIndent,
+        );
+        final innerQuoteStripped = _stripBlockQuoteDepth(
+          listStripped,
+          innerQuoteDepth,
+        );
+        return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
+      })
+      .join('\n');
 }
 
 String _stripFenceContentIndent(String line, int indent) {
@@ -1867,7 +1884,7 @@ String _stripFenceContentIndent(String line, int indent) {
 }
 
 ({String fenceChar, int fenceLength, String infoString, int indent})?
-    _openingFence(String line) {
+_openingFence(String line) {
   // CommonMark allows 1-3 leading spaces on fences.
   final stripped = _stripUpTo3Spaces(line);
   if (stripped.length < 3) return null;
@@ -1995,7 +2012,8 @@ String _expandLeadingTabs(String line, int column) {
   var markerStartIndent = 0;
   while (markerStart < line.length &&
       (line[markerStart] == ' ' || line[markerStart] == '\t')) {
-    final nextIndent = _indentColumnsAfter(
+    final nextIndent =
+        _indentColumnsAfter(
           line,
           markerStart,
           sourceColumnOffset + markerStartIndent,
@@ -2037,7 +2055,8 @@ String _expandLeadingTabs(String line, int column) {
   var separatorIndent = markerIndent;
   while (separatorEnd < line.length &&
       (line[separatorEnd] == ' ' || line[separatorEnd] == '\t')) {
-    separatorIndent = _indentColumnsAfter(
+    separatorIndent =
+        _indentColumnsAfter(
           line,
           separatorEnd,
           sourceColumnOffset + separatorIndent,
@@ -2054,16 +2073,19 @@ String _expandLeadingTabs(String line, int column) {
 
   final separatorColumns = separatorIndent - markerIndent;
   final consumesWholeSeparator = separatorColumns <= 4;
-  final consumedSeparator =
-      consumesWholeSeparator ? separatorEnd - markerEnd : 1;
+  final consumedSeparator = consumesWholeSeparator
+      ? separatorEnd - markerEnd
+      : 1;
   final consumed = markerEnd + consumedSeparator;
-  final consumedIndent =
-      consumesWholeSeparator ? separatorIndent : markerIndent + 1;
+  final consumedIndent = consumesWholeSeparator
+      ? separatorIndent
+      : markerIndent + 1;
   var contentLine = line.substring(consumed);
   if (!consumesWholeSeparator) {
     if (line[markerEnd] == '\t') {
       final markerEndColumn = sourceColumnOffset + markerIndent;
-      final tabWidth = _indentColumnsAfter(line, markerEnd, markerEndColumn) -
+      final tabWidth =
+          _indentColumnsAfter(line, markerEnd, markerEndColumn) -
           markerEndColumn;
       contentLine = '${List.filled(tabWidth - 1, ' ').join()}$contentLine';
     }
@@ -2194,7 +2216,8 @@ PreConfig codeBlockPreConfig({
     builder: (code, language) {
       final fenceIndex = nextFenceIndex++;
       if (isStreaming && streamingText != null && !hasStreamingFenceInfo) {
-        streamingFenceInfo = streamingFenceInfoCache?._infoFor(streamingText) ??
+        streamingFenceInfo =
+            streamingFenceInfoCache?._infoFor(streamingText) ??
             _unclosedFenceInfo(streamingText);
         mermaidFenceCount = streamingFenceInfo!.mermaidFenceCount;
         hasStreamingFenceInfo = true;
@@ -2272,24 +2295,33 @@ int countOccurrences(String text, String lowerQuery) {
 /// wrong occurrence) and overstate the match counter. Line structure is
 /// preserved so the occurrence ORDER matches the rendered text's order.
 ///
-/// Known limitations (matches there keep shifting ordinals, an uncommon
-/// case for real search queries): matches inside link/image URLs, inline
-/// `$...$` math, and 4-space-indented code blocks are still not stripped
-/// (the renderer does not visit them as text either, but this function does
-/// not detect them).
+/// Inline link/image destinations, math, and indented code are also removed
+/// because they render outside visited text nodes.
 String stripSearchIrrelevantMarkdown(String text) {
   final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   final lines = normalized.split('\n');
   final kept = <String>[];
   var inFence = false;
+  var inIndentedCode = false;
+  var activeBlockquoteDepth = 0;
+  var inBlockquoteParagraph = false;
   String? fenceChar;
   var fenceLength = 0;
-  for (final line in lines) {
+  for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    final line = lines[lineIndex];
     final trimmed = line.trimRight();
     // Fence detection ignores a leading blockquote marker (">"), so fences
     // inside blockquotes are stripped too — matching the renderer, which
     // parses them as code blocks.
     final withoutQuote = _stripBlockquoteMarker(trimmed);
+    final quoteDepth = _blockquoteMarkerDepth(line);
+    final contentLine = _stripAllBlockquoteMarkers(line);
+    final isBlank = contentLine.trim().isEmpty;
+    final isIndented = m.CodeBlockSyntax().pattern.hasMatch(contentLine);
+    final startsQuoteContext =
+        quoteDepth > 0 && quoteDepth != activeBlockquoteDepth;
+    final wasInFence = inFence;
+    final opening = wasInFence ? null : _openingFence(withoutQuote);
     if (inFence) {
       if (_isClosingFenceLine(withoutQuote, fenceChar!, fenceLength)) {
         inFence = false;
@@ -2299,15 +2331,36 @@ String stripSearchIrrelevantMarkdown(String text) {
       }
       // Content inside the fence is dropped.
     } else {
-      final opening = _openingFence(withoutQuote);
       if (opening != null) {
         inFence = true;
         fenceChar = opening.fenceChar;
         fenceLength = opening.fenceLength;
         kept.add(''); // The opening fence line is replaced by a blank line.
       } else {
-        kept.add(line);
+        final previousLineIsBlank =
+            lineIndex == 0 ||
+            _stripAllBlockquoteMarkers(lines[lineIndex - 1]).trim().isEmpty ||
+            startsQuoteContext;
+        if (isIndented && (inIndentedCode || previousLineIsBlank)) {
+          inIndentedCode = true;
+          kept.add('');
+        } else {
+          if (!isBlank) inIndentedCode = false;
+          kept.add(line);
+        }
       }
+    }
+    if (quoteDepth > 0) {
+      activeBlockquoteDepth = quoteDepth;
+      inBlockquoteParagraph =
+          !isBlank && !isIndented && !wasInFence && opening == null;
+    } else if (!(activeBlockquoteDepth > 0 &&
+        inBlockquoteParagraph &&
+        !isBlank &&
+        !isIndented &&
+        !wasInFence)) {
+      activeBlockquoteDepth = 0;
+      inBlockquoteParagraph = false;
     }
   }
   if (inFence) {
@@ -2315,27 +2368,36 @@ String stripSearchIrrelevantMarkdown(String text) {
     kept.add('');
   }
   final withoutFences = kept.join('\n');
-  // Inline pass: drop inline code spans and display math. The renderer
-  // inline-parses each paragraph separately, so the code-span scan is split
-  // per paragraph (a span can never cross a blank line). Matches are walked
-  // manually instead of replaceAll because the parser refuses to start a
-  // span right after a backtick — a regex scan would otherwise strip prose
-  // on ragged backtick runs. Unmatched backticks/`$` are left alone: the
-  // renderer treats them as literal text too, so search and rendering stay
-  // consistent.
+  // Inline pass: drop inline code spans, link/image destinations and math.
+  // The renderer inline-parses each paragraph separately, so the code-span
+  // scan is split per paragraph (a span can never cross a blank line).
+  // Matches are walked manually instead of replaceAll because the parser
+  // refuses to start a span right after a backtick — a regex scan would
+  // otherwise strip prose on ragged backtick runs.
+  // Unmatched backticks/`$` are left alone: the renderer treats them as
+  // literal text too, so search and rendering stay consistent.
   final paragraphs = withoutFences.split('\n\n');
-  final inlineStripped = paragraphs.map((paragraph) {
-    final buffer = StringBuffer();
-    var last = 0;
-    for (final match in _codeSpanPattern.allMatches(paragraph)) {
-      if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
-      buffer.write(paragraph.substring(last, match.start));
-      last = match.end;
-    }
-    buffer.write(paragraph.substring(last));
-    return buffer.toString();
-  }).join('\n\n');
-  return inlineStripped.replaceAll(_displayMathPattern, '');
+  final inlineStripped = paragraphs
+      .map((paragraph) {
+        final withoutLinkDestinations = _stripLinkDestinations(paragraph);
+        final buffer = StringBuffer();
+        var last = 0;
+        for (final match in _codeSpanPattern.allMatches(
+          withoutLinkDestinations,
+        )) {
+          if (match.start > 0 &&
+              withoutLinkDestinations[match.start - 1] == '`') {
+            continue;
+          }
+          buffer.write(withoutLinkDestinations.substring(last, match.start));
+          last = match.end;
+        }
+        buffer.write(withoutLinkDestinations.substring(last));
+        return buffer.toString();
+      })
+      .join('\n\n');
+  final withoutDisplayMath = inlineStripped.replaceAll(_displayMathPattern, '');
+  return withoutDisplayMath.split('\n\n').map(_stripInlineMath).join('\n\n');
 }
 
 /// The markdown parser's inline code pattern (see `CodeSyntax`): a run of
@@ -2346,9 +2408,314 @@ final RegExp _codeSpanPattern = RegExp(r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)');
 /// Display math (`$$...$$`) pattern used by the search stripper.
 final RegExp _displayMathPattern = RegExp(r'\$\$[\s\S]*?\$\$');
 
+String _stripInlineMath(String text) {
+  final buffer = StringBuffer();
+  var last = 0;
+  for (final match in RegExp(LatexSyntax.latexPattern).allMatches(text)) {
+    final value = match[0]!;
+    if (value == r'\(' || value == r'\[') continue;
+    if (_hasEscapedBackslash(text, match.start)) continue;
+    if (value.startsWith(r'$') &&
+        !value.startsWith(r'$$') &&
+        _isCrossPairedInlineDollar(text, match.start, value)) {
+      continue;
+    }
+    buffer.write(text.substring(last, match.start));
+    last = match.end;
+  }
+  buffer.write(text.substring(last));
+  return buffer.toString();
+}
+
+String _stripLinkDestinations(String text) {
+  final buffer = StringBuffer();
+  final bracketOpeners = <int>[];
+  final codeSpans = _codeSpanPattern.allMatches(text).where((match) {
+    return match.start == 0 || text[match.start - 1] != '`';
+  }).toList();
+  // Link destinations are parsed before inline code spans by the renderer.
+  // Keep their raw parentheses in the destination map even when backticks in
+  // a destination would otherwise make the code-span pass skip its closer.
+  final linkOpenParens = _findInlineLinkOpenParens(text, codeSpans);
+  final angleDestinationStarts = _angleDestinationStarts(text, linkOpenParens);
+  final matchingParens = _matchingLinkParens(text, angleDestinationStarts);
+  final nextWhitespace = _nextMatchingIndex(text, _isLinkWhitespace);
+  final nextNonWhitespace = _nextMatchingIndex(
+    text,
+    (value, index) => !_isLinkWhitespace(value, index),
+  );
+  var last = 0;
+  var index = 0;
+  var codeSpanIndex = 0;
+  var failedFallbackScannedTo = -1;
+  while (index < text.length) {
+    while (codeSpanIndex < codeSpans.length &&
+        codeSpans[codeSpanIndex].end <= index) {
+      codeSpanIndex++;
+    }
+    if (codeSpanIndex < codeSpans.length &&
+        codeSpans[codeSpanIndex].start == index) {
+      index = codeSpans[codeSpanIndex].end;
+      codeSpanIndex++;
+      continue;
+    }
+    if (text[index] == r'\' && index + 1 < text.length) {
+      index += 2;
+      continue;
+    }
+    if (text[index] == '[') {
+      bracketOpeners.add(index);
+      index++;
+      continue;
+    }
+    if (text[index] != ']' || bracketOpeners.isEmpty) {
+      index++;
+      continue;
+    }
+    final linkOpener = bracketOpeners.removeLast();
+    final openParen = index + 1;
+    if (openParen >= text.length || text[openParen] != '(') {
+      index++;
+      continue;
+    }
+    var destinationEnd = matchingParens[openParen];
+    if (destinationEnd == null ||
+        !_isValidInlineLink(text, linkOpener, destinationEnd)) {
+      if (openParen < failedFallbackScannedTo &&
+          !_hasLinkTitleAfterWhitespace(
+            text,
+            openParen,
+            nextWhitespace,
+            nextNonWhitespace,
+          )) {
+        index++;
+        continue;
+      }
+      final linkScan = _linkDestinationEnd(text, openParen);
+      destinationEnd = linkScan.end;
+      if (destinationEnd == null) {
+        failedFallbackScannedTo = linkScan.scannedTo;
+        index++;
+        continue;
+      }
+      if (!_isValidInlineLink(text, linkOpener, destinationEnd)) {
+        index++;
+        continue;
+      }
+    }
+    buffer.write(text.substring(last, openParen));
+    last = destinationEnd;
+    index = destinationEnd;
+  }
+  buffer.write(text.substring(last));
+  return buffer.toString();
+}
+
+List<int> _nextMatchingIndex(String text, bool Function(String, int) matches) {
+  final next = List<int>.filled(text.length + 1, text.length);
+  var nextIndex = text.length;
+  for (var index = text.length - 1; index >= 0; index--) {
+    if (matches(text, index)) nextIndex = index;
+    next[index] = nextIndex;
+  }
+  return next;
+}
+
+bool _hasLinkTitleAfterWhitespace(
+  String text,
+  int openParen,
+  List<int> nextWhitespace,
+  List<int> nextNonWhitespace,
+) {
+  final whitespaceIndex = nextWhitespace[openParen + 1];
+  if (whitespaceIndex >= text.length) return false;
+  final titleStart = nextNonWhitespace[whitespaceIndex + 1];
+  if (titleStart >= text.length) return false;
+  return text[titleStart] == '"' ||
+      text[titleStart] == "'" ||
+      text[titleStart] == '(';
+}
+
+Set<int> _findInlineLinkOpenParens(String text, List<Match> codeSpans) {
+  final openBrackets = <int>[];
+  final openParens = <int>{};
+  var index = 0;
+  var codeSpanIndex = 0;
+  while (index < text.length) {
+    while (codeSpanIndex < codeSpans.length &&
+        codeSpans[codeSpanIndex].end <= index) {
+      codeSpanIndex++;
+    }
+    if (codeSpanIndex < codeSpans.length &&
+        codeSpans[codeSpanIndex].start == index) {
+      index = codeSpans[codeSpanIndex].end;
+      codeSpanIndex++;
+      continue;
+    }
+    if (text[index] == r'\' && index + 1 < text.length) {
+      index += 2;
+      continue;
+    }
+    if (text[index] == '[') {
+      openBrackets.add(index);
+    } else if (text[index] == ']' && openBrackets.isNotEmpty) {
+      openBrackets.removeLast();
+      if (index + 1 < text.length && text[index + 1] == '(') {
+        openParens.add(index + 1);
+      }
+    }
+    index++;
+  }
+  return openParens;
+}
+
+Set<int> _angleDestinationStarts(String text, Set<int> linkOpenParens) {
+  final starts = <int>{};
+  for (final openParen in linkOpenParens) {
+    var index = openParen + 1;
+    while (_isLinkWhitespace(text, index)) {
+      index++;
+    }
+    if (index < text.length && text[index] == '<') starts.add(index);
+  }
+  return starts;
+}
+
+Map<int, int> _matchingLinkParens(
+  String text,
+  Set<int> angleDestinationStarts,
+) {
+  final matching = <int, int>{};
+  final openParens = <int>[];
+  var angleDestination = false;
+  for (var index = 0; index < text.length; index++) {
+    if (text[index] == r'\' && index + 1 < text.length) {
+      index++;
+      continue;
+    }
+    if (angleDestination) {
+      if (text[index] == '>') angleDestination = false;
+      continue;
+    }
+    if (angleDestinationStarts.contains(index) && openParens.isNotEmpty) {
+      // Parentheses inside angle-bracket destinations do not balance the
+      // link's closing parenthesis.
+      angleDestination = true;
+      continue;
+    }
+    if (text[index] == '(') {
+      openParens.add(index);
+    } else if (text[index] == ')' && openParens.isNotEmpty) {
+      matching[openParens.removeLast()] = index + 1;
+    }
+  }
+  return matching;
+}
+
+({int? end, int scannedTo}) _linkDestinationEnd(String text, int openParen) {
+  var index = openParen + 1;
+  while (_isLinkWhitespace(text, index)) {
+    index++;
+  }
+  if (index >= text.length) return (end: null, scannedTo: index);
+
+  if (text[index] == '<') {
+    index++;
+    while (index < text.length) {
+      final char = text[index];
+      if (char == r'\' && index + 1 < text.length) {
+        index += 2;
+        continue;
+      }
+      if (char == '<' || char == '\n' || char == '\r' || char == '\f') {
+        return (end: null, scannedTo: index);
+      }
+      if (char == '>') {
+        index++;
+        return _linkTitleOrCloseParen(text, index);
+      }
+      index++;
+    }
+    return (end: null, scannedTo: index);
+  }
+
+  var depth = 1;
+  while (index < text.length) {
+    final char = text[index];
+    if (char == r'\' && index + 1 < text.length) {
+      index += 2;
+      continue;
+    }
+    if (_isLinkWhitespace(text, index)) {
+      return _linkTitleOrCloseParen(text, index);
+    }
+    if (char == '<' || char == '>') {
+      return (end: null, scannedTo: index);
+    }
+    if (char == '(') depth++;
+    if (char == ')') {
+      depth--;
+      if (depth == 0) {
+        return (end: index + 1, scannedTo: index + 1);
+      }
+    }
+    index++;
+  }
+  return (end: null, scannedTo: index);
+}
+
+({int? end, int scannedTo}) _linkTitleOrCloseParen(String text, int index) {
+  while (_isLinkWhitespace(text, index)) {
+    index++;
+  }
+  if (index >= text.length) return (end: null, scannedTo: index);
+  if (text[index] == ')') return (end: index + 1, scannedTo: index + 1);
+
+  final titleDelimiter = text[index];
+  if (titleDelimiter != '"' && titleDelimiter != "'" && titleDelimiter != '(') {
+    return (end: null, scannedTo: index);
+  }
+  final closingDelimiter = titleDelimiter == '(' ? ')' : titleDelimiter;
+  index++;
+  while (index < text.length) {
+    if (text[index] == r'\' && index + 1 < text.length) {
+      index += 2;
+      continue;
+    }
+    if (text[index] == closingDelimiter) {
+      index++;
+      while (_isLinkWhitespace(text, index)) {
+        index++;
+      }
+      if (index < text.length && text[index] == ')') {
+        return (end: index + 1, scannedTo: index + 1);
+      }
+      return (end: null, scannedTo: index);
+    }
+    index++;
+  }
+  return (end: null, scannedTo: index);
+}
+
+bool _isLinkWhitespace(String text, int index) {
+  if (index >= text.length) return false;
+  return switch (text.codeUnitAt(index)) {
+    0x20 || 0x09 || 0x0A || 0x0B || 0x0D || 0x0C => true,
+    _ => false,
+  };
+}
+
+bool _isValidInlineLink(String text, int opener, int end) {
+  final nodes = m.Document(encodeHtml: false)
+      .parseInline(text.substring(opener, end));
+  if (nodes.length != 1 || nodes.single is! m.Element) return false;
+  final element = nodes.single as m.Element;
+  return element.tag == 'a' || element.tag == 'img';
+}
+
 /// Strips one leading blockquote marker (`>`), with up to 3 leading spaces
-/// and an optional space after it, from [line]. Returns [line] unchanged when
-/// it is not a blockquote line.
+/// and an optional space or tab after it, from [line]. Returns [line] unchanged
+/// when it is not a blockquote line.
 String _stripBlockquoteMarker(String line) {
   var i = 0;
   // CommonMark allows up to 3 leading spaces before the '>'.
@@ -2357,8 +2724,30 @@ String _stripBlockquoteMarker(String line) {
   }
   if (i >= line.length || line[i] != '>') return line;
   i++; // consume '>'
-  if (i < line.length && line[i] == ' ') i++; // optional space after '>'
+  if (i < line.length && (line[i] == ' ' || line[i] == '\t')) {
+    i++; // optional whitespace after '>'
+  }
   return line.substring(i);
+}
+
+String _stripAllBlockquoteMarkers(String line) {
+  var current = line;
+  while (true) {
+    final stripped = _stripBlockquoteMarker(current);
+    if (stripped == current) return current;
+    current = stripped;
+  }
+}
+
+int _blockquoteMarkerDepth(String line) {
+  var current = line;
+  var depth = 0;
+  while (true) {
+    final stripped = _stripBlockquoteMarker(current);
+    if (stripped == current) return depth;
+    current = stripped;
+    depth++;
+  }
 }
 
 /// A [TextNode] that highlights every case-insensitive occurrence of the
@@ -2551,8 +2940,9 @@ MarkdownConfig buildMarkdownConfig({
   String? streamingText,
   StreamingFenceInfoCache? streamingFenceInfoCache,
 }) {
-  final base =
-      isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+  final base = isDark
+      ? MarkdownConfig.darkConfig
+      : MarkdownConfig.defaultConfig;
   return base.copy(
     configs: [
       codeBlockPreConfig(
@@ -2604,7 +2994,8 @@ MarkdownConfig buildMessageMarkdownConfig({
     isDark: isDark,
     isStreaming: isThisMessageStreaming,
     streamingText: isThisMessageStreaming ? streamingText : null,
-    streamingFenceInfoCache:
-        isThisMessageStreaming ? streamingFenceInfoCache : null,
+    streamingFenceInfoCache: isThisMessageStreaming
+        ? streamingFenceInfoCache
+        : null,
   );
 }

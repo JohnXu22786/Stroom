@@ -21,14 +21,19 @@ List<TextSpan> _collectSpans(InlineSpan span) {
     for (final child in span.children ?? const <InlineSpan>[]) {
       result.addAll(_collectSpans(child));
     }
+  } else if (span is WidgetSpan && span.child is Container) {
+    final child = (span.child as Container).child;
+    if (child is ProxyRichText) {
+      result.addAll(_collectSpans(child.textSpan));
+    }
   }
   return result;
 }
 
 Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
     widget is LinkRecognizerLifecycle
-        ? _unwrapLinkRecognizerLifecycle(widget.child)
-        : widget;
+    ? _unwrapLinkRecognizerLifecycle(widget.child)
+    : widget;
 
 /// Builds [markdown] with [gen] and returns every text span of the resulting
 /// widgets, so tests can inspect both the rendered plain text and the
@@ -41,8 +46,8 @@ List<TextSpan> _spansOf(MarkdownGenerator gen, String markdown) {
   final spans = <TextSpan>[];
   for (final widget in widgets) {
     final padded = widget as Padding;
-    final textWidget = _unwrapLinkRecognizerLifecycle(padded.child!) as Text;
-    spans.addAll(_collectSpans(textWidget.textSpan as TextSpan));
+    final child = _unwrapLinkRecognizerLifecycle(padded.child!);
+    if (child is Text) spans.addAll(_collectSpans(child.textSpan as TextSpan));
   }
   return spans;
 }
@@ -82,8 +87,11 @@ void main() {
       final stripped = stripSearchIrrelevantMarkdown(
         '```\nterm\n```\nprose term',
       );
-      expect(countOccurrences(stripped, 'term'), 1,
-          reason: 'the match inside the code fence must not be counted');
+      expect(
+        countOccurrences(stripped, 'term'),
+        1,
+        reason: 'the match inside the code fence must not be counted',
+      );
       expect(stripped, isNot(contains('term\n```')));
     });
 
@@ -100,8 +108,11 @@ void main() {
       // ``sudo`` is a single code span to the renderer (content "sudo");
       // the whole span must be stripped, not just the two backtick pairs.
       final stripped = stripSearchIrrelevantMarkdown('Use ``sudo rm`` term');
-      expect(countOccurrences(stripped, 'sudo'), 0,
-          reason: 'double-backtick span content must not be counted');
+      expect(
+        countOccurrences(stripped, 'sudo'),
+        0,
+        reason: 'double-backtick span content must not be counted',
+      );
       expect(countOccurrences(stripped, 'term'), 1);
     });
 
@@ -109,9 +120,13 @@ void main() {
       final stripped = stripSearchIrrelevantMarkdown(
         '> ~~~\n> term\n> ~~~\nterm in prose',
       );
-      expect(countOccurrences(stripped, 'term'), 1,
-          reason: 'the match inside the blockquote code fence must not be '
-              'counted');
+      expect(
+        countOccurrences(stripped, 'term'),
+        1,
+        reason:
+            'the match inside the blockquote code fence must not be '
+            'counted',
+      );
     });
 
     test('keeps prose around ragged backtick runs', () {
@@ -119,8 +134,11 @@ void main() {
       // span cannot start right after a backtick), so the prose between
       // them must survive stripping.
       final stripped = stripSearchIrrelevantMarkdown('a ````` x ```` b');
-      expect(countOccurrences(stripped, 'x'), 1,
-          reason: 'ragged backtick runs are literal text, not code spans');
+      expect(
+        countOccurrences(stripped, 'x'),
+        1,
+        reason: 'ragged backtick runs are literal text, not code spans',
+      );
     });
 
     test('does not strip code spans across a paragraph boundary', () {
@@ -141,6 +159,430 @@ void main() {
     test('drops the tail of an unclosed trailing fence', () {
       final stripped = stripSearchIrrelevantMarkdown('```\nterm');
       expect(countOccurrences(stripped, 'term'), 0);
+    });
+
+    test('removes link and image destinations from search text', () {
+      const markdown =
+          '[label](https://hidden.example/term) '
+          '![image](https://term.example) literal ](term) visible term '
+          '[spaced] (term) [invalid](visible term)';
+      final stripped = stripSearchIrrelevantMarkdown(markdown);
+      expect(countOccurrences(stripped, 'term'), 4);
+      expect(stripped, contains('[label]'));
+      final spans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        markdown,
+      );
+      final current = spans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(current.map((span) => span.text), ['term']);
+      final highlights = spans.where(
+        (span) =>
+            span.style?.backgroundColor == Colors.yellow ||
+            span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(highlights.map((span) => span.text), [
+        'term',
+        'term',
+        'term',
+        'term',
+      ]);
+
+      const backtickDestination = '[label](https://x/`term)` visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(backtickDestination),
+          'term',
+        ),
+        1,
+        reason: 'link destination parsing must see its closing parenthesis',
+      );
+      final backtickSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        backtickDestination,
+      );
+      final currentBacktickMatch = backtickSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentBacktickMatch.map((span) => span.text), ['term']);
+
+      final separatedSyntax = stripSearchIrrelevantMarkdown(
+        '[label]`x`(term) visible term',
+      );
+      expect(
+        countOccurrences(separatedSyntax, 'term'),
+        2,
+        reason: 'stripping inline code must not create a link destination',
+      );
+
+      final titledLink = stripSearchIrrelevantMarkdown(
+        '[title](url "term )") visible term',
+      );
+      expect(countOccurrences(titledLink, 'term'), 1);
+
+      const parenthesizedTitle = '[title](url "term (") visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(parenthesizedTitle),
+          'term',
+        ),
+        1,
+        reason: 'parentheses in a quoted title do not close the link',
+      );
+      final parenthesizedTitleSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        parenthesizedTitle,
+      );
+      final currentTitleMatch = parenthesizedTitleSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentTitleMatch.map((span) => span.text), ['term']);
+
+      const quoteBeforeLink = 'intro ("unfinished [label](term) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(quoteBeforeLink),
+          'term',
+        ),
+        1,
+        reason: 'unrelated quote state must not hide a later link closer',
+      );
+      final quoteBeforeLinkSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        quoteBeforeLink,
+      );
+      final currentQuoteMatch = quoteBeforeLinkSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentQuoteMatch.map((span) => span.text), ['term']);
+
+      const parenthesizedDelimiterTitle = '[title](url (term ()) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(parenthesizedDelimiterTitle),
+          'term',
+        ),
+        1,
+        reason: 'parenthesized title delimiters are not destination parens',
+      );
+      final parenthesizedDelimiterTitleSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        parenthesizedDelimiterTitle,
+      );
+      final currentParenthesizedMatch = parenthesizedDelimiterTitleSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentParenthesizedMatch.map((span) => span.text), ['term']);
+
+      const nestedTitledLink =
+          '[outer](bad (oops [inner](url "term (") blah visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(nestedTitledLink),
+          'term',
+        ),
+        1,
+        reason: 'a failed outer scan must still validate a nested titled link',
+      );
+      final nestedTitledLinkSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        nestedTitledLink,
+      );
+      final currentNestedTitleMatch = nestedTitledLinkSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentNestedTitleMatch.map((span) => span.text), ['term']);
+
+      const nestedSimpleLink = '[broken](bad[good](term) prose visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(nestedSimpleLink),
+          'term',
+        ),
+        1,
+        reason: 'a failed outer scan must not hide a nested valid link',
+      );
+      final nestedSimpleLinkSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        nestedSimpleLink,
+      );
+      final currentNestedSimpleMatch = nestedSimpleLinkSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentNestedSimpleMatch.map((span) => span.text), ['term']);
+
+      const nestedAngleDestination =
+          '[outer](bad (oops [inner](<urlterm(>) blah visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(nestedAngleDestination),
+          'term',
+        ),
+        1,
+        reason: 'angle destination parentheses do not consume the link closer',
+      );
+      final nestedAngleDestinationSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        nestedAngleDestination,
+      );
+      final currentNestedAngleMatch = nestedAngleDestinationSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentNestedAngleMatch.map((span) => span.text), ['term']);
+
+      const angleInMalformedTitle =
+          '[outer](bad (oops < [inner](term) blah > visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(angleInMalformedTitle),
+          'term',
+        ),
+        1,
+        reason: 'an unrelated angle bracket must not hide an inner link close',
+      );
+      final angleInMalformedTitleSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        angleInMalformedTitle,
+      );
+      final currentAngleTitleMatch = angleInMalformedTitleSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentAngleTitleMatch.map((span) => span.text), ['term']);
+
+      const escapedCloserBeforeNestedLink =
+          r'[outer](bad (oops \](< [inner](term) blah > visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(escapedCloserBeforeNestedLink),
+          'term',
+        ),
+        1,
+        reason: 'escaped bracket text must not start angle destination state',
+      );
+      final escapedCloserSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        escapedCloserBeforeNestedLink,
+      );
+      final currentEscapedCloserMatch = escapedCloserSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentEscapedCloserMatch.map((span) => span.text), ['term']);
+
+      const escapedLabelCloserBeforeNestedLink =
+          r'[outer](bad (oops [x \](< [inner](term) blah > visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(escapedLabelCloserBeforeNestedLink),
+          'term',
+        ),
+        1,
+        reason: 'an escaped label closer must not open an angle destination',
+      );
+      final escapedLabelCloserSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        escapedLabelCloserBeforeNestedLink,
+      );
+      final currentEscapedLabelMatch = escapedLabelCloserSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentEscapedLabelMatch.map((span) => span.text), ['term']);
+
+      const evenEscapedLabelCloser = r'[label\\](<urlterm(>) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(evenEscapedLabelCloser),
+          'term',
+        ),
+        1,
+        reason: 'an even backslash run leaves the closing bracket active',
+      );
+      final evenEscapedLabelSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        evenEscapedLabelCloser,
+      );
+      final currentEvenEscapedMatch = evenEscapedLabelSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentEvenEscapedMatch.map((span) => span.text), ['term']);
+
+      final manyClosers = List.filled(1024, ')').join();
+      final malformedLink = stripSearchIrrelevantMarkdown(
+        '[label](visible term $manyClosers',
+      );
+      expect(countOccurrences(malformedLink, 'term'), 1);
+
+      final repeatedOpeners = List.filled(512, '[a](').join();
+      final malformedCandidates = stripSearchIrrelevantMarkdown(
+        '$repeatedOpeners visible term',
+      );
+      expect(countOccurrences(malformedCandidates, 'term'), 1);
+
+      final nestedLink = stripSearchIrrelevantMarkdown(
+        '[broken](bad[good](term) prose',
+      );
+      expect(
+        countOccurrences(nestedLink, 'term'),
+        0,
+        reason: 'a failed outer link must not hide a valid nested link',
+      );
+    });
+
+    test('removes inline math content from search text', () {
+      const markdown = r'formula $term + 1$ then visible term';
+      final stripped = stripSearchIrrelevantMarkdown(markdown);
+      expect(countOccurrences(stripped, 'term'), 1);
+      final spans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        markdown,
+      );
+      final current = spans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(current.map((span) => span.text), ['term']);
+    });
+
+    test('removes indented code content but keeps later prose', () {
+      const markdown =
+          '    hidden term\n\n   \tsecond hidden term'
+          '\n\n> >\n> >     nested hidden term\n> >\n\nvisible term';
+      final stripped = stripSearchIrrelevantMarkdown(markdown);
+      expect(countOccurrences(stripped, 'term'), 1);
+      expect(stripped, contains('visible term'));
+      final spans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        markdown,
+      );
+      final current = spans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(current.map((span) => span.text), ['term']);
+
+      const tabQuotedCode = '>\t    hidden term\n>\nvisible term';
+      final tabQuotedStripped = stripSearchIrrelevantMarkdown(tabQuotedCode);
+      expect(countOccurrences(tabQuotedStripped, 'term'), 1);
+      final tabQuotedSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        tabQuotedCode,
+      );
+      final tabQuotedCurrent = tabQuotedSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(tabQuotedCurrent.map((span) => span.text), ['term']);
+
+      const tabQuotedParagraph = '>\tvisible term';
+      final tabParagraphStripped = stripSearchIrrelevantMarkdown(
+        tabQuotedParagraph,
+      );
+      expect(countOccurrences(tabParagraphStripped, 'term'), 1);
+      final tabParagraphSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        tabQuotedParagraph,
+      );
+      final tabParagraphCurrent = tabParagraphSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(tabParagraphCurrent.map((span) => span.text), ['term']);
+
+      const blockquoteAfterParagraph =
+          'intro\n>     hidden term\n> visible term';
+      final blockquoteSearchText = stripSearchIrrelevantMarkdown(
+        blockquoteAfterParagraph,
+      );
+      expect(countOccurrences(blockquoteSearchText, 'term'), 1);
+      final blockquoteSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        blockquoteAfterParagraph,
+      );
+      final blockquoteCurrent = blockquoteSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(blockquoteCurrent.map((span) => span.text), ['term']);
     });
   });
 
@@ -183,8 +625,11 @@ void main() {
       expect(highlights.length, 3);
       expect(highlights[0].text, 'term');
       expect(highlights[0].style?.backgroundColor, Colors.yellow);
-      expect(highlights[1].style?.backgroundColor, Colors.orangeAccent,
-          reason: 'the second occurrence is the current match');
+      expect(
+        highlights[1].style?.backgroundColor,
+        Colors.orangeAccent,
+        reason: 'the second occurrence is the current match',
+      );
       expect(highlights[1].style?.fontWeight, FontWeight.bold);
       expect(highlights[2].style?.backgroundColor, Colors.yellow);
     });
@@ -205,10 +650,16 @@ void main() {
           )
           .toList();
       expect(highlights.length, 2);
-      expect(highlights[0].style?.backgroundColor, Colors.yellow,
-          reason: 'occurrence 0 has global index 5, not the cursor 6');
-      expect(highlights[1].style?.backgroundColor, Colors.orangeAccent,
-          reason: 'occurrence 1 has global index 6 = the cursor');
+      expect(
+        highlights[0].style?.backgroundColor,
+        Colors.yellow,
+        reason: 'occurrence 0 has global index 5, not the cursor 6',
+      );
+      expect(
+        highlights[1].style?.backgroundColor,
+        Colors.orangeAccent,
+        reason: 'occurrence 1 has global index 6 = the cursor',
+      );
     });
 
     test('occurrenceOffset aligns segments of a multi-segment message', () {
@@ -229,8 +680,11 @@ void main() {
           )
           .toList();
       expect(highlights.length, 1);
-      expect(highlights[0].style?.backgroundColor, Colors.orangeAccent,
-          reason: 'this occurrence has global index 12 = the cursor');
+      expect(
+        highlights[0].style?.backgroundColor,
+        Colors.orangeAccent,
+        reason: 'this occurrence has global index 12 = the cursor',
+      );
     });
 
     test('unmatched markdown (links, emphasis) still renders', () {
@@ -273,8 +727,11 @@ void main() {
       ) as Text;
       final root = firstBlock.textSpan as TextSpan;
       final hasMathWidget = _containsWidgetSpan(root);
-      expect(hasMathWidget, isTrue,
-          reason: 'the \$...\$ math must still render as a widget');
+      expect(
+        hasMathWidget,
+        isTrue,
+        reason: 'the \$...\$ math must still render as a widget',
+      );
       final highlights = _collectSpans(root).where(
         (s) =>
             s.style?.backgroundColor == Colors.yellow ||
@@ -283,30 +740,38 @@ void main() {
       expect(highlights.length, 1);
     });
 
-    test('code-fence content is not highlighted and does not shift ordinals',
-        () {
-      // The search layer strips code fences, so the prose occurrence is
-      // match 0 and must be the current (orange) one even though the raw
-      // text also contains "term" inside the fence.
-      final gen = buildSearchMarkdownGenerator(
-        query: 'term',
-        messageFirstMatchIndex: 0,
-        occurrenceOffset: 0,
-        currentMatchIndex: 0,
-      );
-      final spans = _spansOf(gen, '```\nterm\n```\nprose term');
-      final highlights = spans
-          .where(
-            (s) =>
-                s.style?.backgroundColor == Colors.yellow ||
-                s.style?.backgroundColor == Colors.orangeAccent,
-          )
-          .toList();
-      expect(highlights.length, 1,
-          reason: 'the code-fence occurrence must not be highlighted');
-      expect(highlights.single.style?.backgroundColor, Colors.orangeAccent,
-          reason: 'the prose occurrence must stay the current match');
-    });
+    test(
+      'code-fence content is not highlighted and does not shift ordinals',
+      () {
+        // The search layer strips code fences, so the prose occurrence is
+        // match 0 and must be the current (orange) one even though the raw
+        // text also contains "term" inside the fence.
+        final gen = buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        );
+        final spans = _spansOf(gen, '```\nterm\n```\nprose term');
+        final highlights = spans
+            .where(
+              (s) =>
+                  s.style?.backgroundColor == Colors.yellow ||
+                  s.style?.backgroundColor == Colors.orangeAccent,
+            )
+            .toList();
+        expect(
+          highlights.length,
+          1,
+          reason: 'the code-fence occurrence must not be highlighted',
+        );
+        expect(
+          highlights.single.style?.backgroundColor,
+          Colors.orangeAccent,
+          reason: 'the prose occurrence must stay the current match',
+        );
+      },
+    );
   });
 
   group('SearchHighlightTextNode', () {
@@ -320,11 +785,13 @@ void main() {
       );
       final span = node.build() as TextSpan;
       final highlights = span.children!.whereType<TextSpan>().where(
-            (s) => s.style?.backgroundColor == Colors.yellow,
-          );
+        (s) => s.style?.backgroundColor == Colors.yellow,
+      );
       expect(highlights.length, 2);
-      final plain =
-          span.children!.whereType<TextSpan>().map((s) => s.text ?? '').join();
+      final plain = span.children!
+          .whereType<TextSpan>()
+          .map((s) => s.text ?? '')
+          .join();
       expect(plain, 'aaa term bbb term ccc');
     });
 
