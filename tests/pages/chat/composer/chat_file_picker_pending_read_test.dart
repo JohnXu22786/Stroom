@@ -142,6 +142,62 @@ void main() {
     );
   });
 
+  testWidgets('preview bar fits a filename at the two-line wrap boundary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const filename = 'notes.pdf';
+    const style = TextStyle(fontSize: 10, height: 1.2);
+    final naturalText = TextPainter(
+      text: const TextSpan(text: filename, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final scale = 99.28 / naturalText.width;
+    await _seedPdf(tester, 'notes');
+
+    await tester.pumpWidget(_buildTestApp((_) {}, textScale: scale));
+    await _openPicker(tester);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final chip = find.byType(PreviewChip);
+    final filenameLabel = find.descendant(
+      of: chip,
+      matching: find.byType(ConstrainedText),
+    );
+    final labelRect = tester.getRect(filenameLabel);
+    final chipRect = tester.getRect(chip);
+    final previewBarRect = tester.getRect(
+      find.byKey(const Key('file_picker_preview_bar')),
+    );
+    final context = tester.element(chip);
+    final chipStyle = DefaultTextStyle.of(context).style.merge(
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        );
+    final wrappedText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: 99);
+    expect(tester.widget<ConstrainedText>(filenameLabel).data, filename);
+    expect(wrappedText.computeLineMetrics(), hasLength(2));
+    expect(labelRect.height, greaterThan(wrappedText.height - 0.01));
+    expect(labelRect.bottom, lessThanOrEqualTo(chipRect.bottom - 8));
+    expect(chipRect.bottom, lessThanOrEqualTo(previewBarRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('scaled CJK filename fits the measured production chip', (
     tester,
   ) async {
