@@ -67,9 +67,10 @@ class CodeSyntax extends InlineSyntax {
   }
 
   bool _shouldStrip(String code) {
-    // No stripping occurs if the code span contains only spaces:
+    // No stripping occurs if the code span contains only spaces (including
+    // line breaks, which are normalized to spaces below):
     // https://spec.commonmark.org/0.30/#example-334.
-    if (code.trim().isEmpty) {
+    if (code.runes.every((rune) => rune == $space || rune == $lf)) {
       return false;
     }
 
