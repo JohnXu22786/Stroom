@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/pages/files_page_shared.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -87,6 +88,51 @@ Finder _navTab(String label) {
 
 Finder get _bottomNavigationBar =>
     find.byKey(const ValueKey('home-bottom-navigation'));
+
+Future<void> _expectSamePageFilesTapResetsFolder(
+  WidgetTester tester, {
+  required Size screenSize,
+}) async {
+  await TextManifest.addRecord(
+    TextRecord(
+      name: 'nested_note',
+      hash: 'nested-note-hash',
+      createdAt: DateTime(2026, 1, 1),
+      size: 10,
+      folder: 'subfolder',
+    ),
+  );
+
+  await tester.pumpWidget(_buildTestApp(screenSize: screenSize));
+  await _pumpPageAnimations(tester);
+
+  final filesDestination = screenSize.height > screenSize.width
+      ? _navTab('文件')
+      : find.text('文件');
+  await tester.tap(filesDestination);
+  await _pumpPageAnimations(tester);
+  expect(find.byKey(const Key('files_page')), findsOneWidget);
+
+  final container = ProviderScope.containerOf(
+    tester.element(find.byKey(const Key('files_page'))),
+  );
+  await tester.tap(find.text('subfolder'));
+  await _pumpPageAnimations(tester);
+  expect(container.read(filesPageCurrentFolderProvider), 'subfolder');
+  expect(find.text('nested_note.txt'), findsOneWidget);
+
+  await tester.tap(filesDestination);
+  await _pumpPageAnimations(tester);
+
+  expect(
+    container.read(filesPageCurrentFolderProvider),
+    isEmpty,
+    reason: 'selecting Files again should return its active tab to root',
+  );
+  expect(find.text('subfolder'), findsOneWidget);
+  expect(find.text('nested_note.txt'), findsNothing);
+  expect(tester.takeException(), isNull);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -645,6 +691,25 @@ void main() {
       await tester.tap(find.text('设置'));
       await _pumpPageAnimations(tester);
       expect(find.text('常规设置'), findsOneWidget);
+    });
+
+    testWidgets(
+      'reselecting Files resets its open folder from the bottom nav',
+      (tester) async {
+        await _expectSamePageFilesTapResetsFolder(
+          tester,
+          screenSize: const Size(390, 844),
+        );
+      },
+    );
+
+    testWidgets('reselecting Files resets its open folder from the nav rail', (
+      tester,
+    ) async {
+      await _expectSamePageFilesTapResetsFolder(
+        tester,
+        screenSize: const Size(844, 390),
+      );
     });
 
     testWidgets(
