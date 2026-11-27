@@ -88,12 +88,16 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
-        contents = '"menu.file.title" /* comment\ncontinued */ = "File";\n'
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "MainMenu.strings"
-            path.write_text(contents, encoding="utf-8")
+        line_separators = "\n\v\f\r\x1c\x1d\x1e\x85\u2028\u2029"
+        for separator in line_separators:
+            contents = f'"menu.file.title" /* comment{separator}continued */ = "File";'
+            with self.subTest(separator=repr(separator)), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(contents, encoding="utf-8")
 
-            self.assertEqual(read_localized_titles(path), {"menu.file": "File"})
+                self.assertEqual(
+                    read_localized_titles(path), {"menu.file": "File"}
+                )
 
     def test_rejects_newline_inside_localized_title_id(self):
         from pathlib import Path
@@ -107,17 +111,36 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
                 read_localized_titles(path)
 
-    def test_rejects_carriage_return_inside_title_entry(self):
+    def test_rejects_all_splitlines_separators_inside_title_entry(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
-        contents = '"menu.file.title"\r= "File";\r\n'
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "MainMenu.strings"
-            path.write_text(contents, encoding="utf-8")
+        line_separators = "\n\v\f\r\x1c\x1d\x1e\x85\u2028\u2029"
+        for separator in line_separators:
+            contents = f'"menu.file.title"{separator}= "File";'
+            with self.subTest(separator=repr(separator)), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(contents, encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
-                read_localized_titles(path)
+                with self.assertRaisesRegex(
+                    ValueError, r":1: invalid localized title entry"
+                ):
+                    read_localized_titles(path)
+
+    def test_line_comments_end_at_each_splitlines_separator(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        line_separators = "\n\v\f\r\x1c\x1d\x1e\x85\u2028\u2029"
+        for separator in line_separators:
+            contents = f'// comment{separator}"menu.file.title" = "File";'
+            with self.subTest(separator=repr(separator)), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(contents, encoding="utf-8")
+
+                self.assertEqual(
+                    read_localized_titles(path), {"menu.file": "File"}
+                )
 
     def test_rejects_empty_semicolon_entries_but_accepts_blank_comments(self):
         from pathlib import Path

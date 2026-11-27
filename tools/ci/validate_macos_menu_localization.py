@@ -15,9 +15,14 @@ MENU = ROOT / "macos/Runner/Base.lproj/MainMenu.xib"
 PROJECT = ROOT / "macos/Runner.xcodeproj/project.pbxproj"
 LOCALES = ("en", "zh-Hans")
 STRING_ENTRY = re.compile(r'^\s*"([^"\\]+)\.title"\s*=\s*"((?:\\.|[^"\\])*)";\s*$')
+LOCALIZED_LINE_BREAKS = frozenset("\n\v\f\r\x1c\x1d\x1e\x85\u2028\u2029")
 PROJECT_OBJECT = re.compile(
     r"(?ms)^\t\t([0-9A-F]{24})(?:\s*/\*.*?\*/)?\s*=\s*\{(.*?)\};"
 )
+
+
+def _localized_line_number(text: str, index: int) -> int:
+    return sum(char in LOCALIZED_LINE_BREAKS for char in text[:index]) + 1
 
 
 def _strip_project_comments(text: str) -> str:
@@ -233,7 +238,7 @@ def has_localization_build_membership(project: str, localized_paths: dict[str, s
 
 def _strip_localized_comments(text: str, path: Path) -> tuple[str, set[int]]:
     result = list(text)
-    comment_newlines: set[int] = set()
+    comment_line_breaks: set[int] = set()
     index = 0
     in_string = False
     escaped = False
@@ -253,30 +258,32 @@ def _strip_localized_comments(text: str, path: Path) -> tuple[str, set[int]]:
         elif text.startswith("/*", index):
             end = text.find("*/", index + 2)
             if end == -1:
-                line_number = text.count("\n", 0, index) + 1
+                line_number = _localized_line_number(text, index)
                 raise ValueError(f"{path}:{line_number}: unterminated block comment")
             end += 2
             for comment_index in range(index, end):
-                if text[comment_index] == "\n":
-                    comment_newlines.add(comment_index)
+                if text[comment_index] in LOCALIZED_LINE_BREAKS:
+                    comment_line_breaks.add(comment_index)
                 else:
                     result[comment_index] = " "
             index = end
         elif text.startswith("//", index):
-            end = text.find("\n", index + 2)
-            if end == -1:
-                end = len(text)
+            end = index + 2
+            while end < len(text) and text[end] not in LOCALIZED_LINE_BREAKS:
+                end += 1
             for comment_index in range(index, end):
                 result[comment_index] = " "
+            if end < len(text):
+                comment_line_breaks.add(end)
             index = end
         else:
             index += 1
-    return "".join(result), comment_newlines
+    return "".join(result), comment_line_breaks
 
 
 def read_localized_titles(path: Path) -> dict[str, str]:
     titles: dict[str, str] = {}
-    content, comment_newlines = _strip_localized_comments(
+    content, comment_line_breaks = _strip_localized_comments(
         path.read_text(encoding="utf-8"), path
     )
 
@@ -287,9 +294,9 @@ def read_localized_titles(path: Path) -> dict[str, str]:
         )
         if first_character is None:
             return
-        line_number = content.count("\n", 0, start + first_character) + 1
+        line_number = _localized_line_number(content, start + first_character)
         if any(
-            char == "\n" and start + index not in comment_newlines
+            char in LOCALIZED_LINE_BREAKS and start + index not in comment_line_breaks
             for index, char in enumerate(statement[first_character:], first_character)
         ):
             raise ValueError(f"{path}:{line_number}: invalid localized title entry")
