@@ -8,6 +8,7 @@ from PIL import Image, ImageStat
 from playwright.sync_api import sync_playwright
 
 from capture_process_cleanup import cleanup_server
+from capture_managed_outputs import COMPACT_ROW_OUTPUT_PATTERNS, CaptureOutputs
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/compact-rows"
@@ -15,6 +16,8 @@ PORT = 8895
 URL = f"http://127.0.0.1:{PORT}/"
 SERVER_LOG = OUTPUT / ".flutter-web.log"
 OUTPUT.mkdir(parents=True, exist_ok=True)
+captures = CaptureOutputs(OUTPUT, COMPACT_ROW_OUTPUT_PATTERNS)
+captures.clear()
 server_log = SERVER_LOG.open("w")
 server = subprocess.Popen(
     [
@@ -87,9 +90,7 @@ try:
             wait_for_rendered_flutter(page)
             page.wait_for_timeout(300)
             suffix = "-dark" if theme == "dark" else ""
-            (OUTPUT / f"voice-index-fitting-1x{suffix}.png").write_bytes(
-                page.screenshot()
-            )
+            captures.write(f"voice-index-fitting-1x{suffix}.png", page.screenshot())
 
             page.set_viewport_size({"width": 1000, "height": 1200})
             page.goto(
@@ -103,8 +104,8 @@ try:
             page.mouse.wheel(0, 2_000_000)
             page.wait_for_timeout(1000)
             page.mouse.move(0, 0)
-            (OUTPUT / f"voice-index-scaled-high-count-2x{suffix}.png").write_bytes(
-                page.screenshot()
+            captures.write(
+                f"voice-index-scaled-high-count-2x{suffix}.png", page.screenshot()
             )
 
             page.set_viewport_size({"width": 440, "height": 932})
@@ -119,8 +120,8 @@ try:
             page.mouse.wheel(0, 2_000_000)
             page.wait_for_timeout(1000)
             page.mouse.move(0, 0)
-            (OUTPUT / f"voice-index-scaled-narrow-2x{suffix}.png").write_bytes(
-                page.screenshot()
+            captures.write(
+                f"voice-index-scaled-narrow-2x{suffix}.png", page.screenshot()
             )
 
             page.set_viewport_size({"width": 320, "height": 932})
@@ -132,9 +133,7 @@ try:
             wait_for_rendered_flutter(page)
             page.wait_for_timeout(300)
             page.mouse.move(0, 0)
-            (OUTPUT / f"voice-index-rtl-narrow-2x{suffix}.png").write_bytes(
-                page.screenshot()
-            )
+            captures.write(f"voice-index-rtl-narrow-2x{suffix}.png", page.screenshot())
         browser.close()
 
     if errors:
@@ -142,4 +141,8 @@ try:
 finally:
     cleanup_server(server, server_log, SERVER_LOG)
 
-print("Captured French voice duplicate resolution at fitting, wide, and narrow scales, plus narrow Arabic RTL, in light and dark themes.")
+print(
+    "Captured French voice duplicate resolution at fitting, wide, and narrow scales, "
+    "plus narrow Arabic RTL, in light and dark themes: "
+    f"{captures.names}"
+)

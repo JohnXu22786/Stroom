@@ -7,6 +7,8 @@ import time
 from PIL import Image, ImageStat
 from playwright.sync_api import sync_playwright
 
+from capture_managed_outputs import RESPONSIVE_MEDIA_OUTPUT_PATTERNS, CaptureOutputs
+
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/responsive-media-layout"
@@ -14,6 +16,8 @@ PORT = 8894
 BASE_URL = f"http://127.0.0.1:{PORT}/"
 SERVER_LOG = Path("/tmp/r8-responsive-media-layout-flutter.log")
 OUTPUT.mkdir(parents=True, exist_ok=True)
+captures = CaptureOutputs(OUTPUT, RESPONSIVE_MEDIA_OUTPUT_PATTERNS)
+captures.clear()
 
 
 def wait_for_rendered_flutter(page):
@@ -97,7 +101,7 @@ try:
             screenshot = page.screenshot()
             image = Image.open(BytesIO(screenshot)).convert("RGB")
             filename = f"media-picker-fr-320x640-scale{scale}-light.png"
-            (OUTPUT / filename).write_bytes(screenshot)
+            captures.write(filename, screenshot)
             if image.size != (320, 640) or max(ImageStat.Stat(image).stddev) < 1:
                 raise RuntimeError(
                     f"Unexpected media picker capture: {image.size}, "
@@ -152,6 +156,7 @@ try:
                         check=True,
                         stdout=subprocess.DEVNULL,
                     )
+                    captures.record("media-picker-fr-320x640-scale3-reveal.webm")
 
         for scale in (1, 3):
             page.goto(f"{BASE_URL}?component=mermaid&scale={scale}", wait_until="load")
@@ -165,12 +170,11 @@ try:
             if image.size != (320, 640) or max(ImageStat.Stat(image).stddev) < 1:
                 raise RuntimeError(f"Unexpected Mermaid capture: {image.size}")
             filename = f"mermaid-loading-fr-320x640-scale{scale}-light.png"
-            (OUTPUT / filename).write_bytes(page.screenshot())
+            captures.write(filename, page.screenshot())
 
         print(
             {
-                "screenshots": sorted(path.name for path in OUTPUT.glob("*.png")),
-                "playable_preview": "media-picker-fr-320x640-scale3-reveal.webm",
+                "files": captures.names,
                 "viewport_css_px": {"width": 320, "height": 640},
                 "device_pixel_ratio": 1,
                 "locale": "fr_FR",
