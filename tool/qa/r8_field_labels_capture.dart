@@ -45,18 +45,17 @@ void main() {
         cardTheme: const CardThemeData(elevation: 0),
       ),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.linear(scale),
-        ),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(scale)),
         child: child!,
       ),
       home: switch (scene) {
         'folder' => const _FolderCapture(),
         'batch' => const _BatchCapture(),
         _ => ProviderScope(
-            overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
-            child: const ThemeDisplaySettingsPage(),
-          ),
+          overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
+          child: const ThemeDisplaySettingsPage(),
+        ),
       },
     ),
   );
@@ -72,6 +71,14 @@ class _FolderCapture extends StatefulWidget {
 class _FolderCaptureState extends State<_FolderCapture> {
   final _fileNameController = TextEditingController();
   bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Uri.base.queryParameters['hintMode'] == 'folder-name') {
+      _fileNameController.text = 'preview.md';
+    }
+  }
 
   @override
   void dispose() {

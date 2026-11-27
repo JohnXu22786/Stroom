@@ -23,6 +23,7 @@ import 'package:stroom/utils/mermaid_web_url_stub.dart'
     if (dart.library.html) 'package:stroom/utils/mermaid_web_url_web.dart'
     as platform;
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -5219,7 +5220,8 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+              widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
         );
 
         Future<void> saveWithName(
@@ -5301,7 +5303,8 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+              widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
         );
 
         await tester.tap(find.byIcon(Icons.save));

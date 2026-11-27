@@ -13,6 +13,7 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -1508,7 +1509,8 @@ void main() {
       final fileNameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+            widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
       );
       // Filename field should have default value '我的图表'
       final fileNameCtrl = tester.widget<TextField>(fileNameField).controller;
@@ -1554,7 +1556,8 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+              widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
         );
         await tester.enterText(fileNameField, 'chart.mmd');
         await tester.tap(find.text('根目录'));
@@ -1590,7 +1593,8 @@ void main() {
       final fileNameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+            widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
       );
       await tester.enterText(fileNameField, '.mmd');
       await tester.tap(find.text('根目录'));
@@ -1630,7 +1634,8 @@ void main() {
       final fileNameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+            widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
       );
       await tester.enterText(fileNameField, '');
       await tester.pump();
@@ -1724,7 +1729,8 @@ void main() {
       final fileNameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+            widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
       );
       await tester.enterText(fileNameField, 'shared-chart');
       await tester.tap(find.text(destinationFolder));
@@ -1907,7 +1913,8 @@ void main() {
       final fileNameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+            widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
       );
       expect(
         tester.widget<TextField>(fileNameField).controller?.text,
@@ -1985,7 +1992,8 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+              widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
         );
         await tester.enterText(fileNameField, 'renamed-chart.mmd');
         await tester.tap(find.text('根目录'));

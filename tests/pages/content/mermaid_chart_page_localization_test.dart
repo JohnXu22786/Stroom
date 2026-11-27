@@ -6,6 +6,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 Widget _buildTestApp({
@@ -95,8 +96,8 @@ void main() {
     final fileNameField = find.byWidgetPredicate(
       (widget) =>
           widget is TextField &&
-          widget.decoration?.hintText ==
-              'Enter a filename (.mmd added automatically)',
+          widget.decoration?.hint is ConstrainedText &&
+              (widget.decoration!.hint! as ConstrainedText).data == 'Enter a filename (.mmd added automatically)',
     );
     await tester.enterText(fileNameField, '');
     await tester.tap(find.text('Done'));
