@@ -10,6 +10,8 @@ import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 
 const _captureKey = ValueKey('assistant-card-scaled-grid-capture');
+bool _emojiFontLoaded = false;
+
 const _description =
     'Un assistant qui aide à organiser les idées, comparer les options '
     'et préparer des réponses claires pour chaque situation, tout en '
@@ -25,15 +27,30 @@ void main() {
     for (final (family, fileName) in [
       ('Roboto', 'Roboto-Regular.ttf'),
       ('MaterialIcons', 'MaterialIcons-Regular.otf'),
-      ('NotoColorEmoji', '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'),
     ]) {
-      final path =
-          fileName.startsWith('/') ? fileName : '$fontDirectory/$fileName';
-      final bytes = File(path).readAsBytesSync();
-      await (FontLoader(family)
-            ..addFont(Future.value(ByteData.sublistView(bytes))))
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(
+        family,
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
           .load();
     }
+    _emojiFontLoaded = await _loadOptionalFont(
+      'NotoColorEmoji',
+      '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf',
+    );
+  });
+
+  test('optional font loading skips files that are unavailable', () async {
+    final directory = await Directory.systemTemp.createTemp('capture-font-');
+    addTearDown(() => directory.delete(recursive: true));
+
+    expect(
+      await _loadOptionalFont(
+        'NotoColorEmoji',
+        '${directory.path}/missing.ttf',
+      ),
+      isFalse,
+    );
   });
 
   testWidgets('production card geometry stays stable through scaled reveal', (
@@ -71,9 +88,11 @@ void main() {
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               theme: ThemeData.light(useMaterial3: true).copyWith(
-                textTheme: ThemeData.light(useMaterial3: true)
-                    .textTheme
-                    .apply(fontFamilyFallback: const ['NotoColorEmoji']),
+                textTheme: ThemeData.light(useMaterial3: true).textTheme.apply(
+                      fontFamilyFallback: _emojiFontLoaded
+                          ? const ['NotoColorEmoji']
+                          : const [],
+                    ),
               ),
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context)
@@ -133,4 +152,16 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });
+}
+
+Future<bool> _loadOptionalFont(String family, String path) async {
+  final file = File(path);
+  if (!await file.exists()) return false;
+
+  final bytes = await file.readAsBytes();
+  await (FontLoader(
+    family,
+  )..addFont(Future.value(ByteData.sublistView(bytes))))
+      .load();
+  return true;
 }
