@@ -761,6 +761,373 @@ $$
   });
 
   group('MarkdownGenerator.buildPlainTextPreview - Markdown constructs', () {
+    test('renders underscore bold while preserving ordinary long text', () {
+      final emphasized = markdownGenerator.buildPlainTextPreview([
+        'prefix ' * 1000 + '__important__',
+      ]);
+      final emphasizedSpans = [
+        for (final widget in emphasized)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      final boldSpan = emphasizedSpans
+          .map((span) => _leafSpanWithText(span, 'important'))
+          .whereType<TextSpan>()
+          .firstOrNull;
+
+      expect(boldSpan?.style?.fontWeight, FontWeight.bold);
+      expect(
+        emphasizedSpans.map((span) => span.toPlainText()).join(),
+        isNot(contains('__')),
+      );
+
+      final ordinaryText =
+          'ordinary module__name `__module__` `a `` __nested__ b` ' * 1000;
+      var parsedNodeCount = 0;
+      final previewGenerator = MarkdownGenerator(
+        inlineSyntaxList: [_UnexpectedParseSyntax()],
+        onNodeAccepted: (node, index) => parsedNodeCount++,
+      );
+      final ordinary = previewGenerator.buildPlainTextPreview([ordinaryText]);
+      final ordinarySpan = (ordinary.single as Padding).child as Text;
+      expect(ordinarySpan.textSpan?.toPlainText(), ordinaryText);
+      expect(parsedNodeCount, 0);
+
+      final unmatchedEmphasisCandidates = '__x ' * 2048;
+      final unmatchedEmphasisPreview = previewGenerator.buildPlainTextPreview([
+        unmatchedEmphasisCandidates,
+      ]);
+      expect(
+        ((unmatchedEmphasisPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unmatchedEmphasisCandidates,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const inlineLinkDestination = '[link](https://example.com/__segment__)';
+      final inlineLinkPreview = previewGenerator.buildPlainTextPreview([
+        inlineLinkDestination,
+      ]);
+      expect(
+        ((inlineLinkPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        inlineLinkDestination,
+      );
+      expect(parsedNodeCount, 0);
+
+      const multilineLinkTitle = '[x](<url> "title\n__literal__")';
+      final multilineLinkTitlePreview = previewGenerator.buildPlainTextPreview([
+        multilineLinkTitle,
+      ]);
+      expect(
+        ((multilineLinkTitlePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        multilineLinkTitle,
+      );
+      expect(parsedNodeCount, 0);
+
+      const linkWithLineBreak = '[x](url\n__bold__)';
+      final linkWithLineBreakPreview =
+          markdownGenerator.buildPlainTextPreview([linkWithLineBreak]);
+      final linkWithLineBreakSpan = _unwrapLinkRecognizerLifecycle(
+        (linkWithLineBreakPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(linkWithLineBreakSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const malformedLinkDestination = '[x](url __bold__)';
+      final malformedLinkPreview = markdownGenerator.buildPlainTextPreview([
+        malformedLinkDestination,
+      ]);
+      final malformedLinkSpans = [
+        for (final widget in malformedLinkPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        malformedLinkSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const malformedAngleLinkTitle = '[x](<url>"__bold__")';
+      final malformedAngleLinkPreview =
+          markdownGenerator.buildPlainTextPreview([malformedAngleLinkTitle]);
+      final malformedAngleLinkSpans = [
+        for (final widget in malformedAngleLinkPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        malformedAngleLinkSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const inlineCodeAcrossParagraphs = '`unclosed\n\n__bold__`';
+      final inlineCodeAcrossParagraphsPreview =
+          markdownGenerator.buildPlainTextPreview([inlineCodeAcrossParagraphs]);
+      final inlineCodeAcrossParagraphsSpans = [
+        for (final widget in inlineCodeAcrossParagraphsPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        inlineCodeAcrossParagraphsSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const inlineCodeAcrossQuotedParagraphs = '> `unclosed\n>\n> __bold__`';
+      parsedNodeCount = 0;
+      previewGenerator.buildPlainTextPreview([
+        inlineCodeAcrossQuotedParagraphs,
+      ]);
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
+      final unmatchedLinkMarkers = '](' * 1024;
+      final unmatchedLinkPreview = previewGenerator.buildPlainTextPreview([
+        unmatchedLinkMarkers,
+      ]);
+      expect(
+        ((unmatchedLinkPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unmatchedLinkMarkers,
+      );
+      expect(parsedNodeCount, 0);
+
+      const escapedBracket = r'\](__bold__)';
+      final escapedBracketPreview =
+          markdownGenerator.buildPlainTextPreview([escapedBracket]);
+      final escapedBracketSpan = _unwrapLinkRecognizerLifecycle(
+        (escapedBracketPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(escapedBracketSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
+      const unclosedFence = '```\n__fenced__';
+      final fencedPreview = previewGenerator.buildPlainTextPreview([
+        unclosedFence,
+      ]);
+      expect(
+        ((fencedPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unclosedFence,
+      );
+      expect(parsedNodeCount, 0);
+
+      const escapedBackticks = r'\` __escaped__ \`';
+      final escapedPreview = previewGenerator.buildPlainTextPreview([
+        escapedBackticks,
+      ]);
+      final escapedSpan = (_unwrapLinkRecognizerLifecycle(
+        (escapedPreview.single as Padding).child!,
+      ) as Text)
+          .textSpan!;
+      expect(
+        _leafSpanWithText(escapedSpan, 'escaped')?.style?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      for (final lineEnding in ['\r\n', '\r']) {
+        final source = '```$lineEnding' +
+            '__literal__$lineEnding```$lineEnding' +
+            '__after__';
+        final widgets = markdownGenerator.buildPlainTextPreview([source]);
+        final spans = [
+          for (final widget in widgets)
+            if (widget is Padding)
+              (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+        ];
+        expect(
+          spans.any((span) =>
+              _leafSpanWithText(span, 'after')?.style?.fontWeight ==
+              FontWeight.bold),
+          isTrue,
+          reason: 'closed fences should not mask emphasis after $lineEnding',
+        );
+      }
+
+      parsedNodeCount = 0;
+      const escapedFirstBacktick = r'\```__literal__``';
+      final escapedFirstBacktickPreview =
+          previewGenerator.buildPlainTextPreview([escapedFirstBacktick]);
+      expect(
+        ((escapedFirstBacktickPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        escapedFirstBacktick,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const escapedDelimiterInCode = r'`foo\` __inside__`';
+      final escapedDelimiterPreview = previewGenerator.buildPlainTextPreview([
+        escapedDelimiterInCode,
+      ]);
+      final escapedDelimiterSpan = _unwrapLinkRecognizerLifecycle(
+        (escapedDelimiterPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(escapedDelimiterSpan.textSpan!, 'inside')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      const invalidFenceInfo = '```lang`\n__valid__';
+      final invalidFencePreview = previewGenerator.buildPlainTextPreview([
+        invalidFenceInfo,
+      ]);
+      final invalidFenceSpan = _unwrapLinkRecognizerLifecycle(
+        (invalidFencePreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(invalidFenceSpan.textSpan!, 'valid')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
+      const quotedCode = '>     __literal__\n>\n> ```\n> __quoted__\n> ```';
+      final quotedCodePreview = previewGenerator.buildPlainTextPreview([
+        quotedCode,
+      ]);
+      expect(
+        ((quotedCodePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        quotedCode,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const separatedMarkers = '__start\n\nordinary paragraph content\n\nend__';
+      final separatedPreview = previewGenerator.buildPlainTextPreview([
+        separatedMarkers,
+      ]);
+      expect(
+        ((separatedPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        separatedMarkers,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const indentedListCode = '-     __literal__';
+      final indentedListPreview = previewGenerator.buildPlainTextPreview([
+        indentedListCode,
+      ]);
+      expect(
+        ((indentedListPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        indentedListCode,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const nestedListFence =
+          '- item\n  - ```\n    __literal__\n    ```\n\n__bold__';
+      final nestedListFencePreview = previewGenerator.buildPlainTextPreview([
+        nestedListFence,
+      ]);
+      final nestedListFenceSpans = [
+        for (final widget in nestedListFencePreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        nestedListFenceSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
+      const deeplyNestedListFence =
+          '- outer\n  - middle\n    - ```\n      __literal__\n      ```\n      __bold__';
+      previewGenerator.buildPlainTextPreview([deeplyNestedListFence]);
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
+      const escapedLiteral = r'\__literal__';
+      final escapedLiteralPreview = previewGenerator.buildPlainTextPreview([
+        escapedLiteral,
+      ]);
+      expect(
+        ((escapedLiteralPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        escapedLiteral,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const unclosedListFence = '- ```\n  __literal__';
+      final listFencePreview = previewGenerator.buildPlainTextPreview([
+        unclosedListFence,
+      ]);
+      expect(
+        ((listFencePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unclosedListFence,
+      );
+      expect(parsedNodeCount, 0);
+
+      const mixedBacktickRuns = r'`x `` y ` __bold__ ``z``';
+      final mixedBacktickPreview = previewGenerator.buildPlainTextPreview([
+        mixedBacktickRuns,
+      ]);
+      final mixedBacktickSpan = _unwrapLinkRecognizerLifecycle(
+        (mixedBacktickPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(mixedBacktickSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+    });
+
     test('renders display math and bold in the bounded streaming preview', () {
       final widgets = markdownGenerator.buildPlainTextPreview(
         [
@@ -3174,4 +3541,16 @@ $$
           reason: 'should clip to prevent overflow beyond bubble');
     });
   });
+}
+
+class _UnexpectedParseSyntax extends m.InlineSyntax {
+  _UnexpectedParseSyntax()
+      : super(
+          r'普通文本|__literal__|\\__literal__|__start|end__|__x|\[link\]\(https://example\.com/__segment__\)',
+        );
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    throw StateError('ordinary long preview should not run Markdown parsing');
+  }
 }

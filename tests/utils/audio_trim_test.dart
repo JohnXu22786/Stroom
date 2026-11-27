@@ -94,6 +94,20 @@ void main() {
         );
       }
     });
+
+    test('preserves RIFX input instead of trimming it as raw PCM', () {
+      final rifx = _pcmWav(
+        sampleRate: 24000,
+        channels: 1,
+        bitsPerSample: 16,
+        pcm: List<int>.generate(12, (index) => index),
+      )..setRange(0, 4, [0x52, 0x49, 0x46, 0x58]);
+
+      expect(
+        trimAudio(rifx, preset: {'durationSeconds': 1 / 24000}),
+        same(rifx),
+      );
+    });
   });
 }
 

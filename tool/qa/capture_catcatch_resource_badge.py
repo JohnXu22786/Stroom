@@ -16,7 +16,16 @@ URL = "http://127.0.0.1:8879"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
 server = subprocess.Popen(
-    ["python3", "-m", "http.server", "8879", "--directory", str(WEB_BUILD)],
+    [
+        "python3",
+        "-m",
+        "http.server",
+        "8879",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        str(WEB_BUILD),
+    ],
     stdout=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
 )
