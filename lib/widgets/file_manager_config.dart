@@ -10,6 +10,10 @@ class FileManagerConfig<T extends FileRecord> {
   final bool initialGridView;
   final void Function(bool)? onGridViewChanged;
   final Widget Function(T) fileIconBuilder;
+
+  /// Allows a custom file icon to grow in list view beyond the standard
+  /// 44 dp size when its content needs more room.
+  final bool allowFileIconExpansion;
   final Widget Function(T)? fileThumbnailBuilder;
   final void Function(T) onFileTap;
   final List<PopupMenuEntry<String>> Function(T) extraPopupMenuItems;
@@ -30,6 +34,7 @@ class FileManagerConfig<T extends FileRecord> {
     this.initialGridView = false,
     this.onGridViewChanged,
     required this.fileIconBuilder,
+    this.allowFileIconExpansion = false,
     this.fileThumbnailBuilder,
     required this.onFileTap,
     this.extraPopupMenuItems = _defaultExtraMenu,

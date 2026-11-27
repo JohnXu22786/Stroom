@@ -762,6 +762,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
     final config = FileManagerConfig<AudioRecord>(
       title: AppLocalizations.of(context)!.ttsPageTitle,
+      allowFileIconExpansion: true,
       topActionBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
         child: Row(
@@ -825,8 +826,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       },
       showThumbnailToggle: false,
       fileIconBuilder: (file) => Container(
-        width: 44,
-        height: 44,
+        width: MediaQuery.textScalerOf(context)
+            .scale(24)
+            .clamp(44.0, 112.0)
+            .toDouble(),
+        constraints: const BoxConstraints(minHeight: 44),
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
