@@ -23,7 +23,8 @@ Future<void> _loadCaptureFonts() async {
     final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
     await (FontLoader(
       family,
-    )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+    )..addFont(Future.value(ByteData.sublistView(bytes))))
+        .load();
   }
 }
 
@@ -154,9 +155,8 @@ void main() {
           of: tab,
           matching: find.text(label),
         );
-        final labelStyle = Theme.of(tester.element(labelFinder))
-            .textTheme
-            .labelLarge!;
+        final labelStyle =
+            Theme.of(tester.element(labelFinder)).textTheme.labelLarge!;
         final labelPainter = TextPainter(
           text: TextSpan(text: label, style: labelStyle),
           textDirection: TextDirection.ltr,
@@ -222,9 +222,8 @@ void main() {
     );
     expect(clearPainter.width, greaterThan(clearSlotWidth));
     await tester.pump(clearTravel + const Duration(milliseconds: 20));
-    final clearClip = find
-        .ancestor(of: clearText, matching: find.byType(ClipRect))
-        .first;
+    final clearClip =
+        find.ancestor(of: clearText, matching: find.byType(ClipRect)).first;
     final clearClipRect = tester.getRect(clearClip);
     final clearEndRect = tester.getRect(clearText);
     expect(clearEndRect.right, closeTo(clearClipRect.right, 2));
@@ -247,9 +246,8 @@ void main() {
       final tab = find.byKey(Key('file_picker_tab_$type'));
       expect(find.bySemanticsLabel(label), findsOneWidget);
       final labelFinder = find.descendant(of: tab, matching: find.text(label));
-      final labelStyle = Theme.of(tester.element(labelFinder))
-          .textTheme
-          .labelLarge!;
+      final labelStyle =
+          Theme.of(tester.element(labelFinder)).textTheme.labelLarge!;
       final labelPainter = TextPainter(
         text: TextSpan(text: label, style: labelStyle),
         textDirection: TextDirection.ltr,

@@ -253,14 +253,14 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
     final expandedTabRowHeight =
         ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8).clamp(
-          64.0,
-          80.0,
-        );
+      64.0,
+      80.0,
+    );
     final clearRowHeight =
         ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16).clamp(
-          56.0,
-          100.0,
-        );
+      56.0,
+      100.0,
+    );
 
     return PopScope(
       // System back inside a subfolder navigates up one level; only at
@@ -451,9 +451,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final type = _FileTabType.values[index];
     final selected = _tabController.index == index;
     final label = _tabLabel(l10n, type);
-    final foregroundColor = selected
-        ? colorScheme.primary
-        : colorScheme.onSurfaceVariant;
+    final foregroundColor =
+        selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
 
     return SizedBox(
       height: rowHeight,
