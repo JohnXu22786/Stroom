@@ -117,6 +117,71 @@ encrypted-segment.ts
     },
   );
 
+  test(
+    'rejects saved encrypted HLS segments when retry starts at download',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      const segmentUrl = 'https://example.com/segment.ts';
+      const playlist = '''
+#EXTM3U
+#EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+#EXTINF:4.0,
+encrypted-segment.ts
+#EXT-X-ENDLIST
+''';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'encrypted-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'encrypted-hls-download-retry',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({playlistUrl: playlist}),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('encrypted'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
   test('keeps the merged container extension for each playlist', () async {
     const transportUrl = 'https://example.com/transport.m3u8';
     const fragmentedUrl = 'https://example.com/fragmented.m3u8';
