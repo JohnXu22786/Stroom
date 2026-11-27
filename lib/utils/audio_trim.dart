@@ -7,10 +7,11 @@ const int defaultSampleRate = 24000;
 const _magicWav = [0x52, 0x49, 0x46, 0x46]; // "RIFF"
 const _magicRifx = [0x52, 0x49, 0x46, 0x58]; // "RIFX"
 const _magicMp3Id3 = [0x49, 0x44, 0x33]; // "ID3"
+const _magicOgg = [0x4F, 0x67, 0x67, 0x53]; // "OggS"
 
 /// 检测音频实际格式（基于文件头魔数）
 ///
-/// 返回 'wav' | 'mp3' | 'flac' | 'pcm'
+/// 返回已知格式名，'pcm' 表示未识别的裸 PCM。
 String _detectFormat(Uint8List data) {
   if (data.length < 4) return 'pcm';
 
@@ -41,6 +42,22 @@ String _detectFormat(Uint8List data) {
       data[2] == 0x61 &&
       data[3] == 0x43) {
     return 'flac';
+  }
+
+  if (data[0] == _magicOgg[0] &&
+      data[1] == _magicOgg[1] &&
+      data[2] == _magicOgg[2] &&
+      data[3] == _magicOgg[3]) {
+    return 'ogg';
+  }
+
+  // ISO Base Media File Format (M4A/MP4) has an "ftyp" box at offset 4.
+  if (data.length >= 8 &&
+      data[4] == 0x66 &&
+      data[5] == 0x74 &&
+      data[6] == 0x79 &&
+      data[7] == 0x70) {
+    return 'm4a';
   }
 
   return 'pcm';
@@ -214,7 +231,7 @@ Uint8List trimAudio(
   // 自动检测格式
   final fmt = _detectFormat(audioBytes);
 
-  // 压缩格式（mp3/flac）跳过裁切
+  // Compressed formats cannot be trimmed as raw PCM; preserve their bytes.
   if (fmt != 'wav' && fmt != 'pcm') {
     return audioBytes;
   }
