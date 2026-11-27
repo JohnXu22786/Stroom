@@ -86,6 +86,241 @@ String _formatSize(int bytes) {
 void main() {
   group('UnifiedMediaPickerDialog', () {
     testWidgets(
+      'selected preview chips fit three scaled lines and reveal overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        const fittingName = 'a.b';
+        const threeLineName = 'one two three';
+        const overflowName =
+            'media_picker_selected_filename_123456789_extra.txt';
+        final config = _createTestConfig(
+          records: const [
+            _TestRecord(id: '1', name: fittingName),
+            _TestRecord(id: '2', name: threeLineName),
+            _TestRecord(id: '3', name: overflowName),
+          ],
+          multiSelect: true,
+        );
+        var animationsDisabled = true;
+        var tickersActive = true;
+        late void Function({bool? disabled, bool? active}) updateMotion;
+
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) {
+              updateMotion = ({disabled, active}) {
+                setState(() {
+                  if (disabled != null) {
+                    animationsDisabled = disabled;
+                  }
+                  if (active != null) {
+                    tickersActive = active;
+                  }
+                });
+              };
+              return TickerMode(
+                enabled: tickersActive,
+                child: MaterialApp(
+                  locale: const Locale('en', 'US'),
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  localizationsDelegates:
+                      AppLocalizations.localizationsDelegates,
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: const TextScaler.linear(2),
+                      disableAnimations: animationsDisabled,
+                    ),
+                    child: child!,
+                  ),
+                  home: Scaffold(
+                    body: Builder(
+                      builder: (context) => ElevatedButton(
+                        onPressed: () => showMediaPickerDialog(context, config),
+                        child: const Text('Open'),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == fittingName,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final previewBar = find.byKey(const Key('media_picker_preview_bar'));
+        var previewList = find.descendant(
+          of: previewBar,
+          matching: find.byType(ListView),
+        );
+        expect(tester.getSize(previewList).height, 72);
+
+        await tester.tap(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText && widget.data == threeLineName,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        previewList = find.descendant(
+          of: previewBar,
+          matching: find.byType(ListView),
+        );
+        expect(tester.getSize(previewList).height, greaterThan(72));
+        final threeLineText = find.descendant(
+          of: previewList,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText && widget.data == threeLineName,
+          ),
+        );
+        final threeLineContext = tester.element(threeLineText);
+        final threeLinePainter = TextPainter(
+          text: TextSpan(
+            text: threeLineName,
+            style: DefaultTextStyle.of(threeLineContext).style.merge(
+                  const TextStyle(fontSize: 10),
+                ),
+          ),
+          textDirection: Directionality.of(threeLineContext),
+          textScaler: MediaQuery.textScalerOf(threeLineContext),
+          locale: Localizations.maybeLocaleOf(threeLineContext),
+        )..layout(maxWidth: 63);
+        final threeLineMetrics = threeLinePainter.computeLineMetrics();
+        expect(threeLineMetrics.length, greaterThanOrEqualTo(3));
+        expect(tester.getSize(threeLineText).width, 63);
+        final fittingText = find.descendant(
+          of: previewList,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == fittingName,
+          ),
+        );
+        final fittingChip = find
+            .ancestor(
+              of: fittingText,
+              matching: find.byKey(const Key('media_picker_preview_chip')),
+            )
+            .first;
+        final threeLineChip = find
+            .ancestor(
+              of: threeLineText,
+              matching: find.byKey(const Key('media_picker_preview_chip')),
+            )
+            .first;
+        expect(tester.getSize(fittingChip).height, 72);
+        expect(tester.getSize(threeLineChip).height, greaterThan(72));
+        final threeLineChipRect = tester.getRect(threeLineChip);
+        final threeLineTextRect = tester.getRect(threeLineText);
+        final expectedThreeLineHeight = threeLineMetrics
+                .take(3)
+                .fold<double>(0, (height, line) => height + line.height) +
+            9;
+        expect(threeLineChipRect.height, expectedThreeLineHeight);
+        expect(
+          threeLineTextRect.top,
+          greaterThanOrEqualTo(threeLineChipRect.top + 4.5),
+        );
+        expect(
+          threeLineTextRect.bottom,
+          lessThanOrEqualTo(threeLineChipRect.bottom - 4.5),
+        );
+
+        await tester.tap(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText && widget.data == overflowName,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        previewList = find.descendant(
+          of: previewBar,
+          matching: find.byType(ListView),
+        );
+        expect(tester.getSize(previewList).height, greaterThan(72));
+        final previewText = find.descendant(
+          of: previewList,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText && widget.data == overflowName,
+          ),
+        );
+        final chip = find
+            .ancestor(
+              of: previewText,
+              matching: find.byKey(const Key('media_picker_preview_chip')),
+            )
+            .first;
+        expect(tester.getSize(previewText).width, 63);
+        expect(tester.getSize(chip).width, 72);
+        expect(tester.getSize(chip).height, greaterThan(72));
+        final chipStack = find
+            .ancestor(
+              of: previewText,
+              matching: find.byType(Stack),
+            )
+            .first;
+        final removeButton = find
+            .descendant(
+              of: chipStack,
+              matching: find.byIcon(Icons.close),
+            )
+            .first;
+        expect(tester.getRect(removeButton).top, tester.getRect(chip).top - 6);
+        expect(
+          tester.getRect(previewText).top,
+          greaterThanOrEqualTo(tester.getRect(previewList).top),
+        );
+        expect(
+          tester.getRect(previewText).bottom,
+          lessThanOrEqualTo(tester.getRect(previewList).bottom),
+        );
+
+        final textFinder = find.descendant(
+          of: previewText,
+          matching: find.text(overflowName),
+        );
+        updateMotion(disabled: false);
+        await tester.pump();
+        final start = tester.getTopLeft(textFinder);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(tester.getTopLeft(textFinder).dy, lessThan(start.dy));
+
+        updateMotion(active: false);
+        await tester.pump();
+        final hiddenTop = tester.getTopLeft(textFinder);
+        await tester.pump(const Duration(seconds: 2));
+        expect(tester.getTopLeft(textFinder), hiddenTop);
+
+        updateMotion(active: true);
+        await tester.pump();
+        final resumedTop = tester.getTopLeft(textFinder);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(tester.getTopLeft(textFinder).dy, lessThan(resumedTop.dy));
+
+        updateMotion(disabled: true);
+        await tester.pump();
+        final reducedMotionTop = tester.getTopLeft(textFinder);
+        await tester.pump(const Duration(seconds: 2));
+        expect(tester.getTopLeft(textFinder), reducedMotionTop);
+        expect(find.text(overflowName), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'keeps picker controls and selected count within bounds at large text',
       (tester) async {
         const viewport = Size(320, 640);
@@ -1103,7 +1338,7 @@ void main() {
           onPressed: () => showMediaPickerDialog(
             context,
             _createTestConfig(
-              folders: {'$parent', '$parent/$child'},
+              folders: {parent, '$parent/$child'},
               records: [
                 const _TestRecord(
                   id: 'long',
