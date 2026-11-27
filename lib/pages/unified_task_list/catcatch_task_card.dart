@@ -387,7 +387,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     final labelNeedsRoom =
                         labelPainter.width > 40 || labelPainter.height > 40;
                     final indicatorWidth =
-                        labelNeedsRoom ? 44 + labelPainter.width : 40.0;
+                        labelNeedsRoom ? 42 + labelPainter.width : 40.0;
                     final indicatorHeight =
                         labelPainter.height > 40 ? labelPainter.height : 40.0;
                     final animateSize =
@@ -420,11 +420,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                     ),
                                   ),
                                   const SizedBox(width: 2),
-                                  Text(
-                                    progressLabel,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: progressLabelStyle,
+                                  SizedBox(
+                                    width: labelPainter.width,
+                                    child: Text(
+                                      progressLabel,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: progressLabelStyle,
+                                    ),
                                   ),
                                 ],
                               )
