@@ -9,7 +9,7 @@ import 'delimiter_syntax.dart';
 class StrikethroughSyntax extends DelimiterSyntax {
   StrikethroughSyntax()
       : super(
-          '~+',
+          '~~+',
           requiresDelimiterRun: true,
           allowIntraWord: true,
           startCharacter: $tilde,
