@@ -12,30 +12,32 @@ void main() {
 
       final files = await collectConstrainedGalleryImageFiles([
         () => createConstrainedGalleryImageFile(
-          title: 'large-photo.png',
-          width: 4000,
-          height: 3000,
-          maxWidth: 800,
-          maxHeight: 600,
-          imageQuality: 72,
-          thumbnailDataWithSize: (size, {required format, required quality}) {
-            requestedSize = size;
-            requestedQuality = quality;
-            return Future<Uint8List?>.value(null);
-          },
-        ),
+              title: 'large-photo.png',
+              width: 4000,
+              height: 3000,
+              maxWidth: 800,
+              maxHeight: 600,
+              imageQuality: 72,
+              thumbnailDataWithSize: (size,
+                  {required format, required quality}) {
+                requestedSize = size;
+                requestedQuality = quality;
+                return Future<Uint8List?>.value(null);
+              },
+            ),
         () => throw PlatformException(code: 'thumbnail_unavailable'),
         () => createConstrainedGalleryImageFile(
-          title: 'second-photo.png',
-          width: 4000,
-          height: 3000,
-          maxWidth: 800,
-          maxHeight: 600,
-          imageQuality: 72,
-          thumbnailDataWithSize: (size, {required format, required quality}) {
-            return Future<Uint8List?>.value(Uint8List.fromList([4, 5, 6]));
-          },
-        ),
+              title: 'second-photo.png',
+              width: 4000,
+              height: 3000,
+              maxWidth: 800,
+              maxHeight: 600,
+              imageQuality: 72,
+              thumbnailDataWithSize: (size,
+                  {required format, required quality}) {
+                return Future<Uint8List?>.value(Uint8List.fromList([4, 5, 6]));
+              },
+            ),
       ]);
 
       expect(requestedSize.width, 800);

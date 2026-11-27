@@ -21,8 +21,7 @@ Future<XFile?> createConstrainedGalleryImageFile({
     ThumbnailSize size, {
     required ThumbnailFormat format,
     required int quality,
-  })
-  thumbnailDataWithSize,
+  }) thumbnailDataWithSize,
 }) async {
   if (width <= 0 || height <= 0) return null;
 
