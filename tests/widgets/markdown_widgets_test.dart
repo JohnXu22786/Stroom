@@ -782,8 +782,7 @@ $$
       );
 
       final ordinaryText =
-          'ordinary module__name `__module__` `a `` __nested__ b` ' *
-              1000;
+          'ordinary module__name `__module__` `a `` __nested__ b` ' * 1000;
       var parsedNodeCount = 0;
       final previewGenerator = MarkdownGenerator(
         inlineSyntaxList: [_UnexpectedParseSyntax()],
@@ -828,8 +827,7 @@ $$
         final spans = [
           for (final widget in widgets)
             if (widget is Padding)
-              (_unwrapLinkRecognizerLifecycle(widget.child!) as Text)
-                  .textSpan!,
+              (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
         ];
         expect(
           spans.any((span) =>
@@ -884,8 +882,7 @@ $$
       expect(parsedNodeCount, greaterThan(0));
 
       parsedNodeCount = 0;
-      const quotedCode =
-          '>     __literal__\n>\n> ```\n> __quoted__\n> ```';
+      const quotedCode = '>     __literal__\n>\n> ```\n> __quoted__\n> ```';
       final quotedCodePreview = previewGenerator.buildPlainTextPreview([
         quotedCode,
       ]);
@@ -3365,7 +3362,6 @@ $$
     });
   });
 }
-
 
 class _UnexpectedParseSyntax extends m.InlineSyntax {
   _UnexpectedParseSyntax() : super(r'普通文本|__literal__|\\__literal__');
