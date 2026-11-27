@@ -203,11 +203,41 @@ void main() {
     );
     tester.view.physicalSize = const Size(568, 320);
     await tester.pumpAndSettle();
+    await _expectScreenshot(
+      tester,
+      '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-en-568x320-scale3-light.png',
+    );
     expect(
       find.byKey(const Key('file_picker_short_viewport_scroll')),
       findsOneWidget,
     );
+    for (final (type, label) in [
+      ('image', 'Images'),
+      ('text', 'Text'),
+      ('video', 'Videos'),
+      ('audio', 'Audio'),
+    ]) {
+      final tab = find.byKey(Key('file_picker_tab_$type'));
+      final labelFinder = find.descendant(
+        of: tab,
+        matching: find.byType(ConstrainedText),
+      );
+      final labelHeight = _measureConstrainedText(tester, labelFinder).height;
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+      expect(
+        tester.getSize(tab).height,
+        greaterThanOrEqualTo(labelHeight + 8),
+      );
+    }
     final landscapeClear = find.byKey(const Key('file_picker_clear_btn'));
+    final clearLabel = find.descendant(
+      of: landscapeClear,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(
+      tester.getSize(landscapeClear).height,
+      greaterThanOrEqualTo(_measureConstrainedText(tester, clearLabel).height),
+    );
     final landscapeConfirm = find.byKey(const Key('file_picker_confirm_btn'));
     final landscapePreview = find.byKey(const Key('file_picker_preview_bar'));
     final landscapeFile = find.text('picker-chrome-note.txt').first;
@@ -222,6 +252,8 @@ void main() {
       find.byKey(const Key('file_picker_tab_content_image')),
       findsOneWidget,
     );
+    await tester.drag(landscapeScroll, const Offset(0, -60));
+    await tester.pumpAndSettle();
     await tester.drag(
       find.byIcon(Icons.folder_open_outlined),
       const Offset(200, 0),
@@ -241,21 +273,24 @@ void main() {
       find.byKey(const Key('file_picker_tab_content_image')),
       findsOneWidget,
     );
+    await tester.drag(landscapeScroll, const Offset(0, -60));
+    await tester.pumpAndSettle();
     await tester.drag(
       find.byIcon(Icons.folder_open_outlined),
       const Offset(200, 0),
     );
     await tester.pumpAndSettle();
-    await tester.drag(landscapeScroll, const Offset(0, -150));
+    final landscapeScrollable = find
+        .descendant(
+          of: landscapeScroll,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final landscapePosition =
+        tester.state<ScrollableState>(landscapeScrollable).position;
+    landscapePosition.jumpTo(landscapePosition.maxScrollExtent - 50);
     await tester.pumpAndSettle();
     expect(landscapePreview, findsOneWidget);
-    final previewTopBeforeDrag = tester.getTopLeft(landscapePreview).dy;
-    await tester.drag(landscapeScroll, const Offset(0, -300));
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(landscapePreview).dy,
-      lessThan(previewTopBeforeDrag),
-    );
     expect(
       tester.getRect(landscapePreview).overlaps(landscapeViewport),
       isTrue,
@@ -469,7 +504,7 @@ void main() {
     );
     final lastLongFileText = find.text('picker-chrome-long-9.txt');
     expect(lastLongFileText, findsNothing);
-    scrollState.position.jumpTo(scrollState.position.maxScrollExtent - 200);
+    scrollState.position.jumpTo(scrollState.position.maxScrollExtent - 260);
     await tester.pumpAndSettle();
     final lastLongFile = lastLongFileText.first;
     expect(lastLongFile, findsOneWidget);

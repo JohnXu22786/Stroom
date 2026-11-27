@@ -11,6 +11,7 @@ logical pixels.
 | After | en-US | 430 × 932 | 1 | 1× | Light | [Fitting layout](chat-file-picker-en-430x932-scale1-light.png) |
 | After | en-US | 320 × 640 | 1 | 3× | Light | [Narrow layout](chat-file-picker-en-320x640-scale3-light.png) |
 | After | en-US | 320 × 640 | 1 | 3× | Dark | [Dark theme](chat-file-picker-en-320x640-scale3-dark.png) |
+| After | en-US | 568 × 320 | 1 | 3× | Light | [Short landscape layout](chat-file-picker-en-568x320-scale3-light.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Longer German labels](chat-file-picker-de-DE-320x640-scale3-light.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Clear label at full-text endpoint](chat-file-picker-de-DE-320x640-scale3-clear-end.png) |
 | Browser route | de-DE | 320 × 640 | 1 | 3× | Light | [Clear head/start](chat-file-picker-de-DE-320x640-scale3-clear-head-browser.png) · [tail endpoint](chat-file-picker-de-DE-320x640-scale3-clear-tail-browser.png) · [return to head](chat-file-picker-de-DE-320x640-scale3-clear-return-browser.png) |
@@ -21,10 +22,9 @@ in Flutter Web/Chromium, with a selected local text fixture. It is 13.33 seconds
 long at 6 fps (capture timestamps 0 through 13.17 seconds) and shows the
 one-second initial still, the 24 logical px/s travel to the tail endpoint, its
 two-second hold, the return travel, and the two-second head hold. In the latest
-capture the first completed screenshot was 0.463 seconds after first render;
-the forward and return travels have 26 and 25 real samples, with no missing
-frames. The full label remains in route semantics
-throughout.
+capture the first completed screenshot was 0.503 seconds after first render;
+the forward and return travels have 25 and 24 real samples, with a maximum
+gap of one frame in each direction. The full label remains in route semantics throughout.
 The Chromium recorder starts sampling at the fixture-selection click and uses
 a `MutationObserver` timestamp for the first rendered Clear semantics node to
 align the video timeline. It requires an actual screenshot request after first
@@ -49,8 +49,9 @@ the empty state, and unused active-tab viewport space still change the tab;
 preview and confirmation interactions remain outside the swipe region. A long text folder verifies that its row is hit-testable after
 scrolling, selection count changes on tap, and the scroll extent follows the
 active folder's natural rows before contracting after switching to an empty
-tab. Only the active tab's page is built in this compact scroll layout, with
-rows created lazily as the user scrolls; changing tabs returns the shared
+tab. The 568 × 320 capture shows all four 3× labels with their measured line
+height and vertical padding. Only the active tab's page is built in this compact
+scroll layout, with rows created lazily as the user scrolls; changing tabs returns the shared
 scroll position to the top. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial

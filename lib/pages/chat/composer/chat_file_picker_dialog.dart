@@ -259,10 +259,26 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final expandedChrome =
         textScale >= 2 && MediaQuery.sizeOf(context).width <= 600;
     final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
-    final standardExpandedTabRowHeight =
-        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8)
-            .clamp(64.0, 80.0)
-            .toDouble();
+    final standardExpandedTabRowHeight = expandedChrome
+        ? (_FileTabType.values.fold<double>(
+                  0,
+                  (height, type) {
+                    final painter = TextPainter(
+                      text: TextSpan(
+                        text: _tabLabel(l10n, type),
+                        style: tabLabelStyle,
+                      ),
+                      textDirection: Directionality.of(context),
+                      textScaler: MediaQuery.textScalerOf(context),
+                      locale: Localizations.localeOf(context),
+                    )..layout();
+                    return painter.height > height ? painter.height : height;
+                  },
+                ) +
+                8)
+            .clamp(64.0, double.infinity)
+            .toDouble()
+        : 64.0;
     final standardClearRowHeight =
         ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16)
             .clamp(56.0, 100.0)
@@ -280,9 +296,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         (hasSelection ? previewBarHeight : 0) -
         confirmationBarHeight;
     final shortViewportChrome = expandedChrome && estimatedBodyHeight < 96;
-    final expandedTabRowHeight =
-        shortViewportChrome ? 56.0 : standardExpandedTabRowHeight;
-    final clearRowHeight = shortViewportChrome ? 56.0 : standardClearRowHeight;
+    final expandedTabRowHeight = standardExpandedTabRowHeight;
+    final clearRowHeight = standardClearRowHeight;
     final confirmationButton = SafeArea(
       top: false,
       child: Container(
