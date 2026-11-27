@@ -1,22 +1,61 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+// pro_image_editor uses MaterialLocalizations from its material_ui dependency.
+// ignore: depend_on_referenced_packages
+import 'package:material_ui/material_ui.dart' as material_ui;
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/image_editor_page.dart';
 
 Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
-      locale: const Locale('zh', 'CN'),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: home,
-    );
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    ...material_ui.GlobalMaterialLocalizations.delegates,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: home,
+);
 
 void main() {
+  testWidgets('canceling save then closing still asks to save edits', (
+    tester,
+  ) async {
+    final imageBytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==',
+    );
+
+    await tester.pumpWidget(
+      _localizedMaterialApp(home: ImageEditorPage(imageBytes: imageBytes)),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester
+        .widget<ProImageEditor>(find.byType(ProImageEditor))
+        .callbacks
+        .onImageEditingComplete!(imageBytes);
+    final editor = tester.state<ProImageEditorState>(
+      find.byType(ProImageEditor),
+    );
+    editor.closeEditor();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('保存图片'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('保存图片'), findsNothing);
+
+    editor.closeEditor();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('保存图片'), findsOneWidget);
+  });
+
   // ====================================================================
   // Editor configuration: save affordance clarity
   //
