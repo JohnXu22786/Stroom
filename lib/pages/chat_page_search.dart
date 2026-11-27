@@ -364,6 +364,33 @@ extension _ChatPageSearchExt on _ChatPageState {
   /// keyboard stays up while browsing results, matching the pre-fix
   /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
+    final theme = Theme.of(context);
+    final baseHintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge
+            : theme.textTheme.titleMedium) ??
+        theme.textTheme.bodyMedium ??
+        const TextStyle();
+    final hintStyle = baseHintStyle
+        .merge(const TextStyle(fontSize: 13))
+        .copyWith(
+          color: theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+        )
+        .merge(
+          WidgetStateProperty.resolveAs(
+            InputDecorationTheme.of(context).hintStyle,
+            <WidgetState>{
+              if (_searchFocusNode.hasFocus) WidgetState.focused,
+              if (_isSearchFieldHovered) WidgetState.hovered,
+            },
+          ),
+        );
+    final isCurrentSearch = _searchMode == SearchMode.current;
+    final currentSearchHint = AppLocalizations.of(context)!.chatSearchCurrent;
+    final allSearchHint = AppLocalizations.of(context)!.chatSearchAll;
+    final hint = isCurrentSearch ? currentSearchHint : allSearchHint;
+
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
@@ -390,35 +417,51 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: SizedBox(
-                    height: 32,
-                    child: TextField(
-                      controller: _searchTextController,
-                      autofocus: true,
-                      // Same tap-region group as the message list: tapping a
-                      // search result (in the list) must not blur the search
-                      // field — the keyboard stays up while browsing results.
-                      groupId: chatComposerTapRegionGroupId,
-                      onChanged: (query) {
-                        if (_searchMode == SearchMode.current) {
-                          _performSearch(query);
-                        } else if (query.isNotEmpty) {
-                          // Global mode: defer to full search page
-                          _openGlobalSearch();
-                        }
-                      },
-                      decoration: InputDecoration(
-                        hintText: _searchMode == SearchMode.current
-                            ? AppLocalizations.of(context)!.chatSearchCurrent
-                            : AppLocalizations.of(context)!.chatSearchAll,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
+                  child: MouseRegion(
+                    onEnter: (_) {
+                      if (!_isSearchFieldHovered) {
+                        setState(() => _isSearchFieldHovered = true);
+                      }
+                    },
+                    onExit: (_) {
+                      if (_isSearchFieldHovered) {
+                        setState(() => _isSearchFieldHovered = false);
+                      }
+                    },
+                    child: SizedBox(
+                      height: 32,
+                      child: TextField(
+                        controller: _searchTextController,
+                        focusNode: _searchFocusNode,
+                        autofocus: true,
+                        // Same tap-region group as the message list: tapping a
+                        // search result (in the list) must not blur the search
+                        // field — the keyboard stays up while browsing results.
+                        groupId: chatComposerTapRegionGroupId,
+                        onChanged: (query) {
+                          if (_searchMode == SearchMode.current) {
+                            _performSearch(query);
+                          } else if (query.isNotEmpty) {
+                            // Global mode: defer to full search page
+                            _openGlobalSearch();
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hint: ConstrainedText(
+                            hint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: hintStyle,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          border: OutlineInputBorder(),
                         ),
-                        border: OutlineInputBorder(),
+                        style: const TextStyle(fontSize: 13),
                       ),
-                      style: const TextStyle(fontSize: 13),
                     ),
                   ),
                 ),
