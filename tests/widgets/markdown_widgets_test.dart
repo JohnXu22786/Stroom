@@ -818,6 +818,18 @@ $$
       );
       expect(parsedNodeCount, 0);
 
+      const multilineLinkTitle = '[x](<url> "title\n__literal__")';
+      final multilineLinkTitlePreview = previewGenerator.buildPlainTextPreview([
+        multilineLinkTitle,
+      ]);
+      expect(
+        ((multilineLinkTitlePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        multilineLinkTitle,
+      );
+      expect(parsedNodeCount, 0);
+
       const linkWithLineBreak = '[x](url\n__bold__)';
       final linkWithLineBreakPreview =
           markdownGenerator.buildPlainTextPreview([linkWithLineBreak]);

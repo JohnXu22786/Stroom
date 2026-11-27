@@ -461,11 +461,10 @@ int _inlineLinkDestinationEnd(String source, int start) {
   };
   if (titleEndDelimiter == -1) return -1;
   i++;
+  var previousWasLineBreak = false;
   while (i < source.length) {
     final codeUnit = source.codeUnitAt(i);
-    if (codeUnit == 10 || codeUnit == 13) {
-      return -1;
-    } else if (codeUnit == 92) {
+    if (codeUnit == 92) {
       i++;
     } else if (codeUnit == titleEndDelimiter) {
       i++;
@@ -475,6 +474,16 @@ int _inlineLinkDestinationEnd(String source, int start) {
       return i < source.length && source.codeUnitAt(i) == 41 ? i : -1;
     } else if (titleDelimiter == 40 && codeUnit == 41) {
       return -1;
+    } else if (codeUnit == 10 || codeUnit == 13) {
+      if (previousWasLineBreak) return -1;
+      previousWasLineBreak = true;
+      if (codeUnit == 13 &&
+          i + 1 < source.length &&
+          source.codeUnitAt(i + 1) == 10) {
+        i++;
+      }
+    } else if (!_isLinkWhitespace(codeUnit)) {
+      previousWasLineBreak = false;
     }
     i++;
   }
@@ -482,7 +491,12 @@ int _inlineLinkDestinationEnd(String source, int start) {
 }
 
 bool _isLinkWhitespace(int codeUnit) =>
-    codeUnit == 32 || codeUnit == 9 || codeUnit == 11 || codeUnit == 12;
+    codeUnit == 32 ||
+    codeUnit == 9 ||
+    codeUnit == 10 ||
+    codeUnit == 11 ||
+    codeUnit == 12 ||
+    codeUnit == 13;
 
 bool _isEscapedMarkdownCharacter(String source, int offset) {
   var backslashCount = 0;
