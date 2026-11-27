@@ -229,13 +229,26 @@ String _withoutMarkdownCode(String source) {
 
   final sourceWithoutFences = String.fromCharCodes(codeUnits);
   final runs = RegExp(r'`+').allMatches(sourceWithoutFences).toList();
-  final nextRunByLength = <int, int>{};
-  final nextMatchingRun = List<int>.filled(runs.length, -1);
-  for (var i = runs.length - 1; i >= 0; i--) {
+  final runIndicesByLength = <int, List<int>>{};
+  for (var i = 0; i < runs.length; i++) {
     final run = runs[i];
-    final runLength = run.end - run.start;
-    nextMatchingRun[i] = nextRunByLength[runLength] ?? -1;
-    nextRunByLength[runLength] = i;
+    runIndicesByLength.putIfAbsent(run.end - run.start, () => <int>[]).add(i);
+  }
+
+  int nextRunOfLength(int length, int afterIndex) {
+    final indices = runIndicesByLength[length];
+    if (indices == null) return -1;
+    var low = 0;
+    var high = indices.length;
+    while (low < high) {
+      final middle = (low + high) ~/ 2;
+      if (indices[middle] <= afterIndex) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low < indices.length ? indices[low] : -1;
   }
 
   var runIndex = 0;
@@ -245,15 +258,23 @@ String _withoutMarkdownCode(String source) {
     for (var i = run.start - 1; i >= 0 && codeUnits[i] == 92; i--) {
       backslashCount++;
     }
-    final closingRunIndex = nextMatchingRun[runIndex];
-    if (backslashCount.isOdd || closingRunIndex == -1) {
+    final escapedFirstBacktick = backslashCount.isOdd;
+    final openingLength = run.end - run.start - (escapedFirstBacktick ? 1 : 0);
+    if (openingLength == 0) {
       runIndex++;
       continue;
     }
 
-    // Once a run opens a code span, different-length runs inside it cannot
-    // pair with delimiters that follow the span.
-    maskRange(run.start, runs[closingRunIndex].end);
+    final closingRunIndex = nextRunOfLength(openingLength, runIndex);
+    if (closingRunIndex == -1) {
+      runIndex++;
+      continue;
+    }
+
+    final openingStart = run.start + (escapedFirstBacktick ? 1 : 0);
+    // Different-length runs inside a code span cannot pair with delimiters
+    // that follow it. The next exact-length run closes even after a backslash.
+    maskRange(openingStart, runs[closingRunIndex].end);
     runIndex = closingRunIndex + 1;
   }
   return String.fromCharCodes(codeUnits);

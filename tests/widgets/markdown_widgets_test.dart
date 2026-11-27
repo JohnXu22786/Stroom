@@ -819,6 +819,19 @@ $$
       );
       expect(parsedNodeCount, greaterThan(0));
 
+      parsedNodeCount = 0;
+      const escapedFirstBacktick = r'\```__literal__``';
+      final escapedFirstBacktickPreview =
+          previewGenerator.buildPlainTextPreview([escapedFirstBacktick]);
+      expect(
+        ((escapedFirstBacktickPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        escapedFirstBacktick,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
       const escapedDelimiterInCode = r'`foo\` __inside__`';
       final escapedDelimiterPreview = previewGenerator.buildPlainTextPreview([
         escapedDelimiterInCode,
