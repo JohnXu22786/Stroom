@@ -820,6 +820,26 @@ $$
       );
       expect(parsedNodeCount, greaterThan(0));
 
+      for (final lineEnding in ['\r\n', '\r']) {
+        final source = '```$lineEnding' +
+            '__literal__$lineEnding```$lineEnding' +
+            '__after__';
+        final widgets = markdownGenerator.buildPlainTextPreview([source]);
+        final spans = [
+          for (final widget in widgets)
+            if (widget is Padding)
+              (_unwrapLinkRecognizerLifecycle(widget.child!) as Text)
+                  .textSpan!,
+        ];
+        expect(
+          spans.any((span) =>
+              _leafSpanWithText(span, 'after')?.style?.fontWeight ==
+              FontWeight.bold),
+          isTrue,
+          reason: 'closed fences should not mask emphasis after $lineEnding',
+        );
+      }
+
       parsedNodeCount = 0;
       const escapedFirstBacktick = r'\```__literal__``';
       final escapedFirstBacktickPreview =

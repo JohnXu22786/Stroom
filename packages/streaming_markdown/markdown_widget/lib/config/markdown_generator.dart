@@ -176,8 +176,12 @@ String _withoutMarkdownCode(String source) {
   var fenceQuoteDepth = 0;
   var lineStart = 0;
   while (lineStart < source.length) {
-    var lineEnd = source.indexOf('\n', lineStart);
-    if (lineEnd == -1) lineEnd = source.length;
+    var lineEnd = lineStart;
+    while (lineEnd < source.length &&
+        codeUnits[lineEnd] != 10 &&
+        codeUnits[lineEnd] != 13) {
+      lineEnd++;
+    }
     final line = source.substring(lineStart, lineEnd);
     var content = line;
     var quoteDepth = 0;
@@ -225,7 +229,9 @@ String _withoutMarkdownCode(String source) {
         maskRange(lineStart, lineEnd);
       }
     }
-    lineStart = lineEnd + 1;
+    lineStart = lineEnd;
+    if (lineStart < source.length && codeUnits[lineStart] == 13) lineStart++;
+    if (lineStart < source.length && codeUnits[lineStart] == 10) lineStart++;
   }
 
   final sourceWithoutFences = String.fromCharCodes(codeUnits);
