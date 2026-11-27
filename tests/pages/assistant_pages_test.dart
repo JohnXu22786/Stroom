@@ -22,9 +22,9 @@ Widget createTestApp({
   List<Assistant>? assistants,
   Locale locale = const Locale('zh', 'CN'),
   Size? mediaQuerySize,
-  double textScaleFactor = 1,
+  double? textScaleFactor,
   bool darkMode = false,
-  bool disableAnimations = false,
+  bool? disableAnimations,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -54,7 +54,9 @@ Widget createTestApp({
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           size: mediaQuerySize,
-          textScaler: TextScaler.linear(textScaleFactor),
+          textScaler: textScaleFactor == null
+              ? null
+              : TextScaler.linear(textScaleFactor),
           disableAnimations: disableAnimations,
         ),
         child: child!,

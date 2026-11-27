@@ -36,7 +36,7 @@ void main() {
     }
   });
 
-  testWidgets('captures fitting and enlarged production assistant cards', (
+  testWidgets('production card geometry stays stable through scaled reveal', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 640);
@@ -44,17 +44,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    for (final (scale, description, screenshot) in [
-      (
-        1.0,
-        'Helper.',
-        '../../docs/qa/assistant_card_scaled_grid/assistant-card-fr-320x640-scale1.png',
-      ),
-      (
-        2.0,
-        _description,
-        '../../docs/qa/assistant_card_scaled_grid/assistant-card-fr-320x640-scale2.png',
-      ),
+    for (final (scale, description) in [
+      (1.0, 'Helper.'),
+      (2.0, _description),
     ]) {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -96,7 +88,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(tester.takeException(), isNull, reason: 'scale: $scale');
-      await expectLater(find.byKey(_captureKey), matchesGoldenFile(screenshot));
+      final cardSize = tester.getSize(find.byType(AssistantCard));
+      if (scale == 1) {
+        expect(cardSize.height, closeTo(cardSize.width / 0.85, 1));
+      } else {
+        expect(cardSize.height, greaterThan(cardSize.width / 0.85));
+      }
 
       if (scale == 2) {
         final descriptionFinder = find.text(_description);
@@ -107,14 +104,6 @@ void main() {
         for (var second = 1; second <= 70; second++) {
           await tester.pump(const Duration(seconds: 1));
           expect(tester.takeException(), isNull);
-          if ([1, 10, 33, 36, 67, 70].contains(second)) {
-            await expectLater(
-              find.byKey(_captureKey),
-              matchesGoldenFile(
-                '../../docs/qa/assistant_card_scaled_grid/preview-${second.toString().padLeft(2, '0')}.png',
-              ),
-            );
-          }
           final descriptionY = tester.getTopLeft(descriptionFinder).dy;
           final titleX = tester.getTopLeft(titleFinder).dx;
           if ([1, 2, 33, 36, 67, 70].contains(second)) {

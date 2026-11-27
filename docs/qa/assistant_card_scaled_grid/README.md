@@ -12,6 +12,8 @@ the animation. The timeline was measured in the widget capture test: the far
 endpoint is reached at 33 seconds, return starts at 36 seconds, the start
 endpoint is reached at 67 seconds, and the next cycle begins at 70 seconds.
 
-`assistant_card_scaled_grid_capture_test.dart` regenerates the 1× and 2×
-captures and the selected production frames. The GIF combines per-second
-frames captured from that same widget-test timeline.
+`assistant_card_scaled_grid_capture_test.dart` checks production card geometry
+at 1× and 2× and verifies the description's reveal, endpoint holds, and return.
+The checked-in PNG and GIF captures provide the visual reference; they are not
+strict pixel goldens because platform font rasterization can vary across CI
+images.
