@@ -7,6 +7,8 @@ from urllib.request import urlopen
 from PIL import Image, ImageStat
 from playwright.sync_api import sync_playwright
 
+from capture_process_cleanup import cleanup_server
+
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/compact-rows"
 PORT = 8895
@@ -138,9 +140,6 @@ try:
     if errors:
         raise RuntimeError(f"Browser errors: {errors}")
 finally:
-    server.terminate()
-    server.wait(timeout=10)
-    server_log.close()
-    SERVER_LOG.unlink(missing_ok=True)
+    cleanup_server(server, server_log, SERVER_LOG)
 
 print("Captured French voice duplicate resolution at fitting, wide, and narrow scales, plus narrow Arabic RTL, in light and dark themes.")
