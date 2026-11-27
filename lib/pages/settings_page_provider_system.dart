@@ -219,7 +219,6 @@ class _SystemAssistantConfigPanelState
   late String _defaultPrompt;
   late final TextEditingController _promptController;
   List<AvailableModel> _models = const [];
-  List<String> _modelNames = const [];
 
   @override
   void initState() {
@@ -232,16 +231,26 @@ class _SystemAssistantConfigPanelState
       text: _isCustomPrompt ? widget.initial.prompt! : _defaultPrompt,
     );
     _models = availableLlmModels(ref.read(providerEntriesProvider));
-    final baseNames = _models.map((m) => m.displayName).toList();
-    _modelNames = baseNames;
     // 模型列表顺序与对话页共用同一份保存顺序（拖动排序）。
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
+      final savedOrder = prefs.getStringList('model_order') ?? const <String>[];
+      final savedPositions = <String, int>{};
+      for (var i = 0; i < savedOrder.length; i++) {
+        savedPositions.putIfAbsent(savedOrder[i], () => i);
+      }
+      final indices = List<int>.generate(_models.length, (index) => index);
+      indices.sort((left, right) {
+        final leftName = _models[left].displayName;
+        final rightName = _models[right].displayName;
+        final leftOrder = savedPositions[leftName] ?? savedOrder.length + left;
+        final rightOrder =
+            savedPositions[rightName] ?? savedOrder.length + right;
+        final bySavedOrder = leftOrder.compareTo(rightOrder);
+        return bySavedOrder != 0 ? bySavedOrder : left.compareTo(right);
+      });
       setState(() {
-        _modelNames = applySavedOrder(
-          baseNames,
-          prefs.getStringList('model_order'),
-        );
+        _models = indices.map((index) => _models[index]).toList();
       });
     });
   }
@@ -265,16 +274,47 @@ class _SystemAssistantConfigPanelState
     super.dispose();
   }
 
-  /// 当前选择在模型列表中的显示名（解析到最新显示名；引用已失效时
-  /// 展示保存的显示名兜底）。
+  /// 当前选择在模型列表中的模型引用。
+  AvailableModel? get _selectedModel {
+    final modelId = _draft.modelId;
+    if (modelId != null && modelId.isNotEmpty) {
+      final providerName = _draft.providerName;
+      if (providerName != null && providerName.isNotEmpty) {
+        final exactMatch = _models
+            .where(
+              (model) =>
+                  model.modelId == modelId &&
+                  model.providerName == providerName,
+            )
+            .firstOrNull;
+        if (exactMatch != null) return exactMatch;
+      }
+
+      final idMatches =
+          _models.where((model) => model.modelId == modelId).take(2).toList();
+      if (idMatches.length == 1) return idMatches.single;
+    }
+
+    final displayName = _draft.modelDisplayName;
+    if (displayName != null && displayName.isNotEmpty) {
+      final matches = _models
+          .where((model) => model.displayName == displayName)
+          .take(2)
+          .toList();
+      return matches.length == 1 ? matches.single : null;
+    }
+    return null;
+  }
+
+  /// 当前选择的模型显示名；引用失效时回退到保存的名称。
   String get _selectedModelDisplay {
-    final resolved = resolveModelRef(
+    final selected = resolveModelRef(
       models: _models,
       modelId: _draft.modelId,
       providerName: _draft.providerName,
       displayName: _draft.modelDisplayName,
     );
-    if (resolved != null) return resolved.displayName;
+    if (selected != null) return selected.displayName;
     if (_draft.modelDisplayName != null &&
         _draft.modelDisplayName!.isNotEmpty) {
       return _draft.modelDisplayName!;
@@ -282,8 +322,18 @@ class _SystemAssistantConfigPanelState
     return AppLocalizations.of(context)!.systemAssistantFollowCurrentModel;
   }
 
+  /// 模型引用变化时，即使两个模型当前使用相同的显示名，也只标记
+  /// 精确匹配 provider 和 model ID 的一项。
+  bool _isSelectedModel(AvailableModel model) {
+    final selected = _selectedModel;
+    return selected != null &&
+        selected.modelId == model.modelId &&
+        selected.providerName == model.providerName;
+  }
+
   Future<void> _pickModel() async {
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<
+        ({bool followCurrentModel, AvailableModel? model})>(
       context: context,
       constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
@@ -292,7 +342,6 @@ class _SystemAssistantConfigPanelState
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
         final strings = AppLocalizations.of(ctx)!;
-        final currentDisplay = _selectedModelDisplay;
         return SafeArea(
           child: ListView(
             shrinkWrap: true,
@@ -317,20 +366,26 @@ class _SystemAssistantConfigPanelState
                 trailing: !_draft.hasModel
                     ? Icon(Icons.check, size: 18, color: cs.primary)
                     : null,
-                onTap: () => Navigator.pop(ctx, ''),
+                onTap: () => Navigator.pop(ctx, (
+                  followCurrentModel: true,
+                  model: null,
+                )),
               ),
-              for (final name in _modelNames)
+              for (final model in _models)
                 ListTile(
                   dense: true,
                   title: ConstrainedText(
-                    name,
+                    model.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: currentDisplay == name
+                  trailing: _isSelectedModel(model)
                       ? Icon(Icons.check, size: 18, color: cs.primary)
                       : null,
-                  onTap: () => Navigator.pop(ctx, name),
+                  onTap: () => Navigator.pop(ctx, (
+                    followCurrentModel: false,
+                    model: model,
+                  )),
                 ),
             ],
           ),
@@ -339,15 +394,14 @@ class _SystemAssistantConfigPanelState
     );
     if (selected == null) return;
     setState(() {
-      if (selected.isEmpty) {
+      if (selected.followCurrentModel) {
         _draft = _draft.copyWithModel(clearModel: true);
       } else {
-        final resolved =
-            _models.where((m) => m.displayName == selected).firstOrNull;
+        final model = selected.model!;
         _draft = _draft.copyWithModel(
-          modelId: resolved?.modelId,
-          providerName: resolved?.providerName,
-          modelDisplayName: resolved?.displayName ?? selected,
+          modelId: model.modelId,
+          providerName: model.providerName,
+          modelDisplayName: model.displayName,
         );
       }
     });
