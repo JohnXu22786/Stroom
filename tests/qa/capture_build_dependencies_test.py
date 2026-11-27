@@ -110,15 +110,19 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
 
     def test_qa_capture_scripts_use_transitive_build_dependency_check(self):
         script_calls = {
-            "capture_anki_delete_confirmation.py": "capture_entrypoint",
-            "capture_file_info_label.py": "capture_entrypoint",
-            "capture_vertical_editor_gutter_scale.py": "entrypoint",
+            ("tool/qa", "capture_anki_delete_confirmation.py"): "capture_entrypoint",
+            ("tool/qa", "capture_file_info_label.py"): "capture_entrypoint",
+            ("tool/qa", "capture_vertical_editor_gutter_scale.py"): "entrypoint",
+            ("tools/qa", "capture_vertical_backup_error.py"): "capture_entrypoint",
+            ("tools/qa", "capture_vertical_provider_config_header.py"): "capture_entrypoint",
         }
-        qa_directory = Path(__file__).resolve().parents[2] / "tool" / "qa"
+        repository_root = Path(__file__).resolve().parents[2]
 
-        for script_name, entrypoint_name in script_calls.items():
+        for (qa_directory, script_name), entrypoint_name in script_calls.items():
             with self.subTest(script=script_name):
-                script = ast.parse((qa_directory / script_name).read_text())
+                script = ast.parse(
+                    (repository_root / qa_directory / script_name).read_text()
+                )
                 checks_dependencies = any(
                     isinstance(node, ast.If)
                     and isinstance(node.test, ast.Call)
@@ -132,6 +136,40 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
                     for node in ast.walk(script)
                 )
                 self.assertTrue(checks_dependencies)
+
+    def _assert_newer_transitive_source_requires_rebuild(self, entrypoint_path):
+        entrypoint = self.root / entrypoint_path
+        entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        entrypoint.write_text(
+            "import 'package:stroom/widgets/capture_widget.dart';\n",
+            encoding="utf-8",
+        )
+        capture_widget = self.root / "lib/widgets/capture_widget.dart"
+        capture_widget.parent.mkdir(parents=True, exist_ok=True)
+        capture_widget.write_text(
+            "import '../utils/capture_dependency.dart';\n",
+            encoding="utf-8",
+        )
+        transitive_source = self.root / "lib/utils/capture_dependency.dart"
+        transitive_source.parent.mkdir(parents=True, exist_ok=True)
+        transitive_source.write_text("class CaptureDependency {}\n", encoding="utf-8")
+        bundle = self.root / "build/index.html"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text("built bundle\n", encoding="utf-8")
+        newer_mtime = bundle.stat().st_mtime + 1
+        os.utime(transitive_source, (newer_mtime, newer_mtime))
+
+        self.assertTrue(needs_rebuild(self.root, entrypoint, bundle))
+
+    def test_vertical_backup_error_capture_tracks_transitive_source(self):
+        self._assert_newer_transitive_source_requires_rebuild(
+            "tool/qa/vertical_backup_error_capture.dart"
+        )
+
+    def test_vertical_provider_config_header_capture_tracks_transitive_source(self):
+        self._assert_newer_transitive_source_requires_rebuild(
+            "tool/qa/vertical_provider_config_header_capture.dart"
+        )
 
     def test_newer_conditional_production_import_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
