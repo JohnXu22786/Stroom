@@ -13,12 +13,14 @@ PORT = 8894
 
 def focused_capture(page, path):
     width = page.viewport_size['width']
+    captured_at = time.monotonic()
     page.screenshot(path=str(path), clip={
         'x': 0,
         'y': 68 if width > 400 else 76,
         'width': width,
         'height': 70 if width > 400 else 90,
     })
+    return captured_at
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *_):
@@ -91,17 +93,74 @@ with sync_playwright() as playwright:
     frames = ROOT / 'motion-frames'
     frames.mkdir(exist_ok=True)
     # The French 2× label travels about nine seconds in each direction.
-    # Capture one full 23-second cycle, including the initial delay, both
-    # 2-second endpoint holds, and complete return, at four frames per second.
-    for index in range(92):
-        focused_capture(page, frames / f'frame-{index:04d}.png')
-        page.wait_for_timeout(250)
+    # Capture through the full reveal, endpoint holds, and complete return.
+    # Schedule screenshots at 4 Hz against monotonic deadlines, then encode
+    # their measured timestamps as variable frame durations so screenshot time
+    # does not speed up motion. 27.76 seconds includes the full 2-second hold
+    # after the label returns to its leading position.
+    cycle_duration = 27.76
+    frame_rate = 4
+    cycle_started = time.monotonic()
+    frame_paths = []
+    frame_times = []
+    for index in range(int(cycle_duration * frame_rate)):
+        deadline = cycle_started + index / frame_rate
+        time.sleep(max(0, deadline - time.monotonic()))
+        if time.monotonic() >= cycle_started + cycle_duration:
+            break
+        frame_path = frames / f'frame-{index:04d}.png'
+        frame_paths.append(frame_path)
+        frame_times.append(focused_capture(page, frame_path) - cycle_started)
     context.close()
     output_video = ROOT / 'chat-search-hint-fr-reveal-return.webm'
+    concat_file = frames / 'frames.txt'
+    concat_lines = []
+    for index, frame_path in enumerate(frame_paths):
+        if index == 0 and len(frame_times) > 1:
+            duration = frame_times[index + 1]
+        elif index + 1 < len(frame_times):
+            duration = frame_times[index + 1] - frame_times[index]
+        else:
+            duration = cycle_duration - frame_times[index]
+        concat_lines.extend((
+            f"file '{frame_path.resolve()}'",
+            f'duration {duration:.9f}',
+        ))
+    concat_lines.append(f"file '{frame_paths[-1].resolve()}'")
+    concat_file.write_text('\n'.join(concat_lines) + '\n', encoding='utf-8')
+    raw_video = ROOT / 'chat-search-hint-fr-reveal-return-raw.webm'
     subprocess.run([
-        'ffmpeg', '-y', '-framerate', '4', '-i', str(frames / 'frame-%04d.png'),
-        '-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', str(output_video),
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(concat_file),
+        '-fps_mode', 'vfr', '-t', str(cycle_duration),
+        '-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', str(raw_video),
     ], check=True, capture_output=True, text=True)
+    raw_duration = float(subprocess.run([
+        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'csv=p=0', str(raw_video),
+    ], check=True, capture_output=True, text=True).stdout.strip())
+    if abs(raw_duration - cycle_duration) > 0.001:
+        final_padding = max(0, cycle_duration - raw_duration)
+        command = ['ffmpeg', '-y', '-i', str(raw_video)]
+        if final_padding > 0:
+            command.extend(('-vf', f'tpad=stop_mode=clone:stop_duration={final_padding:.9f}'))
+        command.extend((
+            '-fps_mode', 'vfr', '-t', str(cycle_duration),
+            '-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', str(output_video),
+        ))
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        raw_video.unlink()
+    else:
+        raw_video.replace(output_video)
+    final_duration = float(subprocess.run([
+        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'csv=p=0', str(output_video),
+    ], check=True, capture_output=True, text=True).stdout.strip())
+    if abs(final_duration - cycle_duration) > 0.001:
+        raise RuntimeError(f'Expected {cycle_duration}s video, got {final_duration}s')
+    print({'video_timeline': {
+        'frames': len(frame_paths), 'captured_at': [frame_times[0], frame_times[-1]],
+        'encoded_duration': final_duration,
+    }})
     for frame in frames.iterdir():
         frame.unlink()
     frames.rmdir()
