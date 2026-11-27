@@ -46,7 +46,7 @@ route checks focused and validation-error colors on the production field.
 
 ## Browser captures
 
-Captures use production Flutter routes/widgets, not a static mock. Reasoning/model-fit screenshots were refreshed on candidate `c800bb54` (base `cf77979a`); the playable reasoning-option reveal was recorded on exact source candidate `d95ca3b4` at 360×900 / fr-FR / 1.8×. MCP and ASR captures were rendered from the candidate working tree before its first commit; that exact production implementation was later committed as `68eed684` after rebasing onto `cf77979a`. `fa9e99c7` identifies the pre-rebase main base only, not the rendered source revision. The later test and evidence commits did not modify those production routes.
+Captures use production Flutter routes/widgets, not a static mock. Model-fit and reasoning screenshots plus the reasoning reveal video were refreshed from source candidate `e75575c2` on base `91988838`. The reasoning clip is 57.52 seconds at 25 fps, 360×900 / fr-FR / 1.8×: it includes dialog appearance, hint travel, end hold, return travel, and the starting edge. MCP and ASR captures were rendered from the same candidate implementation in the working tree before its first commit; the production implementation was then committed as `67be235a` after rebasing on `91988838`. No target production files changed in later rebases or evidence/test commits.
 
 - `mcp-config-en-320x640-1x.png`: clipped MCP form hints.
 - `asr-audio-url-de-DE-320x900-2x.png`: clipped audio URL hint and focused field.
@@ -54,6 +54,6 @@ Captures use production Flutter routes/widgets, not a static mock. Reasoning/mod
 - `llm-model-name-fit-fr-FR-360x900-1.8x.png`: naturally multiline fitting model-name hint, left unchanged.
 - `llm-reasoning-options-fr-FR-360x900-1.8x.png`: production LLM page showing the reasoning options area.
 - `reasoning-option-fr-FR-360x900-1.8x.png`: reasoning-option dialog's clipped example.
-- `reasoning-option-reveal-fr-FR-360x900-1.8x.webm`: 56.56-second production route recording; the dialog appears at about 10 seconds, the hint travels to the clipped end, pauses, reverses and returns toward its starting edge before the clip ends.
+- `reasoning-option-reveal-fr-FR-360x900-1.8x.webm`: 57.52-second production route recording; the dialog appears at about 10 seconds, the hint travels to the clipped end, pauses, reverses and returns toward its starting edge before the clip ends.
 
 The ASR URL web route renders one full `aria-description="https://example.com/audio.mp3"` on the native input, without a duplicate placeholder or aria-label. The recording shows the hint moving through the bounded field at the reported viewport and locale.
