@@ -18,6 +18,99 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets('measures the catalog URL hint in the production dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: ThemeData(
+            useMaterial3: true,
+            inputDecorationTheme: InputDecorationTheme(
+              hintStyle: WidgetStateTextStyle.resolveWith((states) {
+                return TextStyle(
+                  color: states.contains(WidgetState.focused)
+                      ? Colors.red
+                      : Colors.blue,
+                );
+              }),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: TextButton(
+                onPressed: () => showAssistantRemoteSourceDialog(context, ref),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    const hint = 'https://…/catalog.json';
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    );
+    expect(hintFinder, findsOneWidget);
+    final hintWidget = tester.widget<ConstrainedText>(hintFinder);
+    final hintContext = tester.element(hintFinder);
+    final naturalHint = TextPainter(
+      text: TextSpan(text: hint, style: hintWidget.style),
+      textDirection: Directionality.of(hintContext),
+      textScaler: MediaQuery.textScalerOf(hintContext),
+    )..layout();
+    final hintSlot = tester.getSize(find.byType(ConstrainedInputHint));
+    expect(naturalHint.width, greaterThan(hintSlot.width));
+    debugPrint(
+      'assistant catalog hint=$hint slot=$hintSlot '
+      'intrinsicWidth=${naturalHint.width}',
+    );
+
+    final field = find.byType(TextField).first;
+    final semantics = tester.ensureSemantics();
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(
+        tester.widget<ConstrainedText>(hintFinder).style!.color, Colors.blue);
+    await tester.tap(field);
+    await tester.pump();
+    expect(tester.widget<ConstrainedText>(hintFinder).style!.color, Colors.red);
+    await tester.enterText(field, 'https://example.test/catalog.json');
+    await tester.pump();
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(
+      tester
+          .widget<EditableText>(find.descendant(
+            of: field,
+            matching: find.byType(EditableText),
+          ))
+          .controller
+          .text,
+      'https://example.test/catalog.json',
+    );
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('discards a catalog response after its URL changes', (
     tester,
   ) async {

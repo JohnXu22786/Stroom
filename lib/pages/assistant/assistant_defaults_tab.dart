@@ -99,6 +99,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
   /// 按配置添加顺序显示。
   List<String>? _savedModelOrder;
 
+  final MaterialStatesController _toolOutputHintStates =
+      MaterialStatesController();
+
   /// 工具结果截断长度输入框的控制器。state 持有（而非 build 内联创建）：
   /// 避免每次重建都新建 controller（丢失焦点/泄漏），
   /// 也保证用户输入与 widget 值同步。
@@ -131,6 +134,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
   @override
   void dispose() {
     _truncationLengthController.dispose();
+    _toolOutputHintStates.dispose();
     super.dispose();
   }
 
@@ -520,54 +524,70 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 if (widget.enableMaxToolOutputChars)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child: TextField(
-                      controller: _truncationLengthController,
-                      decoration: InputDecoration(
-                        label: ConstrainedText(
-                          AppLocalizations.of(context)!.assistantMaxCharacters,
-                          maxLines: 1,
-                        ),
-                        // 明确"字符"单位：避免用户按 token/字节理解。
-                        helper: _lengthError == null
-                            ? Text(
-                                AppLocalizations.of(context)!
-                                    .assistantCharactersNotTokens,
-                                softWrap: true,
-                              )
-                            : null,
-                        errorText: _lengthError,
-                        hintText: AppLocalizations.of(context)!
-                            .assistantDefaultCharacterCount(
-                          kToolOutputMaxChars.toString(),
-                        ),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
+                    child: Semantics(
+                      hint: AppLocalizations.of(context)!
+                          .assistantDefaultCharacterCount(
+                        kToolOutputMaxChars.toString(),
                       ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) {
-                        final n = int.tryParse(v);
-                        final inRange = n != null &&
-                            n >= ChatService.kToolOutputMaxCharsMin &&
-                            n <= ChatService.kToolOutputMaxCharsMax;
-                        setState(() {
-                          // 短输入（如 "1"、"12"）仍可继续编辑，但也要
-                          // 明确提示其尚未应用，避免显示值与生效值不一致。
-                          _lengthError = (v.isNotEmpty && !inRange)
-                              ? AppLocalizations.of(
-                                  context,
-                                )!
-                                  .assistantCharacterRange(
-                                  ChatService.kToolOutputMaxCharsMin.toString(),
-                                  ChatService.kToolOutputMaxCharsMax.toString(),
+                      child: TextField(
+                        controller: _truncationLengthController,
+                        statesController: _toolOutputHintStates,
+                        decoration: InputDecoration(
+                          label: ConstrainedText(
+                            AppLocalizations.of(context)!
+                                .assistantMaxCharacters,
+                            maxLines: 1,
+                          ),
+                          // 明确"字符"单位：避免用户按 token/字节理解。
+                          helper: _lengthError == null
+                              ? Text(
+                                  AppLocalizations.of(context)!
+                                      .assistantCharactersNotTokens,
+                                  softWrap: true,
                                 )
-                              : null;
-                        });
-                        // 越界/非法输入：不写入 vars（保存落库的必是
-                        // 生效值），由 errorText 就地提示。
-                        if (inRange) {
-                          widget.onMaxToolOutputCharsChanged(n);
-                        }
-                      },
+                              : null,
+                          errorText: _lengthError,
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!
+                                  .assistantDefaultCharacterCount(
+                                kToolOutputMaxChars.toString(),
+                              ),
+                              statesController: _toolOutputHintStates,
+                              hasError: _lengthError != null,
+                            ),
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) {
+                          final n = int.tryParse(v);
+                          final inRange = n != null &&
+                              n >= ChatService.kToolOutputMaxCharsMin &&
+                              n <= ChatService.kToolOutputMaxCharsMax;
+                          setState(() {
+                            // 短输入（如 "1"、"12"）仍可继续编辑，但也要
+                            // 明确提示其尚未应用，避免显示值与生效值不一致。
+                            _lengthError = (v.isNotEmpty && !inRange)
+                                ? AppLocalizations.of(
+                                    context,
+                                  )!
+                                    .assistantCharacterRange(
+                                    ChatService.kToolOutputMaxCharsMin
+                                        .toString(),
+                                    ChatService.kToolOutputMaxCharsMax
+                                        .toString(),
+                                  )
+                                : null;
+                          });
+                          // 越界/非法输入：不写入 vars（保存落库的必是
+                          // 生效值），由 errorText 就地提示。
+                          if (inRange) {
+                            widget.onMaxToolOutputCharsChanged(n);
+                          }
+                        },
+                      ),
                     ),
                   ),
               ],
