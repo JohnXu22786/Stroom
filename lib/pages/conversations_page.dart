@@ -548,9 +548,20 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               backgroundColor: cs.error,
               foregroundColor: cs.onError,
               icon: const Icon(Icons.delete),
-              label: Text(
-                AppLocalizations.of(context)!
-                    .conversationDeleteCount(_selectedIds.length),
+              label: ConstrainedBox(
+                constraints: BoxConstraints(
+                  // Leave room for the FAB's 32 dp outer inset, 32 dp label
+                  // padding, icon, and icon-label gap.
+                  maxWidth: (MediaQuery.sizeOf(context).width - 100)
+                      .clamp(0.0, double.infinity)
+                      .toDouble(),
+                ),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!
+                      .conversationDeleteCount(_selectedIds.length),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                ),
               ),
             )
           : null,
