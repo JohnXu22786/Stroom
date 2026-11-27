@@ -786,6 +786,7 @@ $$
               1000;
       var parsedNodeCount = 0;
       final previewGenerator = MarkdownGenerator(
+        inlineSyntaxList: [_UnexpectedParseSyntax()],
         onNodeAccepted: (node, index) => parsedNodeCount++,
       );
       final ordinary = previewGenerator.buildPlainTextPreview([ordinaryText]);
@@ -3318,4 +3319,14 @@ $$
           reason: 'should clip to prevent overflow beyond bubble');
     });
   });
+}
+
+
+class _UnexpectedParseSyntax extends m.InlineSyntax {
+  _UnexpectedParseSyntax() : super('普通文本');
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    throw StateError('ordinary long preview should not run Markdown parsing');
+  }
 }

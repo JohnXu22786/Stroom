@@ -134,8 +134,9 @@ class MarkdownGenerator {
     }
     final sourceWithoutCode = _withoutMarkdownCode(source);
     final mayContainUnderscoreEmphasis = RegExp(
-      r'(?<!\w)__(?=\S).*?\S__(?!\w)',
+      r'(?<![\p{L}\p{M}\p{N}_])__(?=\S).*?\S__(?![\p{L}\p{M}\p{N}_])',
       dotAll: true,
+      unicode: true,
     ).hasMatch(sourceWithoutCode);
     if (mayContainUnderscoreEmphasis) {
       final nodes = _parseNodes(source);
