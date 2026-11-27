@@ -784,18 +784,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
       );
     }
 
-    final pageLayout = LayoutBuilder(
-      builder: (context, constraints) {
-        final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
-        final shortKeyboardViewport =
-            _editingMessageId != null && constraints.maxHeight < 450;
-        final scrollConstrainedChrome = constraints.maxHeight / textScale < 400;
-        return buildPageLayout(
-          shortKeyboardViewport,
-          scrollConstrainedChrome: scrollConstrainedChrome,
-        );
-      },
-    );
+    final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final pageLayout = _editingMessageId == null && textScale <= 1
+        ? buildPageLayout(false, scrollConstrainedChrome: false)
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final view = View.of(context);
+              final bottomInset =
+                  view.viewInsets.bottom / view.devicePixelRatio;
+              final shortKeyboardViewport =
+                  _editingMessageId != null && constraints.maxHeight < 450;
+              final availableHeight = constraints.maxHeight + bottomInset;
+              final scrollConstrainedChrome =
+                  textScale > 1 && availableHeight / textScale < 400;
+              return buildPageLayout(
+                shortKeyboardViewport,
+                scrollConstrainedChrome: scrollConstrainedChrome,
+              );
+            },
+          );
 
     return PopScope(
       canPop: true,
