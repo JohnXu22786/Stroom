@@ -226,7 +226,6 @@ try:
 
         cycle_seconds = 1 + 2 * travel_seconds + 4
         frame_rate = 8
-        frame_count = math.ceil(cycle_seconds * frame_rate)
         # `navigate` waits for the first nonblank render and a settle frame, so
         # the widget's initial timer has already elapsed when frame capture
         # begins. Repeat the first rendered still for that elapsed interval to
@@ -240,9 +239,14 @@ try:
             raise RuntimeError(
                 "Motion capture started after the long-name initial pause"
             )
-        initial_hold_frames = min(
-            frame_count,
-            math.ceil(elapsed_before_capture * frame_rate),
+        initial_hold_frames = math.ceil(elapsed_before_capture * frame_rate)
+        # The rounded-up still frames can add up to (1/fps) more time than
+        # the measured delay. Include that excess in the recorded cycle so
+        # the final endpoint still receives its full two-second pause.
+        initial_hold_seconds = initial_hold_frames / frame_rate
+        frame_count = math.ceil(
+            (cycle_seconds + initial_hold_seconds - elapsed_before_capture)
+            * frame_rate
         )
         for index in range(initial_hold_frames):
             (FRAMES / f"frame-{index:03d}.png").write_bytes(start_frame)
