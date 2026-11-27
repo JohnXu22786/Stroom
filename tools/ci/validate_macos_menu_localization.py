@@ -273,8 +273,6 @@ def _strip_localized_comments(text: str, path: Path) -> tuple[str, set[int]]:
                 end += 1
             for comment_index in range(index, end):
                 result[comment_index] = " "
-            if end < len(text):
-                comment_line_breaks.add(end)
             index = end
         else:
             index += 1
