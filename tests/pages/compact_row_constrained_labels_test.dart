@@ -195,7 +195,7 @@ void main() {
   testWidgets('narrow Arabic duplicate actions stay on the RTL trailing edge', (
     tester,
   ) async {
-    _setViewport(tester, const Size(440, 932), scale: 2);
+    _setViewport(tester, const Size(320, 932), scale: 2);
     await tester.pumpWidget(_voiceDialog(count: 1, locale: const Locale('ar')));
     await tester.pumpAndSettle();
 
@@ -203,6 +203,10 @@ void main() {
     expect(actionBar, findsOneWidget);
     expect(find.byType(TextButton), findsNWidgets(2));
     final actionButtons = find.byType(TextButton);
+    expect(
+      tester.getRect(actionButtons.first).top,
+      greaterThanOrEqualTo(tester.getRect(find.text('duplicate')).bottom),
+    );
     final left = math.min(
       tester.getRect(actionButtons.at(0)).left,
       tester.getRect(actionButtons.at(1)).left,

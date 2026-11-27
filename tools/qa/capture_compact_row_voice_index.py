@@ -119,7 +119,7 @@ try:
                 page.screenshot()
             )
 
-            page.set_viewport_size({"width": 440, "height": 932})
+            page.set_viewport_size({"width": 320, "height": 932})
             page.goto(
                 f"{URL}?locale=ar&scale=2&count=1&theme={theme}",
                 wait_until="load",
