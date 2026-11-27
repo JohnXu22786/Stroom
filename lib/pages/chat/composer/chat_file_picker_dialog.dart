@@ -1201,10 +1201,18 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.values.toList();
+    final chipHeight = items.fold<double>(72, (height, entry) {
+      final requiredHeight = PreviewChip.requiredHeight(
+        context,
+        fileName: entry.key,
+        isImage: isImageFileByExtension(entry.key),
+      );
+      return height > requiredHeight ? height : requiredHeight;
+    });
 
     return Container(
       key: const Key('file_picker_preview_bar'),
-      height: 106,
+      constraints: const BoxConstraints(minHeight: 106),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
@@ -1226,7 +1234,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(
+          SizedBox(
+            height: chipHeight,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 8),
