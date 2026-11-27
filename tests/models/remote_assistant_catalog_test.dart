@@ -75,6 +75,45 @@ Be helpful.
       );
     });
 
+    test('rejects non-finite YAML setting numbers', () {
+      const yaml = '''
+schemaVersion: 1
+id: stroom.test
+name: Test assistant
+version: 1.0.0
+settings:
+  temperature: .nan
+prompt: Be helpful.
+''';
+
+      expect(
+        () => RemoteAssistantDefinition.parse(yaml, format: 'stroom-yaml-v1'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects non-finite custom numbers decoded from JSON', () {
+      final finiteDefinition = RemoteAssistantDefinition.parse(
+        _assistantJson(
+          settings:
+              '"customParameters": [{"name":"vendor.limit","type":"number","value":1.25}]',
+        ),
+        format: 'stroom-json-v1',
+      );
+      expect(finiteDefinition.settings.customParameters.single.value, 1.25);
+
+      expect(
+        () => RemoteAssistantDefinition.parse(
+          _assistantJson(
+            settings:
+                '"customParameters": [{"name":"vendor.limit","type":"number","value":1e999}]',
+          ),
+          format: 'stroom-json-v1',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('validates custom parameter names and types', () {
       final definition = RemoteAssistantDefinition.parse(
         _assistantJson(
