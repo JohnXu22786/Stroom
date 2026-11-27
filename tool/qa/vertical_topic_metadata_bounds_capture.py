@@ -1,23 +1,21 @@
 from pathlib import Path
-import shutil
 import subprocess
+import tempfile
 import time
 
 from playwright.sync_api import sync_playwright
 
 from capture_render_readiness import (
     navigate_and_wait_for_flutter_render,
-    video_preview_timing,
+    write_video_frame_manifest,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/qa/vertical_topic_metadata_bounds"
 CAPTURE = OUTPUT / "topic-metadata-fr-320x640-1x-light.png"
-VIDEO_DIR = OUTPUT / "video"
 SCREENSHOT_URL = "http://127.0.0.1:8878/?theme=light&scale=1"
 PREVIEW_URL = "http://127.0.0.1:8878/?theme=light&scale=2"
 OUTPUT.mkdir(parents=True, exist_ok=True)
-VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -43,49 +41,77 @@ with sync_playwright() as playwright:
     video_context = browser.new_context(
         viewport={"width": 320, "height": 640},
         device_scale_factor=1,
-        record_video_dir=str(VIDEO_DIR),
-        record_video_size={"width": 320, "height": 640},
     )
     video_page = video_context.new_page()
-    recording_started = time.monotonic()
     video_page.on("pageerror", lambda error: errors.append(str(error)))
     navigate_and_wait_for_flutter_render(
         video_page, PREVIEW_URL, (320, 640), "Topic"
     )
-    motion_started_at = time.monotonic()
     await_motion_seconds = 15
-    readiness_offset_seconds, recording_wait_seconds = video_preview_timing(
-        recording_started, motion_started_at, await_motion_seconds
-    )
-    video_page.wait_for_timeout(round(recording_wait_seconds * 1_000))
-    video_path = video_page.video.path()
-    video_page.close()
-    video_context.close()
-    preview = OUTPUT / "topic-metadata-reveal-fr-320x640-1x-light.webm"
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            f"{readiness_offset_seconds:.3f}",
-            "-i",
-            video_path,
-            "-t",
-            str(await_motion_seconds),
-            "-an",
-            "-c:v",
-            "libvpx-vp9",
-            "-crf",
-            "34",
-            "-b:v",
-            "0",
-            str(preview),
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    shutil.rmtree(VIDEO_DIR)
+    frame_rate = 10
+    capture_started_at = time.monotonic()
+    capture_deadline = capture_started_at + await_motion_seconds
+    with tempfile.TemporaryDirectory(
+        prefix="topic-metadata-video-", dir=OUTPUT
+    ) as temporary_frames:
+        frames = Path(temporary_frames)
+        frame_times = []
+        next_frame_at = capture_started_at
+        frame_number = 0
+        while next_frame_at < capture_deadline:
+            frame_time = time.monotonic()
+            video_page.screenshot(
+                path=str(frames / f"frame-{frame_number:04d}.png"),
+                timeout=max(1, round((capture_deadline - frame_time) * 1_000)),
+            )
+            frame_times.append(frame_time)
+            frame_number += 1
+            next_frame_at = capture_started_at + frame_number / frame_rate
+            wait_milliseconds = round(
+                (next_frame_at - time.monotonic()) * 1_000
+            )
+            if wait_milliseconds > 0:
+                video_page.wait_for_timeout(
+                    min(
+                        wait_milliseconds,
+                        max(1, round((capture_deadline - time.monotonic()) * 1_000)),
+                    )
+                )
+        manifest = write_video_frame_manifest(
+            frames, frame_times, capture_deadline
+        )
+        video_page.close()
+        video_context.close()
+        preview = OUTPUT / "topic-metadata-reveal-fr-320x640-1x-light.webm"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(manifest),
+                "-t",
+                str(await_motion_seconds),
+                "-vsync",
+                "vfr",
+                "-an",
+                "-c:v",
+                "libvpx-vp9",
+                "-crf",
+                "34",
+                "-b:v",
+                "0",
+                str(preview),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     print(
         {
             "screenshot": str(CAPTURE.relative_to(ROOT)),

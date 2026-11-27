@@ -1,4 +1,6 @@
 from io import BytesIO
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -7,8 +9,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from capture_render_readiness import (
     navigate_and_wait_for_flutter_render,
-    video_preview_timing,
     wait_for_flutter_render,
+    write_video_frame_manifest,
 )
 
 
@@ -96,16 +98,16 @@ class FakePage:
 
 
 class CaptureRenderReadinessTest(unittest.TestCase):
-    def test_video_seek_uses_recording_start_after_page_creation(self):
-        recording_started_at = 10.4
-        motion_started_at = 12
+    def test_video_frame_manifest_preserves_full_capture_interval(self):
+        with tempfile.TemporaryDirectory() as temporary_frames:
+            manifest = write_video_frame_manifest(
+                Path(temporary_frames), [0, 5, 10], capture_deadline=15
+            )
+            lines = manifest.read_text(encoding="utf-8").splitlines()
 
-        seek_offset, duration = video_preview_timing(
-            recording_started_at, motion_started_at, 15
-        )
-
-        self.assertAlmostEqual(seek_offset, 1.6)
-        self.assertEqual(duration, 15)
+        durations = [float(line.split()[1]) for line in lines if line.startswith("duration ")]
+        self.assertEqual(sum(durations), 15)
+        self.assertEqual(lines[-1], "file 'frame-0002.png'")
 
     def test_navigation_and_render_share_one_deadline(self):
         clock = FakeClock(10)

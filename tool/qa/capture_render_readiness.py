@@ -5,9 +5,25 @@ from PIL import Image, ImageStat
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
-def video_preview_timing(recording_started_at, motion_started_at, motion_seconds):
-    """Return the seek offset and duration for a preview after page readiness."""
-    return motion_started_at - recording_started_at, motion_seconds
+def write_video_frame_manifest(frame_directory, frame_times, capture_deadline):
+    """Write an FFmpeg manifest spanning the complete post-readiness capture."""
+    if not frame_times:
+        raise ValueError("Cannot encode a video preview without captured frames")
+
+    lines = []
+    for index, frame_time in enumerate(frame_times):
+        lines.append(f"file 'frame-{index:04d}.png'\n")
+        next_time = (
+            frame_times[index + 1]
+            if index + 1 < len(frame_times)
+            else capture_deadline
+        )
+        lines.append(f"duration {max(next_time - frame_time, 0.04):.6f}\n")
+    lines.append(f"file 'frame-{len(frame_times) - 1:04d}.png'\n")
+
+    manifest = frame_directory / "frames.txt"
+    manifest.write_text("".join(lines), encoding="utf-8")
+    return manifest
 
 
 def remaining_timeout_ms(deadline, failure_message):
