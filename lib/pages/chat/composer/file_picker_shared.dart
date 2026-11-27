@@ -44,6 +44,17 @@ bool isImageFileByExtension(String fileName) {
 // ====================================================================
 
 class PreviewChip extends StatelessWidget {
+  static const _fileChipWidth = 140.0;
+  static const _fileChipBorderWidth = 0.5;
+  static const _fileChipPadding = 8.0;
+  static const _fileChipIconWidth = 20.0;
+  static const _fileChipIconGap = 4.0;
+  static const _fileChipTextWidth = _fileChipWidth -
+      2 * _fileChipBorderWidth -
+      2 * _fileChipPadding -
+      _fileChipIconWidth -
+      _fileChipIconGap;
+
   final String fileName;
   final Uint8List bytes;
   final bool isImage;
@@ -59,6 +70,43 @@ class PreviewChip extends StatelessWidget {
     this.onTap,
   });
 
+  /// Height required by this chip's two-line label at the current text scale.
+  /// The list gives every item the height of the tallest selected chip.
+  static double requiredHeight(
+    BuildContext context, {
+    required String fileName,
+    required bool isImage,
+  }) {
+    if (isImage) return 72;
+
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: fileName,
+        style: defaultStyle.merge(
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: _fileChipTextWidth);
+
+    // Container applies BoxDecoration's border dimensions as content padding,
+    // so measure the same 99 dp text slot the chip renders. Include that border
+    // inset with the file chip's content padding in its height.
+    return (textPainter.height +
+            2 * _fileChipPadding +
+            2 * _fileChipBorderWidth)
+        .clamp(72, double.infinity)
+        .toDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -66,17 +114,21 @@ class PreviewChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: isImage ? 72 : 140,
+        width: isImage ? 72 : _fileChipWidth,
         margin: const EdgeInsets.symmetric(horizontal: 4),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
-              height: 72,
+              height: isImage ? 72 : null,
+              constraints: isImage ? null : const BoxConstraints(minHeight: 72),
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: cs.outlineVariant, width: 0.5),
+                border: Border.all(
+                  color: cs.outlineVariant,
+                  width: _fileChipBorderWidth,
+                ),
               ),
               clipBehavior: Clip.antiAlias,
               child: isImage
@@ -123,15 +175,15 @@ class PreviewChip extends StatelessWidget {
 
   Widget _buildFileChipContent(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(_fileChipPadding),
       child: Row(
         children: [
           Icon(
             Icons.insert_drive_file_outlined,
-            size: 20,
+            size: _fileChipIconWidth,
             color: cs.onSurfaceVariant,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: _fileChipIconGap),
           Expanded(
             child: ConstrainedText(
               fileName,
