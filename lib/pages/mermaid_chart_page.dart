@@ -412,7 +412,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         return;
       }
 
-      final baseName = userFileName.endsWith('.mmd')
+      final baseName = userFileName.toLowerCase().endsWith('.mmd')
           ? userFileName.substring(0, userFileName.length - '.mmd'.length)
           : userFileName;
       if (baseName.isEmpty) {
