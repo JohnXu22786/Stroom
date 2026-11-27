@@ -8,6 +8,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 const _captureKey = ValueKey('chat-file-picker-chrome-capture');
 
@@ -30,6 +31,7 @@ Future<void> _openPicker(
   WidgetTester tester, {
   required ThemeData theme,
   required ValueNotifier<double> textScale,
+  required Locale locale,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -37,7 +39,7 @@ Future<void> _openPicker(
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      locale: const Locale('en', 'US'),
+      locale: locale,
       theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -104,7 +106,12 @@ void main() {
       (ThemeData.dark(useMaterial3: true), 'dark'),
     ]) {
       final textScale = ValueNotifier(1.0);
-      await _openPicker(tester, theme: theme, textScale: textScale);
+      await _openPicker(
+        tester,
+        theme: theme,
+        textScale: textScale,
+        locale: const Locale('en', 'US'),
+      );
       if (name == 'light') {
         await _expectScreenshot(
           tester,
@@ -161,6 +168,71 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       textScale.dispose();
     }
+
+    final germanTextScale = ValueNotifier(1.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: germanTextScale,
+      locale: const Locale('de', 'DE'),
+    );
+    tester.view.physicalSize = const Size(320, 640);
+    germanTextScale.value = 3;
+    await tester.pumpAndSettle();
+    await _expectScreenshot(
+      tester,
+      '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-de-DE-320x640-scale3-light.png',
+    );
+
+    expect(find.bySemanticsLabel('Dateien auswählen'), findsOneWidget);
+    const germanClearLabel = 'Auswahl aufheben (1)';
+    expect(find.bySemanticsLabel(germanClearLabel), findsOneWidget);
+    final clearButton = find.byKey(const Key('file_picker_clear_btn'));
+    final clearText = find.descendant(
+      of: clearButton,
+      matching: find.text(germanClearLabel),
+    );
+    expect(
+      find.descendant(of: clearButton, matching: find.byType(ConstrainedText)),
+      findsOneWidget,
+    );
+    final clearTextX = tester.getTopLeft(clearText).dx;
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.getTopLeft(clearText).dx, closeTo(clearTextX, 0.01));
+    await tester.pump(const Duration(seconds: 18));
+    expect(tester.getTopLeft(clearText).dx, lessThan(clearTextX));
+
+    for (final (type, label) in [
+      ('text', 'Text'),
+      ('image', 'Bilder'),
+      ('video', 'Videos'),
+      ('audio', 'Audio'),
+    ]) {
+      final tab = find.byKey(Key('file_picker_tab_$type'));
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+      final labelFinder = find.descendant(of: tab, matching: find.text(label));
+      final labelStyle = Theme.of(tester.element(labelFinder))
+          .textTheme
+          .labelLarge!;
+      final labelPainter = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: TextDirection.ltr,
+        textScaler: const TextScaler.linear(3),
+        locale: const Locale('de', 'DE'),
+      )..layout();
+      expect(
+        labelPainter.width,
+        lessThanOrEqualTo(tester.getSize(labelFinder).width),
+      );
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(clearButton);
+    await tester.pump();
+    expect(find.byKey(const Key('file_picker_clear_btn')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    germanTextScale.dispose();
 
     semantics.dispose();
     addTearDown(tester.view.resetPhysicalSize);
