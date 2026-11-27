@@ -4,6 +4,8 @@
 // lazy pagination has not loaded yet.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,11 +15,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/pages/assistant_selection_page.dart'
+    show ChatTabVisibility;
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
-Widget _buildApp({String? initialSearchQuery}) {
+Widget _buildApp({
+  String? initialSearchQuery,
+  Locale locale = const Locale('zh', 'CN'),
+  double textScale = 1,
+  ThemeData? theme,
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -30,7 +40,8 @@ Widget _buildApp({String? initialSearchQuery}) {
       }),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
+      theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -38,6 +49,11 @@ Widget _buildApp({String? initialSearchQuery}) {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: Scaffold(
         body: ChatPage(initialSearchQuery: initialSearchQuery),
       ),
@@ -49,8 +65,28 @@ Future<void> _pumpChat(
   WidgetTester tester, {
   required List<ChatMessage> messages,
   String? initialSearchQuery,
+  Locale locale = const Locale('zh', 'CN'),
+  double textScale = 1,
+  ThemeData? theme,
+  ValueListenable<bool>? chatTabVisibility,
 }) async {
-  await tester.pumpWidget(_buildApp(initialSearchQuery: initialSearchQuery));
+  Widget app = _buildApp(
+    initialSearchQuery: initialSearchQuery,
+    locale: locale,
+    textScale: textScale,
+    theme: theme,
+  );
+  if (chatTabVisibility != null) {
+    app = ValueListenableBuilder<bool>(
+      valueListenable: chatTabVisibility,
+      builder: (context, isVisible, child) => ChatTabVisibility(
+        isVisible: isVisible,
+        child: child!,
+      ),
+      child: app,
+    );
+  }
+  await tester.pumpWidget(app);
   await tester.pump();
 
   final ctx = tester.element(find.byType(ChatPage));
@@ -110,6 +146,189 @@ void main() {
   });
 
   group('ChatPage search keeps markdown and highlights matches', () {
+    testWidgets('current-search hint stays editable and exposes the full label',
+        (tester) async {
+      tester.view.physicalSize = const Size(640, 1280);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+        textScale: 2,
+      );
+      await tester.tap(find.byTooltip('Rechercher dans les messages'));
+      await tester.pump();
+
+      final fieldFinder = find.byType(TextField).first;
+      final field = tester.widget<TextField>(fieldFinder);
+      final hint = field.decoration!.hint as ConstrainedText;
+      expect(hint.data, 'Rechercher dans cette conversation…');
+      expect(field.controller, isNotNull);
+      expect(tester.getSize(fieldFinder).height, 32);
+      expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(tester.getSemantics(find.byWidget(hint)).label,
+          'Rechercher dans cette conversation…');
+
+      await tester.enterText(fieldFinder, 'requête');
+      await tester.pump();
+      expect(field.controller!.text, 'requête');
+    });
+
+    testWidgets('current-search hint resolves focused theme text style',
+        (tester) async {
+      final theme = ThemeData(
+        inputDecorationTheme: InputDecorationTheme(
+          hintStyle: WidgetStateTextStyle.resolveWith(
+            (states) => TextStyle(
+              color: states.contains(WidgetState.focused)
+                  ? Colors.purple
+                  : Colors.green,
+            ),
+          ),
+        ),
+      );
+      await _pumpChat(tester, messages: _messages(), theme: theme);
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      final hint = field.decoration!.hint as ConstrainedText;
+      expect(field.focusNode!.hasFocus, isTrue);
+      expect(hint.style!.color, Colors.purple);
+    });
+
+    testWidgets('search focus and hover do not rebuild the chat message list',
+        (tester) async {
+      await _pumpChat(tester, messages: _messages());
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+      await tester.pump();
+
+      final chatFinder = find.byType(Chat);
+      final initialChat = tester.widget<Chat>(chatFinder);
+      final fieldFinder = find.byType(TextField).first;
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer();
+      await mouse.moveTo(tester.getCenter(fieldFinder));
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await mouse.moveTo(const Offset(0, 0));
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+
+      FocusScope.of(tester.element(fieldFinder)).unfocus();
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await tester.tap(fieldFinder);
+      await tester.pump();
+      expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
+      await mouse.removePointer();
+    });
+
+    testWidgets('search hint stops ticking while the chat tab is hidden',
+        (tester) async {
+      tester.view.physicalSize = const Size(640, 1280);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final chatTabVisibility = ValueNotifier(true);
+      addTearDown(chatTabVisibility.dispose);
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+        textScale: 2,
+        chatTabVisibility: chatTabVisibility,
+      );
+      await tester.tap(find.byTooltip('Rechercher dans les messages'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1500));
+
+      final hintText = find.text('Rechercher dans cette conversation…');
+      final visiblePosition = tester.getTopLeft(hintText);
+      chatTabVisibility.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.getTopLeft(hintText), visiblePosition);
+    });
+
+    testWidgets('German current-search hint keeps its full semantic label',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('de', 'DE'),
+      );
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+
+      final hint = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == 'Dieses Gespräch durchsuchen …',
+      );
+      expect(tester.widget<ConstrainedText>(hint).data,
+          'Dieses Gespräch durchsuchen …');
+      expect(tester.getSemantics(hint).label, 'Dieses Gespräch durchsuchen …');
+    });
+
+    testWidgets('global-search mode also constrains its localized hint',
+        (tester) async {
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+      );
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+      await tester.tap(find.text('Toutes les conversations'));
+      await tester.pump();
+
+      final chatPage = find.byType(ChatPage, skipOffstage: false).first;
+      final fieldFinder = find
+          .descendant(
+            of: chatPage,
+            matching: find.byType(TextField),
+          )
+          .first;
+      final hint = tester.widget<TextField>(fieldFinder).decoration!.hint;
+      expect(hint, isA<ConstrainedText>());
+      expect((hint! as ConstrainedText).data,
+          'Rechercher dans toutes les conversations…');
+    });
+
+    testWidgets('fitting search hint stays stationary', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 800,
+                child: const ConstrainedText(
+                  'Search this conversation...',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final hint = find.byType(ConstrainedText);
+      expect(find.descendant(of: hint, matching: find.byType(Transform)),
+          findsNothing);
+    });
+
     testWidgets('search does not flatten markdown into plain text',
         (tester) async {
       await _pumpChat(tester,
