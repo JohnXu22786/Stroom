@@ -162,4 +162,56 @@ segment%2Fone.ts
       await server.close(force: true);
     }
   });
+
+  test('forwards URL-specific authentication headers to child playlists',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final requests = <HttpRequest>[];
+    final serverSubscription = server.listen((request) async {
+      requests.add(request);
+      request.response
+        ..statusCode = request.headers.value(HttpHeaders.cookieHeader) ==
+                    'session=child' &&
+                request.headers.value(HttpHeaders.refererHeader) ==
+                    'https://example.com/watch'
+            ? HttpStatus.ok
+            : HttpStatus.forbidden
+        ..headers.contentType = ContentType.text
+        ..write('''
+#EXTM3U
+#EXTINF:4.0,
+segment.ts
+#EXT-X-ENDLIST
+''');
+      await request.response.close();
+    });
+
+    try {
+      final childUrl = 'http://127.0.0.1:${server.port}/child/playlist.m3u8';
+      final parsed = await M3U8Parser.parsePlaylistWithDetails(
+        '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+${Uri.parse(childUrl).path}
+''',
+        'http://127.0.0.1:${server.port}/master.m3u8',
+        headersForUrl: (url) => url == childUrl
+            ? {
+                HttpHeaders.cookieHeader: 'session=child',
+                HttpHeaders.refererHeader: 'https://example.com/watch',
+              }
+            : const {},
+      );
+
+      expect(requests, hasLength(1));
+      expect(requests.single.headers.value(HttpHeaders.userAgentHeader),
+          contains('Mozilla/5.0'));
+      expect(parsed.resources, [
+        'http://127.0.0.1:${server.port}/child/segment.ts',
+      ]);
+    } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
+  });
 }
