@@ -575,6 +575,69 @@ $variantUrl
   );
 
   test(
+    'rejects a cyclic HLS variant when validating a retry',
+    () async {
+      const playlistUrl = 'https://example.com/self-referencing.m3u8';
+      const segmentUrl = 'https://example.com/saved-segment.ts';
+      final master = '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+$playlistUrl
+''';
+      final savedSegment = MediaResource(
+        url: segmentUrl,
+        name: 'saved-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'hls-retry-cyclic-variant',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'master',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          savedSegment,
+        ],
+        selectedMedia: savedSegment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        playlistDioFactory: () =>
+            Dio()..httpClientAdapter = _PlaylistAdapter({playlistUrl: master}),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('cyclic variant url'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'uses the original initiator as variant referer during HLS retry check',
     () async {
       const originalReferer = 'https://source.example/video';

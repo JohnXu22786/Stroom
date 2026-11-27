@@ -55,6 +55,30 @@ class M3U8Parser {
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
   }) async {
+    return _parsePlaylistWithDetails(
+      content,
+      baseUrl,
+      headersForUrl: headersForUrl,
+      visitedUrls: {_playlistUrlKey(baseUrl)},
+      variantDepth: 0,
+    );
+  }
+
+  static const _maxVariantDepth = 8;
+
+  static Future<
+      ({
+        List<String> resources,
+        List<M3U8PlaylistResource> playlistResources,
+        int mediaSegmentCount,
+        bool hasInitializationMap,
+      })> _parsePlaylistWithDetails(
+    String content,
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+    required Set<String> visitedUrls,
+    required int variantDepth,
+  }) async {
     final lines = _normalizeLines(content);
     if (lines.isEmpty || lines.first.trim() != '#EXTM3U') {
       throw FormatException('Invalid HLS playlist: missing #EXTM3U header');
@@ -84,13 +108,23 @@ class M3U8Parser {
       // 按带宽降序排序，选最高码率
       variants.sort((a, b) => (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0));
       final selectedUrl = _resolveUrl(variants.first.url, baseUrl);
+      if (variantDepth >= _maxVariantDepth) {
+        throw FormatException(
+            'Invalid HLS master playlist: nesting is too deep');
+      }
+      if (!visitedUrls.add(_playlistUrlKey(selectedUrl))) {
+        throw FormatException(
+            'Invalid HLS master playlist: cyclic variant URL');
+      }
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
       final subContent = await _fetchUrl(selectedUrl, headersForUrl);
-      return parsePlaylistWithDetails(
+      return _parsePlaylistWithDetails(
         subContent,
         selectedUrl,
         headersForUrl: headersForUrl,
+        visitedUrls: visitedUrls,
+        variantDepth: variantDepth + 1,
       );
     }
 
@@ -351,6 +385,13 @@ class M3U8Parser {
     final uri = Uri.tryParse(baseUrl);
     if (uri == null) return url;
     return uri.resolve(url).toString();
+  }
+
+  static String _playlistUrlKey(String url) {
+    final uri = Uri.tryParse(url);
+    return uri == null
+        ? url
+        : uri.replace(fragment: '').normalizePath().toString();
   }
 
   /// 通过 HTTP 获取 URL 内容（用于递归解析子播放列表）
