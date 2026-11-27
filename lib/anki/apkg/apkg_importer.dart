@@ -3,11 +3,11 @@ import 'dart:io';
 import 'dart:math' show max;
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../database/sqlite_error_classifier.dart';
 import 'apkg_result.dart';
@@ -85,8 +85,6 @@ class AnkiApkgImporter {
       orElse: () =>
           throw const AnkiApkgException(AnkiApkgErrorCode.collectionMissing),
     );
-    final sourceCollectionKey =
-        sha256.convert(dbEntry.content as List<int>).toString();
 
     // Write to temp file
     late final Directory tmpDir;
@@ -402,6 +400,33 @@ class AnkiApkgImporter {
             ON apkg_revlog_imports (target_revlog_id)
           ''');
           await txn.execute('''
+            CREATE INDEX IF NOT EXISTS apkg_revlog_imports_source_card_review
+            ON apkg_revlog_imports (source_card_id, source_revlog_id)
+          ''');
+          await txn.execute('''
+            CREATE TABLE IF NOT EXISTS apkg_revlog_source_collections (
+              source_collection_key TEXT PRIMARY KEY,
+              collection_created INTEGER NOT NULL
+            )
+          ''');
+          await txn.execute('''
+            CREATE TABLE IF NOT EXISTS apkg_revlog_source_note_aliases (
+              source_collection_key TEXT NOT NULL,
+              note_guid TEXT NOT NULL,
+              PRIMARY KEY (source_collection_key, note_guid)
+            )
+          ''');
+          await txn.execute('''
+            CREATE INDEX IF NOT EXISTS apkg_revlog_source_alias_note
+            ON apkg_revlog_source_note_aliases (note_guid)
+          ''');
+          await txn.execute('''
+            CREATE TEMP TABLE IF NOT EXISTS apkg_revlog_source_note_candidates (
+              note_guid TEXT PRIMARY KEY
+            )
+          ''');
+          await txn.execute('DELETE FROM apkg_revlog_source_note_candidates');
+          await txn.execute('''
             CREATE TRIGGER IF NOT EXISTS apkg_revlog_imports_target_delete
             AFTER DELETE ON revlog
             BEGIN
@@ -423,6 +448,51 @@ class AnkiApkgImporter {
         } catch (_) {
           throw AnkiApkgException.unexpectedError(targetDbPath);
         }
+
+        String? lastSourceNoteGuid;
+        while (true) {
+          List<Map<String, Object?>> sourceReviewNotes;
+          try {
+            sourceReviewNotes = lastSourceNoteGuid == null
+                ? await sourceDb.rawQuery('''
+                    SELECT DISTINCT notes.guid AS note_guid
+                    FROM revlog
+                    JOIN cards ON cards.id = revlog.cid
+                    JOIN notes ON notes.id = cards.nid
+                    ORDER BY notes.guid LIMIT 400
+                  ''')
+                : await sourceDb.rawQuery(
+                    '''
+                      SELECT DISTINCT notes.guid AS note_guid
+                      FROM revlog
+                      JOIN cards ON cards.id = revlog.cid
+                      JOIN notes ON notes.id = cards.nid
+                      WHERE notes.guid > ?
+                      ORDER BY notes.guid LIMIT 400
+                    ''',
+                    [lastSourceNoteGuid],
+                  );
+          } on DatabaseException catch (error) {
+            throw _databaseException(error, tmpDbPath);
+          } catch (_) {
+            throw AnkiApkgException.unexpectedError(tmpDbPath);
+          }
+          if (sourceReviewNotes.isEmpty) break;
+          lastSourceNoteGuid = sourceReviewNotes.last['note_guid'] as String;
+          final aliasBatch = txn.batch();
+          for (final note in sourceReviewNotes) {
+            aliasBatch.insert(
+              'apkg_revlog_source_note_candidates',
+              {'note_guid': note['note_guid']},
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+          await aliasBatch.commit(noResult: true);
+        }
+        final sourceCollectionKey = await _resolveSourceCollectionKey(
+          txn,
+          collectionCreated: srcCol.first['crt'] as int,
+        );
 
         // Keep only one bounded page of source reviews and matching target rows
         // in memory; target revlog and provenance tables can grow very large.
@@ -451,17 +521,27 @@ class AnkiApkgImporter {
           final sourceReviewIds = srcRevlogs
               .map((revlog) => revlog['id'] as int)
               .toList(growable: false);
+          final sourceCardIds = srcRevlogs
+              .map((revlog) => revlog['cid'] as int)
+              .toSet()
+              .toList(growable: false);
           final sourceReviewPlaceholders =
               List.filled(sourceReviewIds.length, '?').join(', ');
+          final sourceCardPlaceholders =
+              List.filled(sourceCardIds.length, '?').join(', ');
           List<Map<String, Object?>> importedReviewMappings;
           try {
             importedReviewMappings = await txn.rawQuery(
               '''
                 SELECT * FROM apkg_revlog_imports
-                WHERE source_collection_key = ?
+                WHERE (source_collection_key = ? OR source_collection_key NOT IN (
+                  SELECT source_collection_key
+                  FROM apkg_revlog_source_collections
+                ))
+                  AND source_card_id IN ($sourceCardPlaceholders)
                   AND source_revlog_id IN ($sourceReviewPlaceholders)
               ''',
-              [sourceCollectionKey, ...sourceReviewIds],
+              [sourceCollectionKey, ...sourceCardIds, ...sourceReviewIds],
             );
           } on DatabaseException catch (error) {
             throw _databaseException(error, targetDbPath);
@@ -470,31 +550,43 @@ class AnkiApkgImporter {
           }
           final sourceReviewMappings = <(int, int), Map<String, Object?>>{
             for (final mapping in importedReviewMappings)
-              (
-                mapping['source_card_id'] as int,
-                mapping['source_revlog_id'] as int,
-              ): mapping,
+              if (mapping['source_collection_key'] == sourceCollectionKey)
+                (
+                  mapping['source_card_id'] as int,
+                  mapping['source_revlog_id'] as int,
+                ): mapping,
           };
           final targetReviewIds = <int>{...sourceReviewIds};
           targetReviewIds.addAll(
             importedReviewMappings
                 .map((mapping) => mapping['target_revlog_id'] as int),
           );
-          final targetReviewPlaceholders =
-              List.filled(targetReviewIds.length, '?').join(', ');
-          List<Map<String, Object?>> existingRevlogs;
-          try {
-            existingRevlogs = await txn.rawQuery(
-              '''
-                SELECT id, cid, ease, ivl, lastIvl, factor, time, type
-                FROM revlog WHERE id IN ($targetReviewPlaceholders)
-              ''',
-              targetReviewIds.toList(growable: false),
-            );
-          } on DatabaseException catch (error) {
-            throw _databaseException(error, targetDbPath);
-          } catch (_) {
-            throw AnkiApkgException.unexpectedError(targetDbPath);
+          final targetReviewIdList = targetReviewIds.toList(growable: false);
+          final existingRevlogs = <Map<String, Object?>>[];
+          for (var offset = 0;
+              offset < targetReviewIdList.length;
+              offset += reviewBatchSize) {
+            final batchReviewIds = targetReviewIdList
+                .skip(offset)
+                .take(reviewBatchSize)
+                .toList(growable: false);
+            final batchPlaceholders =
+                List.filled(batchReviewIds.length, '?').join(', ');
+            try {
+              existingRevlogs.addAll(
+                await txn.rawQuery(
+                  '''
+                    SELECT id, cid, ease, ivl, lastIvl, factor, time, type
+                    FROM revlog WHERE id IN ($batchPlaceholders)
+                  ''',
+                  batchReviewIds,
+                ),
+              );
+            } on DatabaseException catch (error) {
+              throw _databaseException(error, targetDbPath);
+            } catch (_) {
+              throw AnkiApkgException.unexpectedError(targetDbPath);
+            }
           }
           final existingRevlogsById = <int, Map<String, Object?>>{
             for (final revlog in existingRevlogs) revlog['id'] as int: revlog,
@@ -507,7 +599,38 @@ class AnkiApkgImporter {
 
             final sourceId = revlog['id'] as int;
             final sourceKey = (sourceCardId, sourceId);
-            final existingMapping = sourceReviewMappings[sourceKey];
+            var existingMapping = sourceReviewMappings[sourceKey];
+            if (existingMapping == null) {
+              final legacyCandidates = importedReviewMappings.where((mapping) {
+                if (mapping['source_collection_key'] == sourceCollectionKey ||
+                    mapping['source_card_id'] != sourceCardId ||
+                    mapping['source_revlog_id'] != sourceId ||
+                    mapping['target_card_id'] != targetCardId) {
+                  return false;
+                }
+                final mappedReview =
+                    existingRevlogsById[mapping['target_revlog_id'] as int];
+                return mappedReview != null &&
+                    _sameReview(mappedReview, revlog, targetCardId);
+              }).toList(growable: false);
+              if (legacyCandidates.length == 1) {
+                final legacyMapping = legacyCandidates.single;
+                final legacyKey =
+                    legacyMapping['source_collection_key'] as String;
+                await txn.update(
+                  'apkg_revlog_imports',
+                  {'source_collection_key': sourceCollectionKey},
+                  where: '''
+                    source_collection_key = ? AND source_card_id = ? AND source_revlog_id = ?
+                  ''',
+                  whereArgs: [legacyKey, sourceCardId, sourceId],
+                );
+                final adoptedMapping = Map<String, Object?>.from(legacyMapping)
+                  ..['source_collection_key'] = sourceCollectionKey;
+                sourceReviewMappings[sourceKey] = adoptedMapping;
+                existingMapping = adoptedMapping;
+              }
+            }
             if (existingMapping != null) {
               final mappedId = existingMapping['target_revlog_id'] as int;
               final existingAtMappedId = existingRevlogsById[mappedId];
@@ -624,6 +747,89 @@ class AnkiApkgImporter {
         }
       }
     }
+  }
+
+  static Future<String> _resolveSourceCollectionKey(
+    Transaction txn, {
+    required int collectionCreated,
+  }) async {
+    final sources = await txn.query(
+      'apkg_revlog_source_collections',
+      columns: ['source_collection_key'],
+      where: 'collection_created = ?',
+      whereArgs: [collectionCreated],
+    );
+    // Reuse only an exact alias set or a unique majority overlap with multiple
+    // stable note identities. Weak or tied matches may be independent sources.
+    final scores = <String, double>{};
+    final candidateNoteCountRows = await txn.rawQuery('''
+      SELECT COUNT(*) AS note_count
+      FROM apkg_revlog_source_note_candidates
+    ''');
+    final candidateNoteCount =
+        candidateNoteCountRows.single['note_count'] as int;
+    if (candidateNoteCount == 0) return const Uuid().v4();
+    for (final source in sources) {
+      final sourceKey = source['source_collection_key'] as String;
+      final sourceNoteCountRows = await txn.rawQuery(
+        '''
+          SELECT COUNT(*) AS note_count
+          FROM apkg_revlog_source_note_aliases
+          WHERE source_collection_key = ?
+        ''',
+        [sourceKey],
+      );
+      final sourceNoteCount = sourceNoteCountRows.single['note_count'] as int;
+      final sharedNoteCountRows = await txn.rawQuery(
+        '''
+          SELECT COUNT(*) AS note_count
+          FROM apkg_revlog_source_note_aliases AS aliases
+          JOIN apkg_revlog_source_note_candidates AS candidates
+            ON candidates.note_guid = aliases.note_guid
+          WHERE aliases.source_collection_key = ?
+        ''',
+        [sourceKey],
+      );
+      final sharedCount = sharedNoteCountRows.single['note_count'] as int;
+      if (sharedCount == 0) continue;
+      final unionCount = candidateNoteCount + sourceNoteCount - sharedCount;
+      final exactMatch =
+          sharedCount == candidateNoteCount && sharedCount == sourceNoteCount;
+      final strongOverlap = sharedCount >= 2 && sharedCount / unionCount > 0.5;
+      if (exactMatch || strongOverlap) {
+        scores[sourceKey] = sharedCount / unionCount;
+      }
+    }
+
+    String? sourceCollectionKey;
+    if (scores.isNotEmpty) {
+      final bestScore = scores.values.reduce(max);
+      final bestCandidates = scores.entries
+          .where((entry) => entry.value == bestScore)
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      if (bestCandidates.length == 1) {
+        sourceCollectionKey = bestCandidates.single;
+      }
+    }
+
+    if (sourceCollectionKey == null) {
+      sourceCollectionKey = const Uuid().v4();
+      await txn.insert('apkg_revlog_source_collections', {
+        'source_collection_key': sourceCollectionKey,
+        'collection_created': collectionCreated,
+      });
+    }
+
+    await txn.rawInsert(
+      '''
+        INSERT OR IGNORE INTO apkg_revlog_source_note_aliases
+          (source_collection_key, note_guid)
+        SELECT ?, note_guid FROM apkg_revlog_source_note_candidates
+      ''',
+      [sourceCollectionKey],
+    );
+    return sourceCollectionKey;
   }
 
   static void _remapModelDecks(
