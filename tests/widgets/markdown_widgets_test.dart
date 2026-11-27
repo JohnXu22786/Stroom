@@ -806,6 +806,19 @@ $$
       );
       expect(parsedNodeCount, 0);
 
+      const escapedBracket = r'\](__bold__)';
+      final escapedBracketPreview =
+          markdownGenerator.buildPlainTextPreview([escapedBracket]);
+      final escapedBracketSpan = _unwrapLinkRecognizerLifecycle(
+        (escapedBracketPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(escapedBracketSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
       const unclosedFence = '```\n__fenced__';
       final fencedPreview = previewGenerator.buildPlainTextPreview([
         unclosedFence,

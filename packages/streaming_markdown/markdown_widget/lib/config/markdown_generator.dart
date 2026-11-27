@@ -289,6 +289,11 @@ String _withoutMarkdownCode(String source) {
 String _withoutMarkdownLinkDestinations(String source) {
   final codeUnits = source.codeUnits.toList();
   for (final marker in RegExp(r'\]\(').allMatches(source)) {
+    final closingBracket = marker.start;
+    if (_isEscapedMarkdownCharacter(source, closingBracket) ||
+        !_hasUnescapedOpeningBracket(source, closingBracket)) {
+      continue;
+    }
     var depth = 1;
     var inAngleDestination = false;
     var end = marker.end;
@@ -315,6 +320,31 @@ String _withoutMarkdownLinkDestinations(String source) {
     }
   }
   return String.fromCharCodes(codeUnits);
+}
+
+bool _hasUnescapedOpeningBracket(String source, int closingBracket) {
+  var nestedBrackets = 0;
+  for (var i = closingBracket - 1; i >= 0; i--) {
+    final character = source.codeUnitAt(i);
+    if (character != 91 && character != 93) continue;
+    if (_isEscapedMarkdownCharacter(source, i)) continue;
+    if (character == 93) {
+      nestedBrackets++;
+    } else if (nestedBrackets == 0) {
+      return true;
+    } else {
+      nestedBrackets--;
+    }
+  }
+  return false;
+}
+
+bool _isEscapedMarkdownCharacter(String source, int offset) {
+  var backslashCount = 0;
+  for (var i = offset - 1; i >= 0 && source.codeUnitAt(i) == 92; i--) {
+    backslashCount++;
+  }
+  return backslashCount.isOdd;
 }
 
 bool _mayContainUnderscoreEmphasis(String source) {
