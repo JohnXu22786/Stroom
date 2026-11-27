@@ -22,6 +22,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_service_shared.dart';
+import 'package:stroom/services/chat_protocol.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/chat_api_shared.dart';
 part 'chat_service_streaming_test_p1.dart';
