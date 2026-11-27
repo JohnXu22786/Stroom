@@ -109,6 +109,26 @@ void main() {
       );
     });
   });
+
+  group('trimAudio compressed formats', () {
+    test('preserves Ogg/Opus bytes when a trim preset is applied', () {
+      final ogg = Uint8List(64)..setRange(0, 4, [0x4F, 0x67, 0x67, 0x53]);
+
+      expect(
+        trimAudio(ogg, preset: {'durationSeconds': 1 / defaultSampleRate}),
+        same(ogg),
+      );
+    });
+
+    test('preserves M4A bytes when a trim preset is applied', () {
+      final m4a = Uint8List(64)..setRange(4, 8, [0x66, 0x74, 0x79, 0x70]);
+
+      expect(
+        trimAudio(m4a, preset: {'durationSeconds': 1 / defaultSampleRate}),
+        same(m4a),
+      );
+    });
+  });
 }
 
 Uint8List _pcmWav({
