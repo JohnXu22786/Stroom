@@ -13,16 +13,19 @@ logical pixels.
 | After | en-US | 320 × 640 | 1 | 3× | Dark | [Dark theme](chat-file-picker-en-320x640-scale3-dark.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Longer German labels](chat-file-picker-de-DE-320x640-scale3-light.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Clear label at full-text endpoint](chat-file-picker-de-DE-320x640-scale3-clear-end.png) |
+| Browser route | de-DE | 320 × 640 | 1 | 3× | Light | [Clear head/start](chat-file-picker-de-DE-320x640-scale3-clear-head-browser.png) · [tail endpoint](chat-file-picker-de-DE-320x640-scale3-clear-tail-browser.png) · [return to head](chat-file-picker-de-DE-320x640-scale3-clear-return-browser.png) |
 
 The [German Clear reveal preview](chat-file-picker-de-DE-clear-reveal-320x640.webm)
-uses the production route capture as its backdrop and animates the complete
-Roboto label over the measured 312-pixel slot at 4 frames per second. It shows
-the one-second still period, a continuous 24 logical px/s travel to the exact
-endpoint, and the full label held there. The route regression separately
-measures the real `ConstrainedText` widget, checks its exact endpoint, two-second
-hold and reverse, and verifies reduced motion leaves the full label static
-while retaining its complete semantics. The endpoint screenshot is a direct
-production-route capture.
+is a direct Playwright recording of the production `ChatFilePickerDialog` route
+in Flutter Web/Chromium, with a selected local text fixture. It is 13.33 seconds
+long at 6 fps (capture timestamps 0 through 13.17 seconds) and shows the
+one-second initial still, the 24 logical px/s
+travel to the tail endpoint, its two-second hold, the return travel, and the
+two-second head hold. The full label remains in route semantics throughout.
+The regression measures 410.003 logical px of label text in a 312 logical px
+slot, checks the exact endpoint, hold and reverse, and verifies reduced motion
+leaves the full label static. The three browser screenshots are direct route
+captures.
 
 At 1×, the original inline AppBar actions and icon tab layout remain in place.
 At 3× on a narrow viewport, the clear action gets its own row and the four tabs
