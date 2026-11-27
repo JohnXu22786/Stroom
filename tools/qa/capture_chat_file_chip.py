@@ -242,7 +242,7 @@ try:
         screenshots.append("chat-file-chip-two-line-320x640-scale3-light.png")
 
         long_metric, start_frame, first_frame_time = navigate(
-            "long", 3, "light", {"motion": "on"}, capture_first_frame=True
+            "long", 3, "light", {"motion": "controlled"}, capture_first_frame=True
         )
         if "long" not in metric_times:
             raise RuntimeError(
@@ -269,40 +269,24 @@ try:
 
         cycle_seconds = 1 + 2 * travel_seconds + 4
         frame_rate = 8
-        # `navigate` waits for the first nonblank render and a settle frame, so
-        # the widget's initial timer has already elapsed when frame capture
-        # begins. Repeat the first rendered still for that elapsed interval to
-        # preserve the complete one-second on-screen pause in the video. Fail
-        # rather than emit an invalid preview if capture starts after motion.
+        # The controlled QA route holds ConstrainedText motion disabled until
+        # this keypress. Record the first frame, then enable the widget's own
+        # one-second initial timer and capture that whole second live.
         elapsed_before_capture = max(
             0,
             first_frame_time - metric_times.get("long", first_frame_time),
         )
-        if elapsed_before_capture >= 1:
-            raise RuntimeError(
-                "Motion capture started after the long-name initial pause"
-            )
-        initial_hold_frames = math.ceil(
-            max(elapsed_before_capture, 1 - elapsed_before_capture) * frame_rate
-        )
-        # The rounded-up still frames can add up to (1/fps) more time than
-        # the measured delay. Include that excess in the recorded cycle so
-        # the final endpoint still receives its full two-second pause.
-        initial_hold_seconds = initial_hold_frames / frame_rate
-        frame_count = math.ceil(
-            (cycle_seconds + initial_hold_seconds - elapsed_before_capture)
-            * frame_rate
-        )
-        for index in range(initial_hold_frames):
-            (FRAMES / f"frame-{index:03d}.png").write_bytes(start_frame)
-
+        initial_hold_frames = frame_rate
+        frame_count = math.ceil(cycle_seconds * frame_rate) + 1
+        (FRAMES / "frame-000.png").write_bytes(start_frame)
+        page.keyboard.press("m")
         frame_start = time.monotonic()
-        for index in range(initial_hold_frames, frame_count):
-            page.screenshot(path=str(FRAMES / f"frame-{index:03d}.png"))
-            target = frame_start + (index - initial_hold_frames + 1) / frame_rate
+        for index in range(1, frame_count):
+            target = frame_start + index / frame_rate
             delay = target - time.monotonic()
             if delay > 0:
                 page.wait_for_timeout(round(delay * 1000))
+            page.screenshot(path=str(FRAMES / f"frame-{index:03d}.png"))
         return_path = OUTPUT / "chat-file-chip-long-name-return-320x640-scale3-light.png"
         page.screenshot(path=str(return_path))
         screenshots.append(return_path.name)

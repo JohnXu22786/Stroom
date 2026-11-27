@@ -25,13 +25,12 @@ callback is a no-op, no input is focused, and the software keyboard is closed.
   full label bounds.
 - The long-name screenshot and WebM preview show the two-line viewport,
   vertical reveal, the 2 s endpoint pause, return, and the second 2 s endpoint
-  pause. This capture contains 187 frames sampled at 8 fps (23.375 s) and includes
-  the measured 1 s initial delay, both travel legs, and the full final pause.
-  The first frame is captured 0.325 s after the first long-name layout metric;
-  the still is repeated for 0.75 s to account for capture startup and frame
-  rounding, giving about 1.08 s from layout to the end of the opening still.
-  The script also compensates for frame rounding so the final endpoint retains
-  its full pause.
+  pause. This capture contains 185 frames sampled at 8 fps (23.125 s), including
+  the full 1 s initial still, both travel legs, and the final pause. The QA route
+  holds motion until the initial screenshot is saved, then enables the widget's
+  timer while recording. This keeps layout and capture startup outside the
+  video timeline. The extra final frame compensates for 8 fps sampling so the
+  last endpoint retains its full pause.
 
 Run `python3 tools/qa/capture_chat_file_chip.py` from the repository root to
 rebuild the screenshots and motion preview.

@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/pages/chat/composer/file_picker_shared.dart';
@@ -53,13 +52,17 @@ Future<void> main() async {
           textScaler: TextScaler.linear(scale),
           disableAnimations: query['motion'] == 'off',
         );
-        return MediaQuery(
-          data: mediaQuery,
-          child: TickerMode(
-            enabled: query['offscreen'] != 'true',
-            child: child!,
-          ),
+        final captureTree = TickerMode(
+          enabled: query['offscreen'] != 'true',
+          child: child!,
         );
+        if (query['motion'] == 'controlled') {
+          return _MotionCaptureGate(
+            mediaQuery: mediaQuery,
+            child: captureTree,
+          );
+        }
+        return MediaQuery(data: mediaQuery, child: captureTree);
       },
       home: query['route'] == 'picker'
           ? const _DialogRouteFixture()
@@ -97,6 +100,48 @@ class _DialogRouteFixtureState extends State<_DialogRouteFixture> {
 
   @override
   Widget build(BuildContext context) => const Scaffold();
+}
+
+class _MotionCaptureGate extends StatefulWidget {
+  const _MotionCaptureGate({required this.mediaQuery, required this.child});
+
+  final MediaQueryData mediaQuery;
+  final Widget child;
+
+  @override
+  State<_MotionCaptureGate> createState() => _MotionCaptureGateState();
+}
+
+class _MotionCaptureGateState extends State<_MotionCaptureGate> {
+  bool _enabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ServicesBinding.instance.keyboard.addHandler(_handleKey);
+  }
+
+  bool _handleKey(KeyEvent event) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.keyM) {
+      setState(() => _enabled = true);
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    ServicesBinding.instance.keyboard.removeHandler(_handleKey);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery(
+      data: widget.mediaQuery.copyWith(disableAnimations: false),
+      child: TickerMode(enabled: _enabled, child: widget.child),
+    );
+  }
 }
 
 class _FileChipFixture extends StatelessWidget {
