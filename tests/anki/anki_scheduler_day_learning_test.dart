@@ -116,7 +116,8 @@ void main() {
         collection.col,
         collection.cards,
         1,
-      ))?.id,
+      ))
+          ?.id,
       isNull,
     );
   });
