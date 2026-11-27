@@ -6,9 +6,8 @@ import 'package:stroom/providers/conversation_provider.dart';
 
 void main() {
   final query = Uri.base.queryParameters;
-  final locale = query['locale'] == 'fr'
-      ? const Locale('fr')
-      : const Locale('en', 'US');
+  final locale =
+      query['locale'] == 'fr' ? const Locale('fr') : const Locale('en', 'US');
   final textScale = double.tryParse(query['scale'] ?? '') ?? 1;
 
   runApp(
