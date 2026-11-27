@@ -34,6 +34,34 @@ class ValidatePrDescriptionTest(unittest.TestCase):
 
         self.assertEqual(validate_pr_body(body), [])
 
+    def test_rejects_non_english_prose_in_the_ui_consistency_section(self):
+        body = VALID_BODY + """
+
+## UI consistency (when UI is affected)
+- [ ] Screens/components affected: Settings screen.
+- [ ] Searched shared widgets and all `lib/` / `packages/streaming_markdown/` call sites; updated affected callers. La mise en page est cassée sur les petits écrans.
+- [ ] Checked relevant validation and light/dark or responsive/layout state:
+- [ ] Added a representative screenshot/state when practical; preserved intentional feature accents and the external math ownership boundary.
+"""
+
+        self.assertTrue(
+            any(
+                "UI consistency" in error and "English" in error
+                for error in validate_pr_body(body)
+            )
+        )
+
+    def test_accepts_ui_template_checkboxes_with_english_prose(self):
+        body = VALID_BODY + """
+
+## UI consistency (when UI is affected)
+- [ ] Screens/components affected: Settings screen.
+- [ ] Searched shared widgets and all call sites; updated affected callers.
+- [ ] Checked relevant validation and responsive layout state.
+"""
+
+        self.assertEqual(validate_pr_body(body), [])
+
     def test_accepts_the_standard_english_change_type_labels(self):
         labels = (
             "Bug fix",
