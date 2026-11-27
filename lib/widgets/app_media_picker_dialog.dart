@@ -756,9 +756,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.entries.toList();
-    final chipHeights = items
-        .map((item) => _previewChipHeight(item.value.key, cs))
-        .toList();
+    final chipHeights =
+        items.map((item) => _previewChipHeight(item.value.key, cs)).toList();
     final previewHeight = chipHeights.fold<double>(
       72,
       (height, chipHeight) => math.max(height, chipHeight),
