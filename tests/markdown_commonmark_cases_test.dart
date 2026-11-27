@@ -41,6 +41,23 @@ void main() {
     );
   });
 
+  group('CommonMark code span whitespace normalization', () {
+    test('strips ASCII spaces around a non-breaking space', () {
+      expect(
+        markdown.markdownToHtml('` \u00a0 `'),
+        '<p><code>\u00a0</code></p>\n',
+      );
+    });
+
+    test('does not strip an all-space code span', () {
+      expect(markdown.markdownToHtml('`   `'), '<p><code>   </code></p>\n');
+    });
+
+    test('strips ASCII spaces around tab content and preserves the tab', () {
+      expect(markdown.markdownToHtml('` \t `'), '<p><code>\t</code></p>\n');
+    });
+  });
+
   test('reference link labels unescape ASCII punctuation', () {
     expect(
       markdown.markdownToHtml(
