@@ -90,47 +90,87 @@ def main():
               });
               recordFirstRender();
             }''')
+            sync_python_before = time.monotonic()
+            sync_performance = page.evaluate('performance.now()')
+            sync_python_after = time.monotonic()
+            sync_python = (sync_python_before + sync_python_after) / 2
+            selection_started = time.monotonic()
             row.evaluate('element => element.click()')
-            clear = page.locator('flt-semantics[role="button"]').filter(
-                has_text='Auswahl aufheben (1)',
-            )
-            clear.wait_for(timeout=30_000)
-
             frame_count = math.ceil(CYCLE_SECONDS * FRAME_RATE) + 1
             tail_index = math.ceil((1 + TRAVEL_SECONDS) * FRAME_RATE)
-            return_head_index = round((1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS) * FRAME_RATE)
-            render_clock = page.evaluate('''() => ({
-              firstRenderedAt: window.__clearFirstRenderedAt,
-              now: performance.now(),
-            })''')
-            if render_clock['firstRenderedAt'] is None:
-                raise RuntimeError('Clear first-render timestamp was not recorded')
-            elapsed = (
-                render_clock['now'] - render_clock['firstRenderedAt']
-            ) / 1000
-            if elapsed >= 0.5:
-                raise RuntimeError(
-                    f'Clear screenshot was too late to align its initial still: {elapsed:.3f}s'
-                )
-            timeline_started = time.monotonic() - elapsed
-            first_frame = FRAMES / 'frame-0000.png'
-            page.screenshot(path=str(first_frame))
-            first_frame_index = int(elapsed * FRAME_RATE)
-            shutil.copyfile(first_frame, HEAD_CAPTURE)
-            for index in range(1, first_frame_index + 1):
-                shutil.copyfile(first_frame, FRAMES / f'frame-{index:04d}.png')
-
-            for index in range(first_frame_index + 1, frame_count):
-                target = timeline_started + index / FRAME_RATE
+            return_head_index = round(
+                (1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS) * FRAME_RATE
+            )
+            raw_frames = []
+            first_rendered_at = None
+            first_rendered_python = None
+            capture_index = 0
+            deadline = selection_started + 20
+            while time.monotonic() < deadline:
+                target = selection_started + capture_index / FRAME_RATE
                 delay = target - time.monotonic()
                 if delay > 0:
                     time.sleep(delay)
-                frame_path = FRAMES / f'frame-{index:04d}.png'
+                frame_path = FRAMES / f'raw-{capture_index:04d}.png'
                 page.screenshot(path=str(frame_path))
-                if index == tail_index:
-                    shutil.copyfile(frame_path, TAIL_CAPTURE)
-                if index == return_head_index:
-                    shutil.copyfile(frame_path, RETURN_HEAD_CAPTURE)
+                # A screenshot is only available after Chromium finishes
+                # capturing it. Use that time so a slow capture cannot place
+                # a later visual state earlier on the video timeline.
+                frame_captured_at = time.monotonic()
+                raw_frames.append((frame_path, frame_captured_at))
+                first_rendered_at = page.evaluate('window.__clearFirstRenderedAt')
+                if first_rendered_at is not None and first_rendered_python is None:
+                    first_rendered_python = sync_python + (
+                        first_rendered_at - sync_performance
+                    ) / 1000
+                if (
+                    first_rendered_python is not None
+                    and frame_captured_at >= first_rendered_python + CYCLE_SECONDS
+                ):
+                    break
+                capture_index += 1
+            else:
+                raise TimeoutError('Clear did not render within 20 seconds of selection')
+
+            if first_rendered_at is None or first_rendered_python is None:
+                raise RuntimeError('Clear first-render timestamp was not recorded')
+
+            # Capture starts at the selection click so browser/semantics latency
+            # cannot skip the reveal. Rebase the screenshots to the first
+            # rendered Clear frame and duplicate only within the initial still.
+            frame_paths = {}
+            for frame_path, frame_captured_at in raw_frames:
+                elapsed = frame_captured_at - first_rendered_python
+                frame_index = math.floor(elapsed * FRAME_RATE)
+                if 0 <= frame_index < frame_count:
+                    frame_paths[frame_index] = frame_path
+            if not frame_paths:
+                raise RuntimeError('No captured frames followed the Clear render')
+            first_frame_index = min(frame_paths)
+            first_frame = frame_paths[first_frame_index]
+            for frame_index in range(first_frame_index + 1):
+                frame_paths[frame_index] = first_frame
+            previous_frame = first_frame
+            for frame_index in range(frame_count):
+                previous_frame = frame_paths.get(frame_index, previous_frame)
+                shutil.copyfile(
+                    previous_frame,
+                    FRAMES / f'frame-{frame_index:04d}.png',
+                )
+            shutil.copyfile(FRAMES / 'frame-0000.png', HEAD_CAPTURE)
+            shutil.copyfile(FRAMES / f'frame-{tail_index:04d}.png', TAIL_CAPTURE)
+            shutil.copyfile(
+                FRAMES / f'frame-{return_head_index:04d}.png',
+                RETURN_HEAD_CAPTURE,
+            )
+            first_render_capture_delay = (
+                raw_frames[next(
+                    index
+                    for index, (_, frame_captured_at) in enumerate(raw_frames)
+                    if frame_captured_at >= first_rendered_python
+                )][1]
+                - first_rendered_python
+            )
 
             if page_errors:
                 raise RuntimeError(f'Browser reported page errors: {page_errors}')
@@ -164,7 +204,9 @@ def main():
             'frame_rate': FRAME_RATE,
             'frames': frame_count,
             'duration_seconds': round(duration, 2),
-            'first_render_capture_delay_seconds': round(elapsed, 3),
+            'first_render_capture_delay_seconds': round(
+                first_render_capture_delay, 3
+            ),
             'page_errors': page_errors,
         })
     finally:

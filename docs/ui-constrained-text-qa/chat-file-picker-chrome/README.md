@@ -22,10 +22,10 @@ long at 6 fps (capture timestamps 0 through 13.17 seconds) and shows the
 one-second initial still, the 24 logical px/s
 travel to the tail endpoint, its two-second hold, the return travel, and the
 two-second head hold. The full label remains in route semantics throughout.
-The capture observes the first rendered Clear semantics node and backdates the
-frame timeline by the measured time from that render to the first screenshot.
-This retains the full initial still even when the browser takes time to expose
-the semantics node.
+The Chromium recorder starts sampling at the fixture-selection click and uses
+a `MutationObserver` timestamp for the first rendered Clear semantics node to
+align the video timeline. This retains the full initial still even when the
+browser takes time to expose the semantics node.
 The regression measures 410.003 logical px of label text in a 312 logical px
 slot, checks the exact endpoint, hold and reverse, and verifies reduced motion
 leaves the full label static. The three browser screenshots are direct route
