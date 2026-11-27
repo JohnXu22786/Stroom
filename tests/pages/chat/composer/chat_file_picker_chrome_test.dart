@@ -141,6 +141,10 @@ void main() {
       tester.view.physicalSize = const Size(320, 640);
       textScale.value = 3;
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('file_picker_short_viewport_scroll')),
+        findsOneWidget,
+      );
       await _expectScreenshot(
         tester,
         '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-en-320x640-scale3-$name.png',

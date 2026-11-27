@@ -283,7 +283,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16)
             .clamp(56.0, 100.0)
             .toDouble();
-    const previewBarHeight = 106.0;
+    final previewBarHeight = hasSelection ? _measurePreviewBarHeight(cs) : 0.0;
     const confirmationBarHeight = kMinInteractiveDimension + 16.0;
     final mediaSize = MediaQuery.sizeOf(context);
     final viewPadding = MediaQuery.viewPaddingOf(context);
@@ -295,7 +295,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         (hasSelection ? standardClearRowHeight : 0) -
         (hasSelection ? previewBarHeight : 0) -
         confirmationBarHeight;
-    final shortViewportChrome = expandedChrome && estimatedBodyHeight < 96;
+    // Empty-state labels can wrap to multiple lines at these scales, so move
+    // the picker contents into the shared scroll view before its remaining
+    // body is too short to lay out them safely.
+    const minimumExpandedBodyHeight = 200.0;
+    final shortViewportChrome =
+        expandedChrome && estimatedBodyHeight < minimumExpandedBodyHeight;
     final expandedTabRowHeight = standardExpandedTabRowHeight;
     final clearRowHeight = standardClearRowHeight;
     final confirmationButton = SafeArea(
@@ -1198,6 +1203,39 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
   // Preview bar
   // ====================================================================
+
+  double _measurePreviewBarHeight(ColorScheme cs) {
+    final items = _selectedItems.values.toList();
+    final chipHeight = items.fold<double>(72, (height, entry) {
+      final requiredHeight = PreviewChip.requiredHeight(
+        context,
+        fileName: entry.key,
+        isImage: isImageFileByExtension(entry.key),
+      );
+      return height > requiredHeight ? height : requiredHeight;
+    });
+    final headerPainter = TextPainter(
+      text: TextSpan(
+        text: AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
+        style: TextStyle(
+          fontSize: 11,
+          color: cs.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(
+        maxWidth: (MediaQuery.sizeOf(context).width - 24)
+            .clamp(0.0, double.infinity)
+            .toDouble(),
+      );
+    final requiredHeight = headerPainter.height + 8 + chipHeight + 0.5;
+    return requiredHeight > 106 ? requiredHeight : 106;
+  }
 
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.values.toList();
