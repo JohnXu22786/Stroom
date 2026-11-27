@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -736,8 +737,32 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   // Preview bar (multi-select only)
   // ====================================================================
 
+  double _previewChipHeight(String label, ColorScheme cs) {
+    final style = DefaultTextStyle.of(context).style.merge(
+          TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+        );
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout(maxWidth: 63);
+    final visibleLineHeight = painter.computeLineMetrics().take(3).fold<double>(
+          0,
+          (height, line) => height + line.height,
+        );
+    return math.max(72, visibleLineHeight + 9);
+  }
+
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.entries.toList();
+    final chipHeights = items
+        .map((item) => _previewChipHeight(item.value.key, cs))
+        .toList();
+    final previewHeight = chipHeights.fold<double>(
+      72,
+      (height, chipHeight) => math.max(height, chipHeight),
+    );
     final headerBottomPadding =
         MediaQuery.textScalerOf(context).scale(1) > 1 ? 8.0 : 2.0;
 
@@ -764,7 +789,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
             ),
           ),
           SizedBox(
-            height: 72,
+            height: previewHeight,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -774,6 +799,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 final entry = mapEntry.value;
                 return _PreviewChip(
                   label: entry.key,
+                  height: chipHeights[index],
                   onRemove: () {
                     setState(() {
                       _selectedItems.remove(mapEntry.key);
@@ -799,9 +825,14 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
 class _PreviewChip extends StatelessWidget {
   final String label;
+  final double height;
   final VoidCallback onRemove;
 
-  const _PreviewChip({required this.label, required this.onRemove});
+  const _PreviewChip({
+    required this.label,
+    required this.height,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -814,7 +845,8 @@ class _PreviewChip extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
-            height: 72,
+            key: const Key('media_picker_preview_chip'),
+            height: height,
             decoration: BoxDecoration(
               color: cs.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(8),
