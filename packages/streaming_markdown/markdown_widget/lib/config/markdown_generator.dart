@@ -298,9 +298,14 @@ bool _mayContainUnderscoreEmphasis(String source) {
     return backslashCount.isOdd;
   }
 
-  for (final candidate in candidates.allMatches(source)) {
-    if (!isEscaped(candidate.start) && !isEscaped(candidate.end - 2)) {
-      return true;
+  final paragraphs = source.split(
+    RegExp(r'(?:\r\n|\r|\n)[ \t]*(?:(?:\r\n|\r|\n)[ \t]*)+'),
+  );
+  for (final paragraph in paragraphs) {
+    for (final candidate in candidates.allMatches(paragraph)) {
+      if (!isEscaped(candidate.start) && !isEscaped(candidate.end - 2)) {
+        return true;
+      }
     }
   }
   return false;

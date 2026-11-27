@@ -895,6 +895,19 @@ $$
       expect(parsedNodeCount, 0);
 
       parsedNodeCount = 0;
+      const separatedMarkers = '__start\n\nordinary paragraph content\n\nend__';
+      final separatedPreview = previewGenerator.buildPlainTextPreview([
+        separatedMarkers,
+      ]);
+      expect(
+        ((separatedPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        separatedMarkers,
+      );
+      expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
       const indentedListCode = '-     __literal__';
       final indentedListPreview = previewGenerator.buildPlainTextPreview([
         indentedListCode,
@@ -3364,7 +3377,8 @@ $$
 }
 
 class _UnexpectedParseSyntax extends m.InlineSyntax {
-  _UnexpectedParseSyntax() : super(r'普通文本|__literal__|\\__literal__');
+  _UnexpectedParseSyntax()
+      : super(r'普通文本|__literal__|\\__literal__|__start|end__');
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
