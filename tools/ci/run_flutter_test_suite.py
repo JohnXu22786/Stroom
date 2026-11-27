@@ -192,6 +192,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/video_thumbnail_temp_file_test.dart",
         "utils/partial_import_refresh_test.dart",
         "utils/system_gallery_picker_localization_test.dart",
+        "utils/system_gallery_picker_limits_test.dart",
         "utils/web_thumbnail_test.dart",
         "utils/record_models_test.dart",
         "pages/video_gallery_web_source_test.dart",

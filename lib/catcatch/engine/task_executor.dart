@@ -164,6 +164,8 @@ class TaskExecutor {
     String? downloadedFilePath = task.downloadedFilePath;
     List<MediaResource> detectedMedia = List.from(task.detectedMedia);
     MediaResource? selectedMedia = task.selectedMedia;
+    var retryPlaylistValidated =
+        startFromIndex <= StepType.values.indexOf(StepType.parsingPlaylist);
     String? taskError;
     try {
       for (int i = startFromIndex; i < steps.length; i++) {
@@ -171,6 +173,23 @@ class TaskExecutor {
         final stepType = steps[i].type;
         if (steps[i].completed || steps[i].skipped) continue;
         markExecutorStep(steps, i, running: true);
+        if (!retryPlaylistValidated) {
+          final validationMedia = selectedMedia ??
+              (stepType == StepType.downloading ||
+                      stepType == StepType.converting ||
+                      stepType == StepType.saving
+                  ? (detectedMedia.isNotEmpty ? detectedMedia.first : null)
+                  : null);
+          if (validationMedia != null) {
+            await _rejectEncryptedPlaylistOnRetry(
+              task: task,
+              selectedMedia: validationMedia,
+              detectedMedia: detectedMedia,
+              playlistDioFactory: playlistDioFactory,
+            );
+            retryPlaylistValidated = true;
+          }
+        }
         switch (stepType) {
           case StepType.fetching:
             onUpdate(task.copyWith(steps: steps, status: TaskStatus.running));
@@ -754,6 +773,7 @@ class TaskExecutor {
     }
     var parsedMedia = List<MediaResource>.from(media);
     final parsedM3u8Playlists = <({String url, bool hasInitializationMap})>[];
+    var skippedEncryptedPlaylist = false;
     for (final pl in playlist) {
       final dio = playlistDioFactory?.call() ?? Dio();
       cancelToken?.whenCancel.then((_) {
@@ -783,10 +803,35 @@ class TaskExecutor {
       List<MpdRepresentation>? dashRepresentations;
       var mediaSegmentCount = 0;
       if (pl.isM3U8) {
-        final parsed = await M3U8Parser.parsePlaylistWithDetails(
-          content,
-          pl.url,
-        );
+        late final ({
+          List<String> resources,
+          List<M3U8PlaylistResource> playlistResources,
+          int mediaSegmentCount,
+          bool hasInitializationMap,
+        }) parsed;
+        try {
+          parsed = await M3U8Parser.parsePlaylistWithDetails(
+            content,
+            pl.url,
+            headersForUrl: (url) {
+              final headers = <String, String>{};
+              if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+              final cookieHeader = task.browserCookieHeaderForUrl(url);
+              if (cookieHeader != null && cookieHeader.isNotEmpty) {
+                headers['Cookie'] = cookieHeader;
+              }
+              return headers;
+            },
+          );
+        } on UnsupportedError {
+          skippedEncryptedPlaylist = true;
+          parsedMedia.removeWhere(
+            (resource) =>
+                (resource.isPlaylist && resource.url == pl.url) ||
+                (!resource.isPlaylist && resource.initiator == pl.url),
+          );
+          continue;
+        }
         segments = parsed.resources;
         playlistResources = parsed.playlistResources;
         mediaSegmentCount = parsed.mediaSegmentCount;
@@ -902,6 +947,9 @@ class TaskExecutor {
       );
       parsedMedia = [...enrichedMedia, ...segmentMedia];
     }
+    if (skippedEncryptedPlaylist && parsedMedia.isEmpty) {
+      throw UnsupportedError('Encrypted HLS playlists are not supported');
+    }
     markExecutorStep(steps, 2, done: true);
     final mergedExtensions =
         PlaylistMergedExtensions.fromPlaylists(parsedM3u8Playlists);
@@ -909,6 +957,70 @@ class TaskExecutor {
       return null;
     }
     return (media: parsedMedia, mergedExtensions: mergedExtensions);
+  }
+
+  static Future<void> _rejectEncryptedPlaylistOnRetry({
+    required CatCatchTask task,
+    required MediaResource selectedMedia,
+    required List<MediaResource> detectedMedia,
+    Dio Function()? playlistDioFactory,
+  }) async {
+    final playlists = detectedMedia.where((resource) {
+      if (!resource.isPlaylist || !resource.isM3U8) return false;
+      return resource.url == selectedMedia.url ||
+          resource.url == selectedMedia.initiator;
+    }).toList();
+    if (selectedMedia.isPlaylist &&
+        selectedMedia.isM3U8 &&
+        !playlists.any((playlist) => playlist.url == selectedMedia.url)) {
+      playlists.add(selectedMedia);
+    }
+    for (final playlist in playlists) {
+      Map<String, String> headersForUrl(String url) {
+        final headers = <String, String>{
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        };
+        if (playlist.initiator != null) {
+          headers['Referer'] = playlist.initiator!;
+        }
+        final cookieHeader = task.browserCookieHeaderForUrl(url);
+        if (cookieHeader != null && cookieHeader.isNotEmpty) {
+          headers['Cookie'] = cookieHeader;
+        }
+        return headers;
+      }
+
+      final dio = playlistDioFactory?.call() ?? Dio();
+      String content;
+      try {
+        final response = await dio.get(
+          playlist.url,
+          options: Options(headers: headersForUrl(playlist.url)),
+        );
+        if (response.data is! String ||
+            (response.data as String).trim().isEmpty) {
+          throw FormatException(
+            'Unable to verify HLS playlist encryption from an empty response',
+          );
+        }
+        content = response.data as String;
+        final playlistContent =
+            content.startsWith('\uFEFF') ? content.substring(1) : content;
+        if (!playlistContent.trimLeft().startsWith('#EXTM3U')) {
+          throw FormatException(
+            'Unable to verify HLS playlist encryption from an invalid response',
+          );
+        }
+      } finally {
+        dio.close();
+      }
+      await M3U8Parser.parsePlaylistWithDetails(
+        content,
+        playlist.url,
+        headersForUrl: headersForUrl,
+      );
+    }
   }
 
   static Future<String?> _executeDownload({

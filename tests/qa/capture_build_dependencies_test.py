@@ -1,3 +1,4 @@
+import ast
 import os
 import sys
 import tempfile
@@ -101,6 +102,36 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
 
     def test_unchanged_transitive_production_import_does_not_require_rebuild(self):
         self.assertFalse(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_missing_bundle_requires_rebuild(self):
+        missing_bundle = self.root / "missing-build/index.html"
+
+        self.assertTrue(needs_rebuild(self.root, self.entrypoint, missing_bundle))
+
+    def test_qa_capture_scripts_use_transitive_build_dependency_check(self):
+        script_calls = {
+            "capture_anki_delete_confirmation.py": "capture_entrypoint",
+            "capture_file_info_label.py": "capture_entrypoint",
+            "capture_vertical_editor_gutter_scale.py": "entrypoint",
+        }
+        qa_directory = Path(__file__).resolve().parents[2] / "tool" / "qa"
+
+        for script_name, entrypoint_name in script_calls.items():
+            with self.subTest(script=script_name):
+                script = ast.parse((qa_directory / script_name).read_text())
+                checks_dependencies = any(
+                    isinstance(node, ast.If)
+                    and isinstance(node.test, ast.Call)
+                    and isinstance(node.test.func, ast.Name)
+                    and node.test.func.id == "needs_rebuild"
+                    and len(node.test.args) == 3
+                    and isinstance(node.test.args[0], ast.Name)
+                    and node.test.args[0].id == "ROOT"
+                    and isinstance(node.test.args[1], ast.Name)
+                    and node.test.args[1].id == entrypoint_name
+                    for node in ast.walk(script)
+                )
+                self.assertTrue(checks_dependencies)
 
     def test_newer_conditional_production_import_requires_rebuild(self):
         newer_mtime = self.bundle.stat().st_mtime + 1
