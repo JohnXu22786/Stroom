@@ -180,6 +180,7 @@ Widget _buildFileManagerApp({
   bool wrapInHomeStylePopScope = false,
   Locale locale = const Locale('zh', 'CN'),
   ThemeData? theme,
+  double? textScale,
 }) {
   final navKey = navigatorKey ?? GlobalKey<NavigatorState>();
 
@@ -216,7 +217,18 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
-      builder: _disableTestAnimations,
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            disableAnimations: true,
+            textScaler: textScale == null
+                ? mediaQuery.textScaler
+                : TextScaler.linear(textScale),
+          ),
+          child: child!,
+        );
+      },
       locale: locale,
       theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -3844,5 +3856,80 @@ void main() {
         }
       }
     }
+  });
+
+  testWidgets('TTS format badge grows at large text scales without overlap', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<void> pumpAtScale(double scale) async {
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'TTS files',
+        allowFileIconExpansion: true,
+        fileIconBuilder: (_) => Builder(
+          builder: (context) => Container(
+            key: const Key('tts_format_badge'),
+            width: MediaQuery.textScalerOf(context)
+                .scale(24)
+                .clamp(44.0, 112.0)
+                .toDouble(),
+            constraints: const BoxConstraints(minHeight: 44),
+            margin: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+            ),
+            child: const Center(
+              child: Text(
+                'FLAC',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ),
+        onFileTap: (_) {},
+      );
+      await tester.pumpWidget(
+        _buildFileManagerApp(
+          config: config,
+          folders: const {},
+          manifestBridge: testManifestBridge,
+          records: [_TestFileRecord(id: 'tts-record', format: 'flac')],
+          textScale: scale,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    await pumpAtScale(1);
+    final badgeDecoration = find.descendant(
+      of: find.byKey(const Key('tts_format_badge')),
+      matching: find.byType(DecoratedBox),
+    );
+    expect(
+      tester.getSize(badgeDecoration),
+      const Size(44, 44),
+    );
+
+    await pumpAtScale(4);
+    final badge = find.descendant(
+      of: find.byKey(const Key('tts_format_badge')),
+      matching: find.byType(DecoratedBox),
+    );
+    final fileName = find.text('test.flac');
+    expect(find.text('FLAC'), findsOneWidget);
+    expect(tester.getSize(badge).width, greaterThan(44));
+    expect(tester.getSize(badge).height, greaterThan(44));
+    expect(tester.getRect(badge).overlaps(tester.getRect(fileName)), isFalse);
+    expect(
+      tester.getRect(badge).right,
+      lessThanOrEqualTo(tester.getRect(fileName).left),
+    );
+    final menu = find.byKey(const Key('fm_file_popup_tts-record'));
+    expect(tester.getRect(badge).overlaps(tester.getRect(menu)), isFalse);
   });
 }
