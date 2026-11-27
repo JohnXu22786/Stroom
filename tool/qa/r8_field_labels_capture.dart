@@ -53,9 +53,9 @@ void main() {
         'folder' => const _FolderCapture(),
         'batch' => const _BatchCapture(),
         _ => ProviderScope(
-          overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
-          child: const ThemeDisplaySettingsPage(),
-        ),
+            overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
+            child: const ThemeDisplaySettingsPage(),
+          ),
       },
     ),
   );

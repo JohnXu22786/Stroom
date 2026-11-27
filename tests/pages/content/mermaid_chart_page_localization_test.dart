@@ -97,7 +97,8 @@ void main() {
       (widget) =>
           widget is TextField &&
           widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data == 'Enter a filename (.mmd added automatically)',
+          (widget.decoration!.hint! as ConstrainedText).data ==
+              'Enter a filename (.mmd added automatically)',
     );
     await tester.enterText(fileNameField, '');
     await tester.tap(find.text('Done'));

@@ -96,8 +96,9 @@ void main() {
       await tester.pump();
       final folderNameField = find.byWidgetPredicate(
         (widget) =>
-            widget is TextField && widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data == '输入文件夹名称',
+            widget is TextField &&
+            widget.decoration?.hint is ConstrainedText &&
+            (widget.decoration!.hint! as ConstrainedText).data == '输入文件夹名称',
       );
       await tester.enterText(folderNameField, folderName);
       await tester.tap(

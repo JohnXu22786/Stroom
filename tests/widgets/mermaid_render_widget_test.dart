@@ -5221,7 +5221,8 @@ void main() {
           (widget) =>
               widget is TextField &&
               widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
+              (widget.decoration!.hint! as ConstrainedText).data ==
+                  '输入文件名（自动添加 .mmd 后缀）',
         );
 
         Future<void> saveWithName(
@@ -5304,7 +5305,8 @@ void main() {
           (widget) =>
               widget is TextField &&
               widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data == '输入文件名（自动添加 .mmd 后缀）',
+              (widget.decoration!.hint! as ConstrainedText).data ==
+                  '输入文件名（自动添加 .mmd 后缀）',
         );
 
         await tester.tap(find.byIcon(Icons.save));
