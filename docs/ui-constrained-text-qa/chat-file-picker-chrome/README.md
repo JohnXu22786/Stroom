@@ -21,9 +21,9 @@ in Flutter Web/Chromium, with a selected local text fixture. It is 13.33 seconds
 long at 6 fps (capture timestamps 0 through 13.17 seconds) and shows the
 one-second initial still, the 24 logical px/s travel to the tail endpoint, its
 two-second hold, the return travel, and the two-second head hold. In the latest
-capture the first completed screenshot was 0.578 seconds after first render;
-the forward and return travels have 25 and 22 real samples, with a maximum gap
-of one frame in each direction. The full label remains in route semantics
+capture the first completed screenshot was 0.463 seconds after first render;
+the forward and return travels have 26 and 25 real samples, with no missing
+frames. The full label remains in route semantics
 throughout.
 The Chromium recorder starts sampling at the fixture-selection click and uses
 a `MutationObserver` timestamp for the first rendered Clear semantics node to
