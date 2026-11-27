@@ -22,6 +22,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "catcatch/**",
         "pages/catcatch_page_test.dart",
         "pages/catcatch_page_constrained_rows_test.dart",
+        "pages/catcatch_empty_state_layout_test.dart",
         "pages/browser_*_test.dart",
         "browser_page_test.dart",
         "providers/catcatch_provider_test.dart",
