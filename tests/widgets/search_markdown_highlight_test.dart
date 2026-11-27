@@ -32,8 +32,8 @@ List<TextSpan> _collectSpans(InlineSpan span) {
 
 Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
     widget is LinkRecognizerLifecycle
-    ? _unwrapLinkRecognizerLifecycle(widget.child)
-    : widget;
+        ? _unwrapLinkRecognizerLifecycle(widget.child)
+        : widget;
 
 /// Builds [markdown] with [gen] and returns every text span of the resulting
 /// widgets, so tests can inspect both the rendered plain text and the
@@ -123,8 +123,7 @@ void main() {
       expect(
         countOccurrences(stripped, 'term'),
         1,
-        reason:
-            'the match inside the blockquote code fence must not be '
+        reason: 'the match inside the blockquote code fence must not be '
             'counted',
       );
     });
@@ -162,8 +161,7 @@ void main() {
     });
 
     test('removes link and image destinations from search text', () {
-      const markdown =
-          '[label](https://hidden.example/term) '
+      const markdown = '[label](https://hidden.example/term) '
           '![image](https://term.example) literal ](term) visible term '
           '[spaced] (term) [invalid](visible term)';
       final stripped = stripSearchIrrelevantMarkdown(markdown);
@@ -608,8 +606,7 @@ void main() {
     });
 
     test('removes indented code content but keeps later prose', () {
-      const markdown =
-          '    hidden term\n\n   \tsecond hidden term'
+      const markdown = '    hidden term\n\n   \tsecond hidden term'
           '\n\n> >\n> >     nested hidden term\n> >\n\nvisible term';
       final stripped = stripSearchIrrelevantMarkdown(markdown);
       expect(countOccurrences(stripped, 'term'), 1);
@@ -885,13 +882,11 @@ void main() {
       );
       final span = node.build() as TextSpan;
       final highlights = span.children!.whereType<TextSpan>().where(
-        (s) => s.style?.backgroundColor == Colors.yellow,
-      );
+            (s) => s.style?.backgroundColor == Colors.yellow,
+          );
       expect(highlights.length, 2);
-      final plain = span.children!
-          .whereType<TextSpan>()
-          .map((s) => s.text ?? '')
-          .join();
+      final plain =
+          span.children!.whereType<TextSpan>().map((s) => s.text ?? '').join();
       expect(plain, 'aaa term bbb term ccc');
     });
 
