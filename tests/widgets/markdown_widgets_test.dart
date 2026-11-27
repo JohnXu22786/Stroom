@@ -850,6 +850,24 @@ $$
         FontWeight.bold,
       );
 
+      const malformedAngleLinkTitle = '[x](<url>"__bold__")';
+      final malformedAngleLinkPreview =
+          markdownGenerator.buildPlainTextPreview([malformedAngleLinkTitle]);
+      final malformedAngleLinkSpans = [
+        for (final widget in malformedAngleLinkPreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        malformedAngleLinkSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
       const inlineCodeAcrossParagraphs = '`unclosed\n\n__bold__`';
       final inlineCodeAcrossParagraphsPreview =
           markdownGenerator.buildPlainTextPreview([inlineCodeAcrossParagraphs]);

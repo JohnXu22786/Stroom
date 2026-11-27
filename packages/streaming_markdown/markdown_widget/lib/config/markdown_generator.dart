@@ -443,11 +443,14 @@ int _inlineLinkDestinationEnd(String source, int start) {
     if (depth != 0) return -1;
   }
 
+  var separatedTitle = false;
   while (i < source.length && _isLinkWhitespace(source.codeUnitAt(i))) {
+    separatedTitle = true;
     i++;
   }
   if (i >= source.length) return -1;
   if (source.codeUnitAt(i) == 41) return i;
+  if (!separatedTitle) return -1;
 
   final titleDelimiter = source.codeUnitAt(i);
   final titleEndDelimiter = switch (titleDelimiter) {
