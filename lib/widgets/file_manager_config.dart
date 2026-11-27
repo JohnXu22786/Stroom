@@ -10,6 +10,7 @@ class FileManagerConfig<T extends FileRecord> {
   final bool initialGridView;
   final void Function(bool)? onGridViewChanged;
   final Widget Function(T) fileIconBuilder;
+
   /// Allows a custom file icon to grow in list view beyond the standard
   /// 44 dp size when its content needs more room.
   final bool allowFileIconExpansion;

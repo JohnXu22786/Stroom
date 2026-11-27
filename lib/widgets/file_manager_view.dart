@@ -1405,8 +1405,7 @@ class _FileManagerViewState<T extends FileRecord>
                   onChanged: (_) => _toggleSelection(file.id),
                 ),
               // File icon / thumbnail (cached)
-              if (!hasThumbnailBuilder &&
-                  widget.config.allowFileIconExpansion)
+              if (!hasThumbnailBuilder && widget.config.allowFileIconExpansion)
                 widget.config.fileIconBuilder(file)
               else
                 Container(
