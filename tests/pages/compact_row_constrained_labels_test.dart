@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -26,6 +24,7 @@ Widget _localizedApp({
   required Locale locale,
   required Widget home,
   bool disableAnimations = false,
+  bool useMaterial3 = false,
 }) => MaterialApp(
   locale: locale,
   supportedLocales: AppLocalizations.supportedLocales,
@@ -35,6 +34,7 @@ Widget _localizedApp({
     GlobalWidgetsLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
   ],
+  theme: ThemeData(useMaterial3: useMaterial3),
   builder: disableAnimations
       ? (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
@@ -48,9 +48,11 @@ Widget _voiceDialog({
   required int count,
   Locale locale = const Locale('fr'),
   bool disableAnimations = false,
+  bool useMaterial3 = true,
 }) => _localizedApp(
   locale: locale,
   disableAnimations: disableAnimations,
+  useMaterial3: useMaterial3,
   home: Scaffold(
     body: DuplicateResolveDialog(
       working: [
@@ -151,9 +153,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('1234.'),
-      1200,
+      5000,
       scrollable: find.byType(Scrollable).first,
-      maxScrolls: 200,
+      maxScrolls: 2000,
     );
 
     final index = find.text('1234.');
@@ -168,7 +170,7 @@ void main() {
     expect(tester.getSize(index).height, lessThan(60));
     expect(find.text('Mettre à jour'), findsWidgets);
     expect(find.text('Ignorer'), findsWidgets);
-    expect(find.byType(OverflowBar), findsWidgets);
+    expect(find.byType(OverflowBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -196,29 +198,41 @@ void main() {
     tester,
   ) async {
     _setViewport(tester, const Size(320, 932), scale: 2);
-    await tester.pumpWidget(_voiceDialog(count: 1, locale: const Locale('ar')));
+    await tester.pumpWidget(
+      _voiceDialog(
+        count: 1,
+        locale: const Locale('ar'),
+        disableAnimations: true,
+      ),
+    );
     await tester.pumpAndSettle();
 
-    final actionBar = find.byType(OverflowBar).first;
-    expect(actionBar, findsOneWidget);
+    expect(find.byType(OverflowBar), findsNothing);
     expect(find.byType(TextButton), findsNWidgets(2));
     final actionButtons = find.byType(TextButton);
     expect(
       tester.getRect(actionButtons.first).top,
       greaterThanOrEqualTo(tester.getRect(find.text('duplicate')).bottom),
     );
-    final left = math.min(
-      tester.getRect(actionButtons.at(0)).left,
-      tester.getRect(actionButtons.at(1)).left,
-    );
-    final right = math.max(
-      tester.getRect(actionButtons.at(0)).right,
-      tester.getRect(actionButtons.at(1)).right,
-    );
-    expect(
-      (left + right) / 2,
-      lessThan(tester.getCenter(find.byType(DuplicateResolveDialog)).dx),
-    );
+    final dialogCenter = tester
+        .getCenter(find.byType(DuplicateResolveDialog))
+        .dx;
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)))!;
+    for (final label in [l10n.update, l10n.skip]) {
+      final labelFinder = find.text(label);
+      expect(labelFinder, findsOneWidget);
+      expect(tester.getCenter(labelFinder).dx, lessThan(dialogCenter));
+      final paragraph = tester.renderObject<RenderParagraph>(labelFinder);
+      final textContext = tester.element(labelFinder);
+      final natural = TextPainter(
+        text: paragraph.text,
+        textDirection: TextDirection.rtl,
+        textScaler: MediaQuery.textScalerOf(textContext),
+        locale: Localizations.localeOf(textContext),
+      )..layout(maxWidth: double.infinity);
+      expect(paragraph.size.width, greaterThanOrEqualTo(natural.width - 0.01));
+      expect(paragraph.didExceedMaxLines, isFalse);
+    }
     expect(tester.takeException(), isNull);
   });
 }

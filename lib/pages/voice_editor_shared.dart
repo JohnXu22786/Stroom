@@ -177,29 +177,51 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                     ),
                   );
 
-                  List<Widget> actionButtonChildren() => [
-                    TextButton(
+                  Widget updateButton({double? width}) => SizedBox(
+                    width: width ?? buttonWidth(l10n.update),
+                    child: TextButton(
+                      style: width == null
+                          ? null
+                          : TextButton.styleFrom(
+                              alignment: AlignmentDirectional.centerEnd,
+                            ),
                       onPressed: () => _handleUpdate(i),
-                      child: ConstrainedText(
-                        l10n.update,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(l10n.update),
                     ),
-                    const SizedBox(width: 4),
-                    TextButton(
+                  );
+
+                  Widget skipButton({double? width}) => SizedBox(
+                    width: width ?? buttonWidth(l10n.skip),
+                    child: TextButton(
+                      style: width == null
+                          ? null
+                          : TextButton.styleFrom(
+                              alignment: AlignmentDirectional.centerEnd,
+                            ),
                       onPressed: () => _handleSkip(i),
-                      child: ConstrainedText(
-                        l10n.skip,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(l10n.skip),
                     ),
-                  ];
+                  );
 
                   Widget actionButtons() => Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: actionButtonChildren(),
+                    children: [
+                      updateButton(),
+                      const SizedBox(width: 4),
+                      skipButton(),
+                    ],
+                  );
+
+                  Widget stackedActionButtons(double availableWidth) => Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        updateButton(width: availableWidth),
+                        skipButton(width: availableWidth),
+                      ],
+                    ),
                   );
 
                   return Padding(
@@ -217,15 +239,7 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                                   Expanded(child: voiceIdLabel()),
                                 ],
                               ),
-                              Align(
-                                alignment: AlignmentDirectional.centerEnd,
-                                child: OverflowBar(
-                                  alignment: MainAxisAlignment.end,
-                                  spacing: 4,
-                                  overflowAlignment: OverflowBarAlignment.end,
-                                  children: actionButtonChildren(),
-                                ),
-                              ),
+                              stackedActionButtons(constraints.maxWidth),
                             ],
                           );
                         }

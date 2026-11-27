@@ -100,6 +100,7 @@ try:
             page.mouse.move(500, 600)
             page.mouse.wheel(0, 2_000_000)
             page.wait_for_timeout(1000)
+            page.mouse.move(0, 0)
             (OUTPUT / f"voice-index-scaled-high-count-2x{suffix}.png").write_bytes(
                 page.screenshot()
             )
@@ -115,6 +116,7 @@ try:
             page.mouse.move(220, 460)
             page.mouse.wheel(0, 2_000_000)
             page.wait_for_timeout(1000)
+            page.mouse.move(0, 0)
             (OUTPUT / f"voice-index-scaled-narrow-2x{suffix}.png").write_bytes(
                 page.screenshot()
             )
@@ -127,7 +129,7 @@ try:
             )
             wait_for_rendered_flutter(page)
             page.wait_for_timeout(300)
-            page.mouse.move(220, 460)
+            page.mouse.move(0, 0)
             (OUTPUT / f"voice-index-rtl-narrow-2x{suffix}.png").write_bytes(
                 page.screenshot()
             )
