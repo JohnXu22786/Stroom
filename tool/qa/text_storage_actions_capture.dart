@@ -18,6 +18,7 @@ void main() {
   final brightness =
       query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
   final textScale = double.tryParse(query['scale'] ?? '') ?? 1;
+  final reducedMotion = query['reducedMotion'] != 'false';
 
   runApp(
     ProviderScope(
@@ -41,7 +42,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
-            disableAnimations: true,
+            disableAnimations: reducedMotion,
           ),
           child: child ?? const SizedBox.shrink(),
         ),
