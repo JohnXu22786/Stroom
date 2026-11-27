@@ -26,9 +26,8 @@ Future<void> main() async {
     localeParts.first,
     localeParts.length > 1 ? localeParts[1] : null,
   );
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
   final textScale = double.tryParse(query['scale'] ?? '') ?? 1;
   final reducedMotion = query['reducedMotion'] == 'true';
 
