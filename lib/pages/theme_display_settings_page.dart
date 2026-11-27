@@ -33,6 +33,16 @@ class _ThemeDisplaySettingsPageState
     final themeNotifier = ref.read(themeProvider.notifier);
     final selectedLocale = ref.watch(localeProvider);
     final strings = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final languageSearchHintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge!
+            : theme.textTheme.titleMedium!)
+        .copyWith(
+          color: theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+        )
+        .merge(theme.inputDecorationTheme.hintStyle);
     final normalizedQuery = _languageQuery.trim().toLowerCase();
     final matchingLanguages = supportedAppLocales
         .map(
@@ -113,7 +123,12 @@ class _ThemeDisplaySettingsPageState
                     onChanged: (query) =>
                         setState(() => _languageQuery = query),
                     decoration: InputDecoration(
-                      hintText: strings.languageSearchHint,
+                      hint: ConstrainedText(
+                        strings.languageSearchHint,
+                        style: languageSearchHintStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),

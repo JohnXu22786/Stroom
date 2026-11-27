@@ -13,6 +13,38 @@ import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+
+double _naturalWidth(WidgetTester tester, Finder finder) {
+  final label = tester.widget<ConstrainedText>(finder);
+  final context = tester.element(finder);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: label.data,
+      style: label.style ?? DefaultTextStyle.of(context).style,
+    ),
+    textDirection: label.textDirection ?? Directionality.of(context),
+    textScaler: label.textScaler ?? MediaQuery.textScalerOf(context),
+    locale: label.locale ?? Localizations.maybeLocaleOf(context),
+    maxLines: label.maxLines,
+  )..layout();
+  return painter.width;
+}
+
+Widget _buildGermanThemePage() => ProviderScope(
+      overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
+      child: MaterialApp(
+        locale: const Locale('de', 'DE'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const ThemeDisplaySettingsPage(),
+      ),
+    );
 
 void main() {
   test(
@@ -453,5 +485,71 @@ void main() {
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('英语（English）'), findsOneWidget);
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
+  });
+
+  testWidgets('localized language search hint at narrow 2x text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(_buildGermanThemePage());
+    await tester.pump();
+    await tester.drag(
+      find.byKey(const Key('theme-display-settings-list')),
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('language-search-field')),
+    );
+    final hint = AppLocalizations.of(
+      tester.element(find.byKey(const Key('language-search-field'))),
+    )!
+        .languageSearchHint;
+    expect(field.decoration!.hint, isA<ConstrainedText>());
+    expect((field.decoration!.hint! as ConstrainedText).data, hint);
+    expect(field.decoration!.hintText, isNull);
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    );
+    expect(
+      _naturalWidth(tester, hintFinder),
+      greaterThan(tester.getSize(hintFinder).width),
+    );
+    await tester.tap(find.byKey(const Key('language-search-field')));
+    await tester.enterText(
+        find.byKey(const Key('language-search-field')), 'sprache');
+    await tester.pump();
+    expect(field.controller?.text, 'sprache');
+    expect(tester.testTextInput.hasAnyClients, isTrue);
+    expect(tester.takeException(), isNull);
+
+    // The same production hint remains stationary when a wide 1x slot fits it.
+    tester.view.physicalSize = const Size(800, 900);
+    tester.platformDispatcher.textScaleFactorTestValue = 1;
+    await tester.pumpWidget(_buildGermanThemePage());
+    await tester.pump();
+
+    final wideField = tester.widget<TextField>(
+      find.byKey(const Key('language-search-field')),
+    );
+    expect(wideField.decoration!.hint, isA<ConstrainedText>());
+    final wideHint = wideField.decoration!.hint! as ConstrainedText;
+    final wideHintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == wideHint.data,
+    );
+    expect(
+      _naturalWidth(tester, wideHintFinder),
+      lessThanOrEqualTo(tester.getSize(wideHintFinder).width),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

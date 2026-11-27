@@ -353,6 +353,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: ConstrainedText(
           strings.batchDlgSavePreset,
           maxLines: 1,
@@ -368,7 +369,10 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            helperText: strings.batchDlgPresetHint,
+            helper: Text(
+              strings.batchDlgPresetHint,
+              softWrap: true,
+            ),
           ),
         ),
         actions: [

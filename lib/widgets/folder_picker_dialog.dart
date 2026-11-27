@@ -255,7 +255,15 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final hintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge!
+            : theme.textTheme.titleMedium!)
+        .copyWith(
+          color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
+        )
+        .merge(theme.inputDecorationTheme.hintStyle);
     final folders = _filteredFolders;
 
     return PopScope(
@@ -302,9 +310,14 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                   TextField(
                     controller: widget.fileNameController,
                     decoration: InputDecoration(
-                      hintText: widget.fileNameHintText ??
-                          AppLocalizations.of(context)!
-                              .folderPickerFileNameHint,
+                      hint: ConstrainedText(
+                        widget.fileNameHintText ??
+                            AppLocalizations.of(context)!
+                                .folderPickerFileNameHint,
+                        style: hintStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -454,8 +467,13 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             controller: _newFolderController,
                             focusNode: _newFolderFocusNode,
                             decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context)!
-                                  .folderPickerFolderNameHint,
+                              hint: ConstrainedText(
+                                AppLocalizations.of(context)!
+                                    .folderPickerFolderNameHint,
+                                style: hintStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),

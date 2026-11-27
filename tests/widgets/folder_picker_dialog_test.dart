@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 Widget _buildTestApp(Widget body) {
   return MaterialApp(
@@ -14,8 +15,143 @@ Widget _buildTestApp(Widget body) {
   );
 }
 
+Widget _buildLocalizedFolderPickerApp(Widget body, {Locale? locale}) {
+  return MaterialApp(
+    locale: locale ?? const Locale('de', 'DE'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: body),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+  );
+}
+
+double _naturalWidth(WidgetTester tester, Finder finder) {
+  final label = tester.widget<ConstrainedText>(finder);
+  final context = tester.element(finder);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: label.data,
+      style: label.style ?? DefaultTextStyle.of(context).style,
+    ),
+    textDirection: label.textDirection ?? Directionality.of(context),
+    textScaler: label.textScaler ?? MediaQuery.textScalerOf(context),
+    locale: label.locale ?? Localizations.maybeLocaleOf(context),
+    maxLines: label.maxLines,
+  )..layout();
+  return painter.width;
+}
+
 void main() {
   group('FolderPickerDialog', () {
+    testWidgets('localized narrow field hints remain available and editable', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final fileNameController = TextEditingController();
+      addTearDown(fileNameController.dispose);
+
+      await tester.pumpWidget(_buildLocalizedFolderPickerApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => FolderPickerDialog.show(
+              context,
+              availableFolders: const {},
+              onCreateFolder: (_) async => null,
+              fileNameController: fileNameController,
+              fileNameHintText:
+                  AppLocalizations.of(context)!.chatSaveFilenameHint,
+            ),
+            child: const Text('Open'),
+          );
+        }),
+      ));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+
+      final fields =
+          tester.widgetList<TextField>(find.byType(TextField)).toList();
+      expect(fields, hasLength(2));
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(FolderPickerDialog)),
+      )!;
+      expect(
+        fields.map((field) => field.decoration!.hint),
+        everyElement(isA<ConstrainedText>()),
+        reason:
+            'Both finite field hints should use ConstrainedText; current hintText values: '
+            '${fields.map((field) => field.decoration!.hintText).toList()}',
+      );
+      expect(
+        (fields[0].decoration!.hint! as ConstrainedText).data,
+        l10n.chatSaveFilenameHint,
+      );
+      expect(fields[1].decoration!.hint, isA<ConstrainedText>());
+      expect(
+        (fields[1].decoration!.hint! as ConstrainedText).data,
+        l10n.folderPickerFolderNameHint,
+      );
+      for (final hint in [
+        l10n.chatSaveFilenameHint,
+        l10n.folderPickerFolderNameHint,
+      ]) {
+        final hintFinder = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == hint,
+        );
+        expect(
+          _naturalWidth(tester, hintFinder),
+          greaterThan(tester.getSize(hintFinder).width),
+          reason: 'Expected de-DE at 360x800/2x to clip "$hint".',
+        );
+      }
+      final fileNameField = find.byType(TextField).first;
+      await tester.ensureVisible(fileNameField);
+      await tester.pump();
+      await tester.tap(fileNameField);
+      await tester.enterText(fileNameField, 'datei.md');
+      await tester.pump();
+      expect(fileNameController.text, 'datei.md');
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      final newFolderField = find.byType(TextField).last;
+      await tester.ensureVisible(newFolderField);
+      await tester.pump();
+      await tester.tap(newFolderField);
+      await tester.enterText(newFolderField, 'Neuer Ordner');
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(newFolderField).controller!.text,
+        'Neuer Ordner',
+      );
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      tester.widget<TextField>(newFolderField).controller!.clear();
+      await tester.pump();
+
+      // At normal scale and a wide viewport, the default new-folder hint fits.
+      tester.view.physicalSize = const Size(800, 900);
+      tester.platformDispatcher.textScaleFactorTestValue = 1;
+      fileNameController.clear();
+      await tester.pump();
+      for (final hint in [l10n.folderPickerFolderNameHint]) {
+        final hintFinder = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == hint,
+        );
+        expect(
+          _naturalWidth(tester, hintFinder),
+          lessThanOrEqualTo(tester.getSize(hintFinder).width),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows only root-level folders at top level', (tester) async {
       await tester.pumpWidget(_buildTestApp(
         Builder(builder: (context) {
