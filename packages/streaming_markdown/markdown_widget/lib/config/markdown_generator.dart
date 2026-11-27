@@ -133,8 +133,10 @@ class MarkdownGenerator {
       return buildWidgets(source, config: mdConfig);
     }
     final sourceWithoutCode = _withoutMarkdownCode(source);
+    final emphasisCandidateSource =
+        _withoutMarkdownLinkDestinations(sourceWithoutCode);
     final mayContainUnderscoreEmphasis =
-        _mayContainUnderscoreEmphasis(sourceWithoutCode);
+        _mayContainUnderscoreEmphasis(emphasisCandidateSource);
     if (mayContainUnderscoreEmphasis) {
       final nodes = _parseNodes(source);
       if (_containsStrongEmphasis(nodes)) {
@@ -280,6 +282,37 @@ String _withoutMarkdownCode(String source) {
     // that follow it. The next exact-length run closes even after a backslash.
     maskRange(openingStart, runs[closingRunIndex].end);
     runIndex = closingRunIndex + 1;
+  }
+  return String.fromCharCodes(codeUnits);
+}
+
+String _withoutMarkdownLinkDestinations(String source) {
+  final codeUnits = source.codeUnits.toList();
+  for (final marker in RegExp(r'\]\(').allMatches(source)) {
+    var depth = 1;
+    var inAngleDestination = false;
+    var end = marker.end;
+    while (end < source.length) {
+      final codeUnit = source.codeUnitAt(end);
+      if (codeUnit == 92) {
+        end++;
+      } else if (inAngleDestination) {
+        if (codeUnit == 62) inAngleDestination = false;
+      } else if (codeUnit == 60 && depth == 1) {
+        inAngleDestination = true;
+      } else if (codeUnit == 40) {
+        depth++;
+      } else if (codeUnit == 41) {
+        depth--;
+        if (depth == 0) break;
+      }
+      end++;
+    }
+    if (depth == 0) {
+      for (var i = marker.end; i <= end; i++) {
+        if (codeUnits[i] != 10 && codeUnits[i] != 13) codeUnits[i] = 32;
+      }
+    }
   }
   return String.fromCharCodes(codeUnits);
 }

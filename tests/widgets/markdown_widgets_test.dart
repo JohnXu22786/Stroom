@@ -793,6 +793,19 @@ $$
       expect(ordinarySpan.textSpan?.toPlainText(), ordinaryText);
       expect(parsedNodeCount, 0);
 
+      parsedNodeCount = 0;
+      const inlineLinkDestination = '[link](https://example.com/__segment__)';
+      final inlineLinkPreview = previewGenerator.buildPlainTextPreview([
+        inlineLinkDestination,
+      ]);
+      expect(
+        ((inlineLinkPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        inlineLinkDestination,
+      );
+      expect(parsedNodeCount, 0);
+
       const unclosedFence = '```\n__fenced__';
       final fencedPreview = previewGenerator.buildPlainTextPreview([
         unclosedFence,
@@ -3378,7 +3391,9 @@ $$
 
 class _UnexpectedParseSyntax extends m.InlineSyntax {
   _UnexpectedParseSyntax()
-      : super(r'普通文本|__literal__|\\__literal__|__start|end__');
+      : super(
+          r'普通文本|__literal__|\\__literal__|__start|end__|\[link\]\(https://example\.com/__segment__\)',
+        );
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
