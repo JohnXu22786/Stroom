@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,50 @@ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import '../l10n/app_localizations.dart';
 
 import '../widgets/constrained_text.dart';
+
+Future<XFile> createConstrainedGalleryImageFile({
+  required String title,
+  required int width,
+  required int height,
+  required double? maxWidth,
+  required double? maxHeight,
+  required int? imageQuality,
+  required Future<Uint8List?> Function(
+    ThumbnailSize size, {
+    required ThumbnailFormat format,
+    required int quality,
+  })
+  thumbnailDataWithSize,
+}) async {
+  if (width <= 0 || height <= 0) {
+    throw StateError('Could not determine image dimensions for $title.');
+  }
+
+  final scale = math.min(
+    1.0,
+    math.min(
+      maxWidth == null ? 1.0 : maxWidth / width,
+      maxHeight == null ? 1.0 : maxHeight / height,
+    ),
+  );
+  final thumbnail = await thumbnailDataWithSize(
+    ThumbnailSize(
+      math.max(1, (width * scale).round()).toInt(),
+      math.max(1, (height * scale).round()).toInt(),
+    ),
+    format: ThumbnailFormat.jpeg,
+    quality: imageQuality ?? 100,
+  );
+  if (thumbnail == null) {
+    throw StateError('Could not create a constrained image for $title.');
+  }
+
+  return XFile.fromData(
+    thumbnail,
+    name: '${p.basenameWithoutExtension(title)}.jpg',
+    mimeType: 'image/jpeg',
+  );
+}
 
 Future<List<XFile>> pickNativeGalleryMedia(
   BuildContext context, {
@@ -57,36 +102,19 @@ Future<List<XFile>> pickNativeGalleryMedia(
   for (final asset in assets) {
     if (!isVideo &&
         (maxWidth != null || maxHeight != null || imageQuality != null)) {
-      final width = asset.width;
-      final height = asset.height;
-      if (width > 0 && height > 0) {
-        final scale = math.min(
-          1.0,
-          math.min(
-            maxWidth == null ? 1.0 : maxWidth / width,
-            maxHeight == null ? 1.0 : maxHeight / height,
-          ),
-        );
-        final thumbnail = await asset.thumbnailDataWithSize(
-          ThumbnailSize(
-            math.max(1, (width * scale).round()).toInt(),
-            math.max(1, (height * scale).round()).toInt(),
-          ),
-          format: ThumbnailFormat.jpeg,
-          quality: imageQuality ?? 100,
-        );
-        if (thumbnail != null) {
-          final title = await asset.titleAsync;
-          files.add(
-            XFile.fromData(
-              thumbnail,
-              name: '${p.basenameWithoutExtension(title)}.jpg',
-              mimeType: 'image/jpeg',
-            ),
-          );
-          continue;
-        }
-      }
+      final title = await asset.titleAsync;
+      files.add(
+        await createConstrainedGalleryImageFile(
+          title: title,
+          width: asset.width,
+          height: asset.height,
+          maxWidth: maxWidth,
+          maxHeight: maxHeight,
+          imageQuality: imageQuality,
+          thumbnailDataWithSize: asset.thumbnailDataWithSize,
+        ),
+      );
+      continue;
     }
 
     final file = await asset.originFile;
