@@ -65,7 +65,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       final runningTasks = ref
           .read(taskListProvider)
