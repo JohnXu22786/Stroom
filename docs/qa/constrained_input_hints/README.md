@@ -46,7 +46,7 @@ route checks focused and validation-error colors on the production field.
 
 ## Browser captures
 
-Captures use production Flutter routes/widgets, not a static mock. Reasoning/model-fit screenshots were refreshed on candidate `c800bb54` (base `cf77979a`); the playable reasoning-option reveal was recorded on exact source candidate `d95ca3b4` at 360×900 / fr-FR / 1.8×. MCP and ASR captures were rendered on `fa9e99c7` before rebasing; the rebase added unrelated CatCatch changes and the scoped production routes remained byte-for-byte unchanged.
+Captures use production Flutter routes/widgets, not a static mock. Reasoning/model-fit screenshots were refreshed on candidate `c800bb54` (base `cf77979a`); the playable reasoning-option reveal was recorded on exact source candidate `d95ca3b4` at 360×900 / fr-FR / 1.8×. MCP and ASR captures were rendered from the candidate working tree before its first commit; that exact production implementation was later committed as `68eed684` after rebasing onto `cf77979a`. `fa9e99c7` identifies the pre-rebase main base only, not the rendered source revision. The later test and evidence commits did not modify those production routes.
 
 - `mcp-config-en-320x640-1x.png`: clipped MCP form hints.
 - `asr-audio-url-de-DE-320x900-2x.png`: clipped audio URL hint and focused field.
