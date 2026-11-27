@@ -2434,16 +2434,15 @@ String _stripLinkDestinations(String text) {
     return match.start == 0 || text[match.start - 1] != '`';
   }).toList();
   // Link destinations are parsed before inline code spans by the renderer.
-  // Keep their raw parentheses in the destination map even when backticks in
-  // a destination would otherwise make the code-span pass skip its closer.
-  final linkOpenParens = _findInlineLinkOpenParens(text, codeSpans);
-  final angleDestinationStarts = _angleDestinationStarts(text, linkOpenParens);
-  final matchingParens = _matchingLinkParens(text, angleDestinationStarts);
+  // Keep raw parentheses in the destination map even when backticks in a
+  // destination would otherwise make the code-span pass skip its closer.
+  final matchingParens = _matchingLinkParens(text);
   final nextWhitespace = _nextMatchingIndex(text, _isLinkWhitespace);
   final nextNonWhitespace = _nextMatchingIndex(
     text,
     (value, index) => !_isLinkWhitespace(value, index),
   );
+  final nextUnescapedAngleBracket = _nextUnescapedAngleBracket(text);
   var last = 0;
   var index = 0;
   var codeSpanIndex = 0;
@@ -2479,6 +2478,25 @@ String _stripLinkDestinations(String text) {
       continue;
     }
     var destinationEnd = matchingParens[openParen];
+    if (destinationEnd != null &&
+        (_hasInvalidBareDestinationAngle(
+              text,
+              openParen,
+              destinationEnd,
+              nextWhitespace,
+              nextNonWhitespace,
+              nextUnescapedAngleBracket,
+            ) ||
+            _hasInvalidMappedLinkTail(
+              text,
+              openParen,
+              destinationEnd,
+              nextWhitespace,
+              nextNonWhitespace,
+            ))) {
+      index++;
+      continue;
+    }
     if (destinationEnd == null ||
         !_isValidInlineLink(text, linkOpener, destinationEnd)) {
       if (openParen < failedFallbackScannedTo &&
@@ -2521,12 +2539,78 @@ List<int> _nextMatchingIndex(String text, bool Function(String, int) matches) {
   return next;
 }
 
+List<int> _nextUnescapedAngleBracket(String text) {
+  final unescapedAngles = List<bool>.filled(text.length, false);
+  var index = 0;
+  while (index < text.length) {
+    if (text[index] == r'\' && index + 1 < text.length) {
+      index += 2;
+      continue;
+    }
+    if (text[index] == '<' || text[index] == '>') {
+      unescapedAngles[index] = true;
+    }
+    index++;
+  }
+
+  final next = List<int>.filled(text.length + 1, text.length);
+  var nextIndex = text.length;
+  for (var cursor = text.length - 1; cursor >= 0; cursor--) {
+    if (unescapedAngles[cursor]) nextIndex = cursor;
+    next[cursor] = nextIndex;
+  }
+  return next;
+}
+
+bool _hasInvalidBareDestinationAngle(
+  String text,
+  int openParen,
+  int destinationEnd,
+  List<int> nextWhitespace,
+  List<int> nextNonWhitespace,
+  List<int> nextUnescapedAngleBracket,
+) {
+  final destinationStart = nextNonWhitespace[openParen + 1];
+  if (destinationStart >= destinationEnd || text[destinationStart] == '<') {
+    return false;
+  }
+  final whitespaceIndex = nextWhitespace[openParen + 1];
+  final bareEnd = whitespaceIndex < destinationEnd
+      ? whitespaceIndex
+      : destinationEnd;
+  return nextUnescapedAngleBracket[openParen + 1] < bareEnd;
+}
+
+bool _hasInvalidMappedLinkTail(
+  String text,
+  int openParen,
+  int destinationEnd,
+  List<int> nextWhitespace,
+  List<int> nextNonWhitespace,
+) {
+  final destinationStart = nextNonWhitespace[openParen + 1];
+  if (destinationStart < destinationEnd && text[destinationStart] == '<') {
+    return false;
+  }
+  final whitespaceIndex = nextWhitespace[openParen + 1];
+  if (whitespaceIndex >= destinationEnd) return false;
+  final titleStart = nextNonWhitespace[whitespaceIndex + 1];
+  if (titleStart >= destinationEnd) return true;
+  final titleDelimiter = text[titleStart];
+  if (titleDelimiter == ')') return false;
+  return titleDelimiter != '"' &&
+      titleDelimiter != "'" &&
+      titleDelimiter != '(';
+}
+
 bool _hasLinkTitleAfterWhitespace(
   String text,
   int openParen,
   List<int> nextWhitespace,
   List<int> nextNonWhitespace,
 ) {
+  final contentStart = nextNonWhitespace[openParen + 1];
+  if (contentStart < text.length && text[contentStart] == '<') return true;
   final whitespaceIndex = nextWhitespace[openParen + 1];
   if (whitespaceIndex >= text.length) return false;
   final titleStart = nextNonWhitespace[whitespaceIndex + 1];
@@ -2536,71 +2620,12 @@ bool _hasLinkTitleAfterWhitespace(
       text[titleStart] == '(';
 }
 
-Set<int> _findInlineLinkOpenParens(String text, List<Match> codeSpans) {
-  final openBrackets = <int>[];
-  final openParens = <int>{};
-  var index = 0;
-  var codeSpanIndex = 0;
-  while (index < text.length) {
-    while (codeSpanIndex < codeSpans.length &&
-        codeSpans[codeSpanIndex].end <= index) {
-      codeSpanIndex++;
-    }
-    if (codeSpanIndex < codeSpans.length &&
-        codeSpans[codeSpanIndex].start == index) {
-      index = codeSpans[codeSpanIndex].end;
-      codeSpanIndex++;
-      continue;
-    }
-    if (text[index] == r'\' && index + 1 < text.length) {
-      index += 2;
-      continue;
-    }
-    if (text[index] == '[') {
-      openBrackets.add(index);
-    } else if (text[index] == ']' && openBrackets.isNotEmpty) {
-      openBrackets.removeLast();
-      if (index + 1 < text.length && text[index + 1] == '(') {
-        openParens.add(index + 1);
-      }
-    }
-    index++;
-  }
-  return openParens;
-}
-
-Set<int> _angleDestinationStarts(String text, Set<int> linkOpenParens) {
-  final starts = <int>{};
-  for (final openParen in linkOpenParens) {
-    var index = openParen + 1;
-    while (_isLinkWhitespace(text, index)) {
-      index++;
-    }
-    if (index < text.length && text[index] == '<') starts.add(index);
-  }
-  return starts;
-}
-
-Map<int, int> _matchingLinkParens(
-  String text,
-  Set<int> angleDestinationStarts,
-) {
+Map<int, int> _matchingLinkParens(String text) {
   final matching = <int, int>{};
   final openParens = <int>[];
-  var angleDestination = false;
   for (var index = 0; index < text.length; index++) {
     if (text[index] == r'\' && index + 1 < text.length) {
       index++;
-      continue;
-    }
-    if (angleDestination) {
-      if (text[index] == '>') angleDestination = false;
-      continue;
-    }
-    if (angleDestinationStarts.contains(index) && openParens.isNotEmpty) {
-      // Parentheses inside angle-bracket destinations do not balance the
-      // link's closing parenthesis.
-      angleDestination = true;
       continue;
     }
     if (text[index] == '(') {

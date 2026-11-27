@@ -217,6 +217,23 @@ void main() {
       );
       expect(currentBacktickMatch.map((span) => span.text), ['term']);
 
+      const escapedAngleDestination = r'[label](url\<term) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(escapedAngleDestination),
+          'term',
+        ),
+        1,
+        reason: 'an escaped angle bracket in a bare URL remains valid',
+      );
+
+      const angleInTitle = '[label](url "title <term>") visible term';
+      expect(
+        countOccurrences(stripSearchIrrelevantMarkdown(angleInTitle), 'term'),
+        1,
+        reason: 'angle brackets in a link title do not invalidate its URL',
+      );
+
       final separatedSyntax = stripSearchIrrelevantMarkdown(
         '[label]`x`(term) visible term',
       );
@@ -230,6 +247,52 @@ void main() {
         '[title](url "term )") visible term',
       );
       expect(countOccurrences(titledLink, 'term'), 1);
+
+      const paddedNoTitleLink = '[label](hiddenTerm ) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(paddedNoTitleLink),
+          'term',
+        ),
+        1,
+        reason: 'whitespace before a closing paren does not require a title',
+      );
+      final paddedNoTitleSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        paddedNoTitleLink,
+      );
+      final currentPaddedNoTitleMatch = paddedNoTitleSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentPaddedNoTitleMatch.map((span) => span.text), ['term']);
+
+      const angleLinkWithSpace = '[label](<hidden term>) visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(angleLinkWithSpace),
+          'term',
+        ),
+        1,
+        reason: 'spaces inside angle-bracket destinations remain valid',
+      );
+      final angleLinkWithSpaceSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        angleLinkWithSpace,
+      );
+      final currentAngleLinkWithSpace = angleLinkWithSpaceSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentAngleLinkWithSpace.map((span) => span.text), ['term']);
 
       const parenthesizedTitle = '[title](url "term (") visible term';
       expect(
@@ -395,6 +458,29 @@ void main() {
       );
       expect(currentAngleTitleMatch.map((span) => span.text), ['term']);
 
+      const invalidAngleOuter = '[broken](<bad [good](term)> visible term';
+      expect(
+        countOccurrences(
+          stripSearchIrrelevantMarkdown(invalidAngleOuter),
+          'term',
+        ),
+        1,
+        reason: 'an invalid angle destination must not hide a nested link',
+      );
+      final invalidAngleOuterSpans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'term',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        invalidAngleOuter,
+      );
+      final currentInvalidAngleMatch = invalidAngleOuterSpans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+      expect(currentInvalidAngleMatch.map((span) => span.text), ['term']);
+
       const escapedCloserBeforeNestedLink =
           r'[outer](bad (oops \](< [inner](term) blah > visible term';
       expect(
@@ -477,6 +563,20 @@ void main() {
         '$repeatedOpeners visible term',
       );
       expect(countOccurrences(malformedCandidates, 'term'), 1);
+
+      final repeatedAngleCandidates = List.filled(512, '[a](x(').join();
+      final repeatedAngleClosers = List.filled(1024, ')').join();
+      final malformedAngleCandidates = stripSearchIrrelevantMarkdown(
+        '$repeatedAngleCandidates<hiddenTerm$repeatedAngleClosers visible term',
+      );
+      expect(countOccurrences(malformedAngleCandidates, 'hiddenterm'), 1);
+      expect(countOccurrences(malformedAngleCandidates, 'term'), 2);
+
+      final repeatedInvalidTailCandidates = List.filled(512, '[a](x(').join();
+      final malformedTailCandidates = stripSearchIrrelevantMarkdown(
+        '$repeatedInvalidTailCandidates invalid$repeatedAngleClosers visible term',
+      );
+      expect(countOccurrences(malformedTailCandidates, 'term'), 1);
 
       final nestedLink = stripSearchIrrelevantMarkdown(
         '[broken](bad[good](term) prose',
