@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -68,6 +69,36 @@ segment-1.ts
         hasInitializationMap: parsed.hasInitializationMap,
       ),
       'ts',
+    );
+  });
+
+  test('rejects an initialization map without a URI', () async {
+    expect(
+      M3U8Parser.parsePlaylistWithDetails(
+        '''
+#EXTM3U
+#EXT-X-MAP:
+#EXTINF:4.0,
+segment.m4s
+''',
+        'https://example.com/hls/playlist.m3u8',
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects an initialization map with an empty URI', () async {
+    expect(
+      M3U8Parser.parsePlaylistWithDetails(
+        '''
+#EXTM3U
+#EXT-X-MAP:URI=""
+#EXTINF:4.0,
+segment.m4s
+''',
+        'https://example.com/hls/playlist.m3u8',
+      ),
+      throwsFormatException,
     );
   });
 
@@ -210,6 +241,44 @@ ${Uri.parse(childUrl).path}
         'http://127.0.0.1:${server.port}/child/segment.ts',
       ]);
     } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
+  });
+
+  test('cancels a child playlist fetch while its response is held', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final requestReceived = Completer<void>();
+    final releaseResponse = Completer<void>();
+    final serverSubscription = server.listen((request) async {
+      if (!requestReceived.isCompleted) requestReceived.complete();
+      await releaseResponse.future;
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..write('#EXTM3U\n#EXTINF:4.0,\nsegment.ts\n');
+      await request.response.close();
+    });
+    final cancellation = Completer<void>();
+
+    try {
+      final parsing = M3U8Parser.parsePlaylistWithDetails(
+        '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/child/playlist.m3u8
+''',
+        'http://127.0.0.1:${server.port}/master.m3u8',
+        cancellationSignal: cancellation.future,
+      );
+      await requestReceived.future;
+      cancellation.complete();
+
+      await expectLater(
+        parsing.timeout(const Duration(seconds: 2)),
+        throwsA(isA<StateError>()),
+      );
+    } finally {
+      if (!releaseResponse.isCompleted) releaseResponse.complete();
       await serverSubscription.cancel();
       await server.close(force: true);
     }

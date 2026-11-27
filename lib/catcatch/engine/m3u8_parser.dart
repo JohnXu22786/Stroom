@@ -33,11 +33,13 @@ class M3U8Parser {
     String content,
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
+    Future<void>? cancellationSignal,
   }) async {
     final parsed = await parsePlaylistWithDetails(
       content,
       baseUrl,
       headersForUrl: headersForUrl,
+      cancellationSignal: cancellationSignal,
     );
     return parsed.resources;
   }
@@ -54,17 +56,20 @@ class M3U8Parser {
     String content,
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
+    Future<void>? cancellationSignal,
   }) async {
     return _parsePlaylistWithDetails(
       content,
       baseUrl,
       headersForUrl: headersForUrl,
+      cancellationSignal: cancellationSignal,
       visitedUrls: {_playlistUrlKey(baseUrl)},
       variantDepth: 0,
     );
   }
 
   static const _maxVariantDepth = 8;
+  static const _playlistFetchTimeout = Duration(seconds: 30);
 
   static Future<
       ({
@@ -76,6 +81,7 @@ class M3U8Parser {
     String content,
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
+    Future<void>? cancellationSignal,
     required Set<String> visitedUrls,
     required int variantDepth,
   }) async {
@@ -118,11 +124,16 @@ class M3U8Parser {
       }
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
-      final subContent = await _fetchUrl(selectedUrl, headersForUrl);
+      final subContent = await _fetchUrl(
+        selectedUrl,
+        headersForUrl,
+        cancellationSignal: cancellationSignal,
+      );
       return _parsePlaylistWithDetails(
         subContent,
         selectedUrl,
         headersForUrl: headersForUrl,
+        cancellationSignal: cancellationSignal,
         visitedUrls: visitedUrls,
         variantDepth: variantDepth + 1,
       );
@@ -131,37 +142,36 @@ class M3U8Parser {
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.startsWith('#EXT-X-MAP:')) {
-        hasInitializationMap = true;
         final attributes = _parseTagParams(
           line.substring('#EXT-X-MAP:'.length),
         );
         final initializationUrl = attributes['URI'];
-        if (initializationUrl != null) {
-          final range = _parseByteRange(attributes['BYTERANGE']);
-          final resolvedUrl = _resolveUrl(initializationUrl, baseUrl);
-          int? rangeStart;
-          if (range != null) {
-            rangeStart = range.offset ??
-                (previousMapRangeUri == resolvedUrl
-                    ? previousMapRangeEnd
-                    : null);
-            if (rangeStart == null) {
-              throw FormatException(
-                'Implicit EXT-X-MAP byte-range offset has no preceding range for $resolvedUrl',
-              );
-            }
-            previousMapRangeUri = resolvedUrl;
-            previousMapRangeEnd = rangeStart + range.length;
-          } else {
-            previousMapRangeUri = null;
-            previousMapRangeEnd = null;
-          }
-          segments.add((
-            url: resolvedUrl,
-            rangeStart: rangeStart,
-            rangeLength: range?.length,
-          ));
+        if (initializationUrl == null || initializationUrl.trim().isEmpty) {
+          throw FormatException('Invalid HLS initialization map: missing URI');
         }
+        hasInitializationMap = true;
+        final range = _parseByteRange(attributes['BYTERANGE']);
+        final resolvedUrl = _resolveUrl(initializationUrl, baseUrl);
+        int? rangeStart;
+        if (range != null) {
+          rangeStart = range.offset ??
+              (previousMapRangeUri == resolvedUrl ? previousMapRangeEnd : null);
+          if (rangeStart == null) {
+            throw FormatException(
+              'Implicit EXT-X-MAP byte-range offset has no preceding range for $resolvedUrl',
+            );
+          }
+          previousMapRangeUri = resolvedUrl;
+          previousMapRangeEnd = rangeStart + range.length;
+        } else {
+          previousMapRangeUri = null;
+          previousMapRangeEnd = null;
+        }
+        segments.add((
+          url: resolvedUrl,
+          rangeStart: rangeStart,
+          rangeLength: range?.length,
+        ));
       } else if (line.startsWith('#EXT-X-BYTERANGE:')) {
         pendingByteRange = _parseByteRange(
           line.substring('#EXT-X-BYTERANGE:'.length),
@@ -397,26 +407,38 @@ class M3U8Parser {
   /// 通过 HTTP 获取 URL 内容（用于递归解析子播放列表）
   static Future<String> _fetchUrl(
     String url,
-    M3U8HeadersForUrl? headersForUrl,
-  ) async {
+    M3U8HeadersForUrl? headersForUrl, {
+    Future<void>? cancellationSignal,
+  }) async {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(url));
-      request.headers.set('User-Agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-      headersForUrl?.call(url).forEach((name, value) {
-        request.headers.set(name, value);
-      });
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        throw HttpException(
-          'Failed to fetch playlist: HTTP ${response.statusCode}',
-          uri: Uri.parse(url),
-        );
+      Future<String> fetch() async {
+        final request = await client.getUrl(Uri.parse(url));
+        request.headers.set('User-Agent',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        headersForUrl?.call(url).forEach((name, value) {
+          request.headers.set(name, value);
+        });
+        final response = await request.close();
+        if (response.statusCode != 200) {
+          throw HttpException(
+            'Failed to fetch playlist: HTTP ${response.statusCode}',
+            uri: Uri.parse(url),
+          );
+        }
+        return await response.transform(utf8.decoder).join();
       }
-      return await response.transform(utf8.decoder).join();
+
+      final operation = fetch().timeout(_playlistFetchTimeout);
+      final cancellation = cancellationSignal?.then<String>((_) {
+        client.close(force: true);
+        throw StateError('HLS playlist fetch cancelled');
+      });
+      return await (cancellation == null
+          ? operation
+          : Future.any([operation, cancellation]));
     } finally {
-      client.close();
+      client.close(force: true);
     }
   }
 }
