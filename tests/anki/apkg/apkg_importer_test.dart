@@ -409,6 +409,118 @@ void main() {
   });
 
   test(
+    'does not reimport review events from updated source snapshots',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_updated_snapshot_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final firstSourcePath = '${documents.path}/first.anki2';
+      final updatedSourcePath = '${documents.path}/updated.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
+
+      try {
+        await _createCollection(
+          firstSourcePath,
+          includeNote: true,
+          includeCard: true,
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _addSourceReview(
+          firstSourcePath,
+          noteId: 44,
+          cardId: 44,
+          noteGuid: 'initial-reviewed-note',
+          reviewId: 123457,
+        );
+        final firstSource = await sqflite.openDatabase(firstSourcePath);
+        try {
+          await firstSource.insert('notes', {
+            'id': 10,
+            'guid': 'unrelated-anchor-note',
+            'mid': 1,
+            'mod': 0,
+            'usn': 0,
+            'tags': '',
+            'flds': 'unrelated\u001fnote',
+            'sfld': 'unrelated',
+            'csum': 0,
+            'flags': 0,
+            'data': '',
+          });
+        } finally {
+          await firstSource.close();
+        }
+        await File(firstSourcePath).copy(updatedSourcePath);
+        final updatedSource = await sqflite.openDatabase(updatedSourcePath);
+        try {
+          await updatedSource.delete(
+            'notes',
+            where: 'id = ?',
+            whereArgs: [10],
+          );
+          await updatedSource.update(
+            'col',
+            {
+              'mod': 2,
+              'decks': jsonEncode({
+                '2': {'id': 2, 'name': 'Updated deck'},
+              }),
+              'models': jsonEncode({'1': _modelJson(1, 'Edited model')}),
+            },
+            where: 'id = 1',
+          );
+        } finally {
+          await updatedSource.close();
+        }
+        await _addSourceReview(
+          updatedSourcePath,
+          noteId: 45,
+          cardId: 45,
+          noteGuid: 'new-reviewed-note',
+          reviewId: 123458,
+        );
+        expect(
+          await File(firstSourcePath).readAsBytes(),
+          isNot(await File(updatedSourcePath).readAsBytes()),
+        );
+        await _createCollection(targetPath);
+        final firstPackage = await _packageCollection(
+          documents,
+          firstSourcePath,
+        );
+        final retainedFirstPackage = '${documents.path}/first.apkg';
+        await File(firstPackage).copy(retainedFirstPackage);
+        final updatedPackage = await _packageCollection(
+          documents,
+          updatedSourcePath,
+        );
+
+        await AnkiApkgImporter.import(retainedFirstPackage);
+        await AnkiApkgImporter.import(updatedPackage);
+        await AnkiApkgImporter.import(updatedPackage);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final revlogs = await target.query('revlog');
+          expect(revlogs, hasLength(3));
+          expect(revlogs.map((row) => row['id']).toSet(), {
+            123456,
+            123457,
+            123458,
+          });
+        } finally {
+          await target.close();
+        }
+      } finally {
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
     'maps review history to duplicate cards and avoids reimport duplicates',
     () async {
       final documents = await Directory.systemTemp.createTemp(
@@ -706,6 +818,254 @@ void main() {
       }
     },
   );
+
+  test(
+    'keeps review provenance separate when sources share note GUIDs',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_shared_note_guid_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final firstSourcePath = '${documents.path}/first.anki2';
+      final secondSourcePath = '${documents.path}/second.anki2';
+      final ambiguousSourcePath = '${documents.path}/ambiguous.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
+
+      try {
+        await _createCollection(
+          firstSourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: 100,
+          noteGuid: 'shared-note-guid',
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _addSourceReview(
+          firstSourcePath,
+          noteId: 44,
+          cardId: 44,
+          noteGuid: 'first-source-note',
+          reviewId: 123457,
+        );
+        await _createCollection(
+          secondSourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: 100,
+          noteGuid: 'shared-note-guid',
+          models: {'1': _modelJson(1, 'Different model')},
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _addSourceReview(
+          secondSourcePath,
+          noteId: 44,
+          cardId: 44,
+          noteGuid: 'second-source-note',
+          reviewId: 123458,
+        );
+        await _createCollection(
+          ambiguousSourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: 100,
+          noteGuid: 'shared-note-guid',
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _addSourceReview(
+          ambiguousSourcePath,
+          noteId: 44,
+          cardId: 44,
+          noteGuid: 'first-source-note',
+          reviewId: 123459,
+        );
+        await _addSourceReview(
+          ambiguousSourcePath,
+          noteId: 45,
+          cardId: 45,
+          noteGuid: 'second-source-note',
+          reviewId: 123460,
+        );
+        await _createCollection(targetPath);
+        final firstPackage = await _packageCollection(
+          documents,
+          firstSourcePath,
+        );
+        final retainedFirstPackage = '${documents.path}/first.apkg';
+        await File(firstPackage).copy(retainedFirstPackage);
+        final secondPackage = await _packageCollection(
+          documents,
+          secondSourcePath,
+        );
+        final retainedSecondPackage = '${documents.path}/second.apkg';
+        await File(secondPackage).copy(retainedSecondPackage);
+        final ambiguousPackage = await _packageCollection(
+          documents,
+          ambiguousSourcePath,
+        );
+
+        await AnkiApkgImporter.import(retainedFirstPackage);
+        await AnkiApkgImporter.import(retainedSecondPackage);
+
+        // Model two previously distinct sources whose surviving note aliases
+        // now tie exactly against this snapshot. Repeated imports must reuse
+        // the identity assigned to the ambiguous snapshot itself.
+        final targetForAliases = await sqflite.openDatabase(targetPath);
+        try {
+          final sources = await targetForAliases.query(
+            'apkg_revlog_source_collections',
+            where: 'collection_created = ?',
+            whereArgs: [100],
+          );
+          expect(sources, hasLength(2));
+          for (final source in sources) {
+            for (final noteGuid in [
+              'shared-note-guid',
+              'first-source-note',
+              'second-source-note',
+            ]) {
+              await targetForAliases.insert(
+                  'apkg_revlog_source_note_aliases',
+                  {
+                    'source_collection_key': source['source_collection_key'],
+                    'note_guid': noteGuid,
+                  },
+                  conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
+            }
+          }
+        } finally {
+          await targetForAliases.close();
+        }
+
+        await AnkiApkgImporter.import(ambiguousPackage);
+        await AnkiApkgImporter.import(ambiguousPackage);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final revlogs = await target.query('revlog');
+          expect(revlogs, hasLength(7));
+          expect(revlogs.map((row) => row['id']).toSet(), hasLength(7));
+        } finally {
+          await target.close();
+        }
+      } finally {
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test('adopts legacy review mappings when source identity is upgraded',
+      () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_import_legacy_provenance_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final secondSourcePath = '${documents.path}/second_source.anki2';
+    final targetPath = '${documents.path}/collection.anki2';
+    const firstLegacyCollectionKey = 'legacy-first-collection-hash';
+    const secondLegacyCollectionKey = 'legacy-second-collection-hash';
+
+    try {
+      await _createCollection(
+        sourcePath,
+        includeNote: true,
+        includeCard: true,
+        noteGuid: 'first-legacy-note',
+        revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+      );
+      await _createCollection(
+        secondSourcePath,
+        includeNote: true,
+        includeCard: true,
+        noteGuid: 'second-legacy-note',
+        revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+      );
+      await _createCollection(
+        targetPath,
+        includeNote: true,
+        includeCard: true,
+        noteGuid: 'first-legacy-note',
+        revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+      );
+      await _addSourceReview(
+        targetPath,
+        noteId: 902,
+        cardId: 902,
+        noteGuid: 'second-legacy-note',
+        reviewId: 123457,
+      );
+      final target = await sqflite.openDatabase(targetPath);
+      try {
+        await target.execute('''
+          CREATE TABLE apkg_revlog_imports (
+            source_collection_key TEXT NOT NULL,
+            source_card_id INTEGER NOT NULL,
+            source_revlog_id INTEGER NOT NULL,
+            target_card_id INTEGER NOT NULL,
+            target_revlog_id INTEGER NOT NULL,
+            PRIMARY KEY (source_collection_key, source_card_id, source_revlog_id)
+          )
+        ''');
+        await target.insert('apkg_revlog_imports', {
+          'source_collection_key': firstLegacyCollectionKey,
+          'source_card_id': 43,
+          'source_revlog_id': 123456,
+          'target_card_id': 43,
+          'target_revlog_id': 123456,
+        });
+        await target.insert('apkg_revlog_imports', {
+          'source_collection_key': secondLegacyCollectionKey,
+          'source_card_id': 43,
+          'source_revlog_id': 123456,
+          'target_card_id': 902,
+          'target_revlog_id': 123457,
+        });
+      } finally {
+        await target.close();
+      }
+      final packagePath = await _packageCollection(documents, sourcePath);
+      final retainedPackage = '${documents.path}/first.apkg';
+      await File(packagePath).copy(retainedPackage);
+      final secondPackage = await _packageCollection(
+        documents,
+        secondSourcePath,
+      );
+
+      await AnkiApkgImporter.import(retainedPackage);
+      await AnkiApkgImporter.import(secondPackage);
+      await AnkiApkgImporter.import(secondPackage);
+
+      final verifiedTarget = await sqflite.openDatabase(
+        targetPath,
+        readOnly: true,
+      );
+      try {
+        expect(await verifiedTarget.query('revlog'), hasLength(2));
+        final mappings = await verifiedTarget.query('apkg_revlog_imports');
+        expect(mappings, hasLength(2));
+        expect(
+          mappings.map((mapping) => mapping['source_collection_key']).toSet(),
+          hasLength(2),
+        );
+        expect(
+          mappings.map((mapping) => mapping['source_collection_key']),
+          isNot(contains(firstLegacyCollectionKey)),
+        );
+        expect(
+          mappings.map((mapping) => mapping['source_collection_key']),
+          isNot(contains(secondLegacyCollectionKey)),
+        );
+      } finally {
+        await verifiedTarget.close();
+      }
+    } finally {
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
+  });
 
   test('imports large review histories with distinct source events', () async {
     const existingReviewCount = 512;
@@ -1341,6 +1701,57 @@ Future<void> _createCollection(
     },
   );
   await db.close();
+}
+
+Future<void> _addSourceReview(
+  String path, {
+  required int noteId,
+  required int cardId,
+  required String noteGuid,
+  required int reviewId,
+}) async {
+  final db = await sqflite.openDatabase(path);
+  try {
+    await db.insert('notes', {
+      'id': noteId,
+      'guid': noteGuid,
+      'mid': 1,
+      'mod': 0,
+      'usn': 0,
+      'tags': '',
+      'flds': 'front\u001fback',
+      'sfld': 'front',
+      'csum': 0,
+      'flags': 0,
+      'data': '',
+    });
+    await db.insert('cards', {
+      'id': cardId,
+      'nid': noteId,
+      'did': 1,
+      'ord': 0,
+      'mod': 0,
+      'usn': 0,
+      'type': 0,
+      'queue': 0,
+      'due': 0,
+      'ivl': 0,
+      'factor': 2500,
+      'reps': 0,
+      'lapses': 0,
+      'left': 0,
+      'odue': 0,
+      'odid': 0,
+      'flags': 0,
+      'data': '',
+    });
+    await db.insert(
+      'revlog',
+      _revlogEntry(id: reviewId, cardId: cardId),
+    );
+  } finally {
+    await db.close();
+  }
 }
 
 Map<String, Object?> _revlogEntry({
