@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,9 +8,58 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:stroom/models/remote_assistant_catalog.dart';
 import 'package:stroom/services/assistant_catalog_service.dart';
+import 'package:stroom/services/assistant_catalog_transport_io.dart';
 
 void main() {
   group('AssistantCatalogService', () {
+    test(
+      'tries later allowed catalog addresses after a connection failure',
+      () async {
+        final attemptedAddresses = <String>[];
+
+        final connectedAddress = await connectToAllowedAssistantCatalogAddress(
+          addresses: ['192.0.2.1', '93.184.216.34'],
+          port: 443,
+          isBlockedAddress: (_) => false,
+          connect: (address, port) async {
+            attemptedAddresses.add(address);
+            if (address == '192.0.2.1') {
+              throw const SocketException('Connection refused');
+            }
+            return '$address:$port';
+          },
+        );
+
+        expect(connectedAddress, '93.184.216.34:443');
+        expect(attemptedAddresses, ['192.0.2.1', '93.184.216.34']);
+      },
+    );
+
+    test(
+      'rejects empty or mixed blocked DNS results before connecting',
+      () async {
+        for (final addresses in <List<String>>[
+          [],
+          ['93.184.216.34', '10.0.0.8'],
+        ]) {
+          var connectionCount = 0;
+          await expectLater(
+            connectToAllowedAssistantCatalogAddress(
+              addresses: addresses,
+              port: 443,
+              isBlockedAddress: (address) => address.startsWith('10.'),
+              connect: (address, port) async {
+                connectionCount++;
+                return '$address:$port';
+              },
+            ),
+            throwsA(isA<FormatException>()),
+          );
+          expect(connectionCount, 0);
+        }
+      },
+    );
+
     if (kIsWeb) {
       test('fails closed when guarded DNS resolution is unavailable', () async {
         final service = AssistantCatalogService();
