@@ -97,7 +97,9 @@ class PreviewChip extends StatelessWidget {
       ellipsis: '…',
     )..layout(maxWidth: _fileChipTextWidth);
 
-    // Include content padding and a layout inset for the painted border.
+    // Container applies BoxDecoration's border dimensions as content padding,
+    // so measure the same 99 dp text slot the chip renders. Include that border
+    // inset with the file chip's content padding in its height.
     return (textPainter.height +
             2 * _fileChipPadding +
             2 * _fileChipBorderWidth)

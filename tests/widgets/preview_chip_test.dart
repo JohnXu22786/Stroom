@@ -134,7 +134,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('measurement includes the one dp border inset', (tester) async {
+    testWidgets('measurement matches the rendered 99 dp label slot', (
+      tester,
+    ) async {
       Widget scaledChip(double scale) => MaterialApp(
             theme: ThemeData(
               useMaterial3: true,
@@ -163,55 +165,96 @@ void main() {
               color: Theme.of(initialContext).colorScheme.onSurfaceVariant,
             ),
           );
-      final initialText = TextPainter(
-        text: TextSpan(text: 'notes.pdf', style: initialStyle),
-        textDirection: Directionality.of(initialContext),
-        locale: Localizations.maybeLocaleOf(initialContext),
-      )..layout();
-      final scale = 99.5 / initialText.width;
-      expect(scale, greaterThan(1));
+      double scaleForNaturalWidth(double targetWidth) {
+        var low = 1.0;
+        var high = 4.0;
+        for (var attempt = 0; attempt < 30; attempt++) {
+          final scale = (low + high) / 2;
+          final painter = TextPainter(
+            text: TextSpan(text: 'notes.pdf', style: initialStyle),
+            textDirection: Directionality.of(initialContext),
+            textScaler: TextScaler.linear(scale),
+            locale: Localizations.maybeLocaleOf(initialContext),
+          )..layout();
+          if (painter.width < targetWidth) {
+            low = scale;
+          } else {
+            high = scale;
+          }
+        }
+        return (low + high) / 2;
+      }
 
-      await tester.pumpWidget(scaledChip(scale));
-      final chip = find.byType(PreviewChip);
-      final context = tester.element(chip);
-      final style = DefaultTextStyle.of(context).style.merge(
-            TextStyle(
-              fontSize: 10,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-      final textWidth = tester.getSize(find.byType(ConstrainedText)).width;
-      final naturalText = TextPainter(
-        text: TextSpan(text: 'notes.pdf', style: style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        locale: Localizations.maybeLocaleOf(context),
-      )..layout();
-      final wrappedText = TextPainter(
-        text: TextSpan(text: 'notes.pdf', style: style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        locale: Localizations.maybeLocaleOf(context),
-        maxLines: 2,
-        ellipsis: '…',
-      )..layout(maxWidth: textWidth);
+      Future<(BuildContext, double, double, double, TextPainter)>
+          measureAtWidth(
+        double naturalWidth,
+      ) async {
+        await tester.pumpWidget(scaledChip(scaleForNaturalWidth(naturalWidth)));
+        final chip = find.byType(PreviewChip);
+        final context = tester.element(chip);
+        final style = DefaultTextStyle.of(context).style.merge(
+              TextStyle(
+                fontSize: 10,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            );
+        final rowWidth = tester
+            .getSize(find.descendant(of: chip, matching: find.byType(Row)))
+            .width;
+        final textSlotWidth = rowWidth - 20 - 4;
+        final labelWidth = tester.getSize(find.byType(ConstrainedText)).width;
+        final naturalText = TextPainter(
+          text: TextSpan(text: 'notes.pdf', style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout();
+        final renderedText = TextPainter(
+          text: TextSpan(text: 'notes.pdf', style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+          maxLines: 2,
+          ellipsis: '…',
+        )..layout(maxWidth: textSlotWidth);
+        expect(textSlotWidth, closeTo(99, 0.01));
+        expect(naturalText.width, closeTo(naturalWidth, 0.2));
+        return (
+          context,
+          textSlotWidth,
+          labelWidth,
+          tester.getSize(chip).height,
+          renderedText,
+        );
+      }
 
-      expect(textWidth, closeTo(99, 0.01));
-      expect(naturalText.width, greaterThan(99));
-      expect(naturalText.width, lessThan(100));
-      expect(wrappedText.computeLineMetrics(), hasLength(2));
+      final fitting = await measureAtWidth(98.28);
+      expect(fitting.$5.computeLineMetrics(), hasLength(1));
+      expect(fitting.$3, closeTo(99, 0.01));
+      expect(fitting.$4, 72);
       expect(
         PreviewChip.requiredHeight(
-          context,
+          fitting.$1,
           fileName: 'notes.pdf',
           isImage: false,
         ),
-        greaterThanOrEqualTo(wrappedText.height + 17),
+        72,
       );
+
+      final wrapping = await measureAtWidth(99.28);
+      expect(wrapping.$5.computeLineMetrics(), hasLength(2));
+      expect(wrapping.$3, closeTo(99, 0.01));
+      final requiredHeight =
+          (wrapping.$5.height + 17).clamp(72, double.infinity).toDouble();
       expect(
-        tester.getSize(chip).height,
-        greaterThanOrEqualTo(wrappedText.height + 17),
+        PreviewChip.requiredHeight(
+          wrapping.$1,
+          fileName: 'notes.pdf',
+          isImage: false,
+        ),
+        closeTo(requiredHeight, 0.01),
       );
+      expect(wrapping.$4, greaterThanOrEqualTo(requiredHeight));
     });
 
     testWidgets('long names reveal vertically and pause offscreen or reduced', (
