@@ -54,39 +54,44 @@ class _ChatPageSearchFieldState extends State<_ChatPageSearchField> {
             },
           ),
         );
+    final tickerMode = TickerMode.valuesOf(context);
 
-    return MouseRegion(
-      onEnter: (_) {
-        if (!_isHovered) setState(() => _isHovered = true);
-      },
-      onExit: (_) {
-        if (_isHovered) setState(() => _isHovered = false);
-      },
-      child: SizedBox(
-        height: 32,
-        child: TextField(
-          controller: widget.controller,
-          focusNode: _focusNode,
-          autofocus: true,
-          // Same tap-region group as the message list: tapping a search result
-          // must not blur the search field while browsing matches.
-          groupId: chatComposerTapRegionGroupId,
-          onChanged: widget.onChanged,
-          decoration: InputDecoration(
-            hint: ConstrainedText(
-              widget.hint,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: hintStyle,
+    return TickerMode(
+      enabled: tickerMode.enabled && ChatTabVisibility.of(context),
+      forceFrames: tickerMode.forceFrames,
+      child: MouseRegion(
+        onEnter: (_) {
+          if (!_isHovered) setState(() => _isHovered = true);
+        },
+        onExit: (_) {
+          if (_isHovered) setState(() => _isHovered = false);
+        },
+        child: SizedBox(
+          height: 32,
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _focusNode,
+            autofocus: true,
+            // Same tap-region group as the message list: tapping a search
+            // result must not blur the search field while browsing matches.
+            groupId: chatComposerTapRegionGroupId,
+            onChanged: widget.onChanged,
+            decoration: InputDecoration(
+              hint: ConstrainedText(
+                widget.hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: hintStyle,
+              ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 6,
+              ),
+              border: OutlineInputBorder(),
             ),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 6,
-            ),
-            border: OutlineInputBorder(),
+            style: const TextStyle(fontSize: 13),
           ),
-          style: const TextStyle(fontSize: 13),
         ),
       ),
     );

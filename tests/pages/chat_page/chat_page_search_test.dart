@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/pages/assistant_selection_page.dart'
+    show ChatTabVisibility;
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -65,13 +68,25 @@ Future<void> _pumpChat(
   Locale locale = const Locale('zh', 'CN'),
   double textScale = 1,
   ThemeData? theme,
+  ValueListenable<bool>? chatTabVisibility,
 }) async {
-  await tester.pumpWidget(_buildApp(
+  Widget app = _buildApp(
     initialSearchQuery: initialSearchQuery,
     locale: locale,
     textScale: textScale,
     theme: theme,
-  ));
+  );
+  if (chatTabVisibility != null) {
+    app = ValueListenableBuilder<bool>(
+      valueListenable: chatTabVisibility,
+      builder: (context, isVisible, child) => ChatTabVisibility(
+        isVisible: isVisible,
+        child: child!,
+      ),
+      child: app,
+    );
+  }
+  await tester.pumpWidget(app);
   await tester.pump();
 
   final ctx = tester.element(find.byType(ChatPage));
@@ -213,6 +228,33 @@ void main() {
       await tester.pump();
       expect(identical(tester.widget<Chat>(chatFinder), initialChat), isTrue);
       await mouse.removePointer();
+    });
+
+    testWidgets('search hint stops ticking while the chat tab is hidden',
+        (tester) async {
+      tester.view.physicalSize = const Size(640, 1280);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final chatTabVisibility = ValueNotifier(true);
+      addTearDown(chatTabVisibility.dispose);
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+        textScale: 2,
+        chatTabVisibility: chatTabVisibility,
+      );
+      await tester.tap(find.byTooltip('Rechercher dans les messages'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1500));
+
+      final hintText = find.text('Rechercher dans cette conversation…');
+      final visiblePosition = tester.getTopLeft(hintText);
+      chatTabVisibility.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.getTopLeft(hintText), visiblePosition);
     });
 
     testWidgets('German current-search hint keeps its full semantic label',
