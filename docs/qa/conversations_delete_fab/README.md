@@ -14,7 +14,8 @@ French at 320×640, text scale 3. The French capture shows all 123 conversations
 selected, the visible delete icon, the clipped `Supprimer 123` label, and the
 complete FAB within the viewport. Its measured red FAB bounds are x=16..303 and
 y=568..623 CSS pixels. The English button is also fully visible. Chromium
-reported no page errors.
+reported no page errors. The capture harness checks the expected complete
+red-button rectangles for both fixture sizes, in addition to the viewport edge.
 
 The 36-second WebM shows a 288×56 crop of the French production FAB at two
 frames per second. It includes the initial pause and the clipped FAB label's

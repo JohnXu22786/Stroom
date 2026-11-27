@@ -31,7 +31,7 @@ def wait_for_rendered_flutter(page):
     raise TimeoutError("Flutter Web did not render the ConversationsPage fixture")
 
 
-def capture_page(page, output):
+def capture_page(page, output, expected_fab_bounds):
     image_bytes = page.screenshot(path=str(output))
     image = Image.open(BytesIO(image_bytes)).convert("RGB")
     header = image.crop((0, 0, image.width, min(56, image.height)))
@@ -76,6 +76,11 @@ def capture_page(page, output):
     )
     if bounds[0] < 0 or bounds[2] >= image.width or bounds[3] >= image.height:
         raise RuntimeError(f"Delete FAB escaped viewport in {output}: {bounds}")
+    if bounds != expected_fab_bounds:
+        raise RuntimeError(
+            f"Delete FAB bounds in {output} were {bounds}; "
+            f"expected complete visible button {expected_fab_bounds}"
+        )
     return bounds, selected_count
 
 
@@ -220,11 +225,15 @@ try:
 
         english_selection = select_one(800, "en", 1)
         english = OUTPUT / "delete-fab-en-800x640-scale1.png"
-        english_bounds, english_count = capture_page(page, english)
+        english_bounds, english_count = capture_page(
+            page, english, expected_fab_bounds=(649, 568, 783, 623)
+        )
 
         french_selection = select_one(320, "fr", 3)
         french = OUTPUT / "delete-fab-fr-320x640-scale3.png"
-        french_bounds, french_count = capture_page(page, french)
+        french_bounds, french_count = capture_page(
+            page, french, expected_fab_bounds=(16, 568, 303, 623)
+        )
 
         # Record one frame every 500 ms at normal playback speed. This keeps the
         # initial pause and full forward/return cycle while sampling smoothly.
