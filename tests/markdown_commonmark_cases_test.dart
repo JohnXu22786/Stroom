@@ -2,6 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
 void main() {
+  test('extended URL autolinks accept tabs but reject adjacent text', () {
+    final options = markdown.ExtensionSet.gitHubWeb;
+    expect(
+      markdown.markdownToHtml('go\twww.example.com', extensionSet: options),
+      '<p>go\t<a href="http://www.example.com">www.example.com</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('xwww.example.com', extensionSet: options),
+      '<p>xwww.example.com</p>\n',
+    );
+  });
+
   test('autolinks accept digits in a valid scheme and enforce its length', () {
     expect(
       markdown.markdownToHtml('<x1:target>'),
