@@ -10,6 +10,8 @@ from urllib.request import urlopen
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_build_dependencies import needs_rebuild
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path(
@@ -37,14 +39,7 @@ environment["CXX"] = str(toolchain / "bin/clang++")
 environment["LD_LIBRARY_PATH"] = f"{toolchain}/lib"
 environment["PATH"] = f"{toolchain}/bin:{environment['PATH']}"
 capture_entrypoint = ROOT / "tool/qa/file_info_label_capture.dart"
-if (
-    not (WEB_BUILD / "index.html").exists()
-    or capture_entrypoint.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-    or (ROOT / "lib/pages/chat/dialogs/file_info_dialog.dart").stat().st_mtime
-    > (WEB_BUILD / "index.html").stat().st_mtime
-    or (ROOT / "lib/pages/chat/widgets/info_row.dart").stat().st_mtime
-    > (WEB_BUILD / "index.html").stat().st_mtime
-):
+if needs_rebuild(ROOT, capture_entrypoint, WEB_BUILD / "index.html"):
     subprocess.run(
         [
             "/workspace/sdks/flutter/bin/flutter",
