@@ -39,7 +39,10 @@ class AlertBlockSyntax extends BlockSyntax {
     while (!parser.isDone) {
       final lineContent = parser.current.content.trimLeft();
       if (lineContent.startsWith('>')) {
-        final strippedContent = lineContent.replaceFirst(RegExp(r'^>\s*'), '');
+        final strippedContent = lineContent.replaceFirst(
+          RegExp(r'^>[ \t]?'),
+          '',
+        );
         childLines.add(Line(strippedContent));
         parser.advance();
         _lazyContinuation = false;
