@@ -185,6 +185,7 @@ class TaskExecutor {
               task: task,
               selectedMedia: validationMedia,
               detectedMedia: detectedMedia,
+              cancelToken: cancelToken,
               playlistDioFactory: playlistDioFactory,
             );
             retryPlaylistValidated = true;
@@ -822,6 +823,7 @@ class TaskExecutor {
               }
               return headers;
             },
+            cancellationSignal: cancelToken?.whenCancel.then<void>((_) {}),
           );
         } on UnsupportedError {
           skippedEncryptedPlaylist = true;
@@ -963,6 +965,7 @@ class TaskExecutor {
     required CatCatchTask task,
     required MediaResource selectedMedia,
     required List<MediaResource> detectedMedia,
+    CancelToken? cancelToken,
     Dio Function()? playlistDioFactory,
   }) async {
     final playlists = detectedMedia.where((resource) {
@@ -1019,6 +1022,7 @@ class TaskExecutor {
         content,
         playlist.url,
         headersForUrl: headersForUrl,
+        cancellationSignal: cancelToken?.whenCancel.then<void>((_) {}),
       );
     }
   }
