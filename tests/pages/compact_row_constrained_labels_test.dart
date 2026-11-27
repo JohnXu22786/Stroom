@@ -22,34 +22,47 @@ void _setViewport(WidgetTester tester, Size size, {double scale = 1}) {
   addTearDown(tester.view.platformDispatcher.clearTextScaleFactorTestValue);
 }
 
-Widget _localizedApp({required Locale locale, required Widget home}) =>
-    MaterialApp(
-      locale: locale,
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: home,
-    );
+Widget _localizedApp({
+  required Locale locale,
+  required Widget home,
+  bool disableAnimations = false,
+}) => MaterialApp(
+  locale: locale,
+  supportedLocales: AppLocalizations.supportedLocales,
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  builder: disableAnimations
+      ? (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        )
+      : null,
+  home: home,
+);
 
-Widget _voiceDialog({required int count, Locale locale = const Locale('fr')}) =>
-    _localizedApp(
-      locale: locale,
-      home: Scaffold(
-        body: DuplicateResolveDialog(
-          working: [
-            for (var i = 0; i < count; i++)
-              VoiceEntry(name: 'Voice $i', id: 'duplicate'),
-          ],
-          idToFirstIdx: const {'duplicate': 0},
-          pending: List.generate(count, (i) => i),
-          onComplete: (_) {},
-        ),
-      ),
-    );
+Widget _voiceDialog({
+  required int count,
+  Locale locale = const Locale('fr'),
+  bool disableAnimations = false,
+}) => _localizedApp(
+  locale: locale,
+  disableAnimations: disableAnimations,
+  home: Scaffold(
+    body: DuplicateResolveDialog(
+      working: [
+        for (var i = 0; i < count; i++)
+          VoiceEntry(name: 'Voice $i', id: 'duplicate'),
+      ],
+      idToFirstIdx: const {'duplicate': 0},
+      pending: List.generate(count, (i) => i),
+      onComplete: (_) {},
+    ),
+  ),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -157,6 +170,26 @@ void main() {
     expect(find.text('Ignorer'), findsWidgets);
     expect(find.byType(OverflowBar), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reduced-motion duplicate title keeps its full semantic value', (
+    tester,
+  ) async {
+    _setViewport(tester, const Size(440, 932), scale: 2);
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_voiceDialog(count: 1, disableAnimations: true));
+    await tester.pumpAndSettle();
+
+    final title = AppLocalizations.of(tester.element(find.byType(Scaffold)))!
+        .voiceDuplicateResolution;
+    final titleFinder = find.text(title);
+    expect(titleFinder, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(titleFinder);
+    expect(paragraph.maxLines, 1);
+    expect(paragraph.didExceedMaxLines, isTrue);
+    expect(tester.getSemantics(titleFinder).label, title);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
   });
 
   testWidgets('narrow Arabic duplicate actions stay on the RTL trailing edge', (

@@ -118,6 +118,19 @@ try:
             (OUTPUT / f"voice-index-scaled-narrow-2x{suffix}.png").write_bytes(
                 page.screenshot()
             )
+
+            page.set_viewport_size({"width": 440, "height": 932})
+            page.goto(
+                f"{URL}?locale=ar&scale=2&count=1&theme={theme}",
+                wait_until="load",
+                timeout=120_000,
+            )
+            wait_for_rendered_flutter(page)
+            page.wait_for_timeout(300)
+            page.mouse.move(220, 460)
+            (OUTPUT / f"voice-index-rtl-narrow-2x{suffix}.png").write_bytes(
+                page.screenshot()
+            )
         browser.close()
 
     if errors:
@@ -128,4 +141,4 @@ finally:
     server_log.close()
     SERVER_LOG.unlink(missing_ok=True)
 
-print("Captured French voice duplicate resolution at fitting, wide, and narrow scales in light and dark themes.")
+print("Captured French voice duplicate resolution at fitting, wide, and narrow scales, plus narrow Arabic RTL, in light and dark themes.")
