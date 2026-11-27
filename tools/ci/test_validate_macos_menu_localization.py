@@ -107,6 +107,38 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
                 read_localized_titles(path)
 
+    def test_rejects_carriage_return_inside_title_entry(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = '"menu.file.title"\r= "File";\r\n'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
+                read_localized_titles(path)
+
+    def test_rejects_empty_semicolon_entries_but_accepts_blank_comments(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        for contents in (";\n", "/* comment */;\n"):
+            with self.subTest(contents=contents), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(contents, encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ValueError, r":1: invalid localized title entry"
+                ):
+                    read_localized_titles(path)
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text("\n\n// comment\n/* block comment */\n", encoding="utf-8")
+
+            self.assertEqual(read_localized_titles(path), {})
+
     def test_block_comments_do_not_hide_invalid_title_entries(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
