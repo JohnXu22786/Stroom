@@ -33,6 +33,19 @@ class _ThemeDisplaySettingsPageState
     final themeNotifier = ref.read(themeProvider.notifier);
     final selectedLocale = ref.watch(localeProvider);
     final strings = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final languageSearchHintStyle = (theme.useMaterial3
+            ? theme.textTheme.bodyLarge
+            : theme.textTheme.titleMedium) ??
+        theme.textTheme.bodyMedium ??
+        const TextStyle();
+    final styledLanguageSearchHint = languageSearchHintStyle
+        .copyWith(
+          color: theme.useMaterial3
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.hintColor,
+        )
+        .merge(theme.inputDecorationTheme.hintStyle);
     final normalizedQuery = _languageQuery.trim().toLowerCase();
     final matchingLanguages = supportedAppLocales
         .map(
@@ -107,18 +120,28 @@ class _ThemeDisplaySettingsPageState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 children: [
-                  TextField(
-                    key: const Key('language-search-field'),
-                    controller: _languageSearchController,
-                    onChanged: (query) =>
-                        setState(() => _languageQuery = query),
-                    decoration: InputDecoration(
-                      hintText: strings.languageSearchHint,
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  Semantics(
+                    hint: strings.languageSearchHint,
+                    child: TextField(
+                      key: const Key('language-search-field'),
+                      controller: _languageSearchController,
+                      onChanged: (query) =>
+                          setState(() => _languageQuery = query),
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedText(
+                            strings.languageSearchHint,
+                            style: styledLanguageSearchHint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        isDense: true,
                       ),
-                      isDense: true,
                     ),
                   ),
                   const Divider(height: 24),

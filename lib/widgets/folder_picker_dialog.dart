@@ -255,7 +255,21 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final strings = AppLocalizations.of(context)!;
+    final fileNameHint =
+        widget.fileNameHintText ?? strings.folderPickerFileNameHint;
+    final folderNameHint = strings.folderPickerFolderNameHint;
+    final hintStyle = ((theme.useMaterial3
+                ? theme.textTheme.bodyLarge
+                : theme.textTheme.titleMedium) ??
+            theme.textTheme.bodyMedium ??
+            const TextStyle())
+        .copyWith(
+          color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
+        )
+        .merge(theme.inputDecorationTheme.hintStyle);
     final folders = _filteredFolders;
 
     return PopScope(
@@ -299,23 +313,31 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         ?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 6),
-                  TextField(
-                    controller: widget.fileNameController,
-                    decoration: InputDecoration(
-                      hintText: widget.fileNameHintText ??
-                          AppLocalizations.of(context)!
-                              .folderPickerFileNameHint,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  Semantics(
+                    hint: fileNameHint,
+                    child: TextField(
+                      controller: widget.fileNameController,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedText(
+                            fileNameHint,
+                            style: hintStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        filled: true,
+                        fillColor: cs.surface,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
-                      filled: true,
-                      fillColor: cs.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
+                      textInputAction: TextInputAction.done,
                     ),
-                    textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -450,25 +472,34 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: _newFolderController,
-                            focusNode: _newFolderFocusNode,
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context)!
-                                  .folderPickerFolderNameHint,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                          child: Semantics(
+                            hint: folderNameHint,
+                            child: TextField(
+                              controller: _newFolderController,
+                              focusNode: _newFolderFocusNode,
+                              decoration: InputDecoration(
+                                hint: ExcludeSemantics(
+                                  child: ConstrainedText(
+                                    folderNameHint,
+                                    style: hintStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: cs.surface,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                errorText: _createError,
                               ),
-                              filled: true,
-                              fillColor: cs.surface,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              errorText: _createError,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _createFolder(),
                             ),
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _createFolder(),
                           ),
                         ),
                         const SizedBox(width: 8),

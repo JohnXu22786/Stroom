@@ -12,6 +12,7 @@ import 'package:stroom/pages/text_storage_page.dart';
 import 'package:stroom/providers/text_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _GatedTextRecordsNotifier extends TextRecordsNotifier {
   final returnReloadStarted = Completer<void>();
@@ -27,6 +28,12 @@ class _GatedTextRecordsNotifier extends TextRecordsNotifier {
     }
     await super.loadRecords();
   }
+}
+
+bool _hasTextFieldHint(TextField field, String expected) {
+  final hint = field.decoration?.hint;
+  final visualHint = hint is ExcludeSemantics ? hint.child : hint;
+  return visualHint is ConstrainedText && visualHint.data == expected;
 }
 
 void main() {
@@ -94,8 +101,7 @@ void main() {
       await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
       await tester.pump();
       final folderNameField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.hintText == '输入文件夹名称',
+        (widget) => widget is TextField && _hasTextFieldHint(widget, '输入文件夹名称'),
       );
       await tester.enterText(folderNameField, folderName);
       await tester.tap(
