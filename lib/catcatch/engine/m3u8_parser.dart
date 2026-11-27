@@ -55,11 +55,14 @@ class M3U8Parser {
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
   }) async {
+    final lines = _normalizeLines(content);
+    if (lines.isEmpty || lines.first.trim() != '#EXTM3U') {
+      throw FormatException('Invalid HLS playlist: missing #EXTM3U header');
+    }
     if (isEncrypted(content)) {
       throw UnsupportedError('Encrypted HLS playlists are not supported');
     }
 
-    final lines = _normalizeLines(content);
     final segments = <M3U8PlaylistResource>[];
     var mediaSegmentCount = 0;
     var hasInitializationMap = false;
@@ -74,11 +77,8 @@ class M3U8Parser {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
       final variants = _parseStreamInf(lines);
       if (variants.isEmpty) {
-        return (
-          resources: <String>[],
-          playlistResources: <M3U8PlaylistResource>[],
-          mediaSegmentCount: 0,
-          hasInitializationMap: false,
+        throw FormatException(
+          'Invalid HLS master playlist: no playable variants found',
         );
       }
       // 按带宽降序排序，选最高码率
@@ -166,6 +166,9 @@ class M3U8Parser {
       }
     }
 
+    if (segments.isEmpty) {
+      throw FormatException('Invalid HLS media playlist: no media resources');
+    }
     debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
     return (
       resources: segments.map((resource) => resource.url).toList(),
@@ -274,7 +277,9 @@ class M3U8Parser {
 
   /// 标准化行：统一换行、过滤空白
   static List<String> _normalizeLines(String content) {
-    return content
+    final normalized =
+        content.startsWith('\uFEFF') ? content.substring(1) : content;
+    return normalized
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
         .split('\n')

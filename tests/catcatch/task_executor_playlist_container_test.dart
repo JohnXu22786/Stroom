@@ -313,6 +313,147 @@ encrypted-segment.ts
   );
 
   test(
+    'rejects an empty saved HLS playlist when verifying a retry',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      const segmentUrl = 'https://example.com/segment.ts';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'encrypted-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'encrypted-hls-retry-empty-playlist',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({playlistUrl: '#EXTM3U'}),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('no media resources'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'rejects a non-playlist response from a variant during retry validation',
+    () async {
+      const originalReferer = 'https://source.example/video';
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final variantUrl =
+          'http://${server.address.address}:${server.port}/variant.m3u8';
+      final playlistUrl = 'https://example.com/master.m3u8';
+      final segmentUrl = 'https://example.com/segment.ts';
+      final serverDone = server.listen((request) async {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.html
+          ..write('<html>Sign in to continue</html>');
+        await request.response.close();
+      });
+      final master = '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+$variantUrl
+''';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'saved-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'encrypted-hls-retry-invalid-variant',
+        url: originalReferer,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'master',
+            ext: 'm3u8',
+            initiator: originalReferer,
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      try {
+        await HttpOverrides.runWithHttpOverrides(
+          () => TaskExecutor.retryFromStep(
+            task: task,
+            fromStep: StepType.downloading,
+            playlistDioFactory: () => Dio()
+              ..httpClientAdapter = _PlaylistAdapter({playlistUrl: master}),
+            onUpdate: (updated) => finalTask = updated,
+          ),
+          _RealHttpOverrides(),
+        );
+      } finally {
+        await serverDone.cancel();
+        await server.close(force: true);
+      }
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('invalid hls playlist'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'uses the original initiator as variant referer during HLS retry check',
     () async {
       const originalReferer = 'https://source.example/video';
