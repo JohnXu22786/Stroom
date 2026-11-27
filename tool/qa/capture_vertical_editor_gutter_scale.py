@@ -10,6 +10,8 @@ from urllib.request import urlopen
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_build_dependencies import needs_rebuild
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path(
@@ -43,15 +45,7 @@ environment['LD_LIBRARY_PATH'] = str(fl_deps / 'lib')
 environment['PATH'] = f"{fl_deps}/bin:{environment['PATH']}"
 
 entrypoint = ROOT / 'tool/qa/vertical_editor_gutter_scale_capture.dart'
-build_inputs = [
-    entrypoint,
-    ROOT / 'lib/widgets/code_editor_field.dart',
-    ROOT / 'lib/widgets/code_block_source_widget.dart',
-    ROOT / 'lib/widgets/code_line_number_gutter.dart',
-]
-if not (WEB_BUILD / 'index.html').exists() or max(
-    path.stat().st_mtime for path in build_inputs
-) > (WEB_BUILD / 'index.html').stat().st_mtime:
+if needs_rebuild(ROOT, entrypoint, WEB_BUILD / 'index.html'):
     subprocess.run(
         [
             '/workspace/sdks/flutter/bin/flutter',
