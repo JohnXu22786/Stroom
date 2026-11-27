@@ -971,6 +971,29 @@ $$
       );
       expect(parsedNodeCount, 0);
 
+      parsedNodeCount = 0;
+      const nestedListFence =
+          '- item\n  - ```\n    __literal__\n    ```\n\n__bold__';
+      final nestedListFencePreview = previewGenerator.buildPlainTextPreview([
+        nestedListFence,
+      ]);
+      final nestedListFenceSpans = [
+        for (final widget in nestedListFencePreview)
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
+      ];
+      expect(
+        nestedListFenceSpans
+            .map((span) => _leafSpanWithText(span, 'bold'))
+            .whereType<TextSpan>()
+            .firstOrNull
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
       const escapedLiteral = r'\__literal__';
       final escapedLiteralPreview = previewGenerator.buildPlainTextPreview([
         escapedLiteral,

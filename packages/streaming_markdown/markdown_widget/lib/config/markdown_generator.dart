@@ -173,6 +173,7 @@ String _withoutMarkdownCode(String source) {
   var fenceCharacter = 0;
   var fenceLength = 0;
   var fenceQuoteDepth = 0;
+  var fenceListIndent = 0;
   var lineStart = 0;
   while (lineStart < source.length) {
     var lineEnd = lineStart;
@@ -184,6 +185,7 @@ String _withoutMarkdownCode(String source) {
     final line = source.substring(lineStart, lineEnd);
     var content = line;
     var quoteDepth = 0;
+    var listIndent = 0;
     while (true) {
       final match = quotePrefix.matchAsPrefix(content);
       if (match == null) break;
@@ -193,6 +195,7 @@ String _withoutMarkdownCode(String source) {
     while (true) {
       final match = listPrefix.matchAsPrefix(content);
       if (match == null) break;
+      listIndent += match.end;
       content = content.substring(match.end);
     }
 
@@ -200,11 +203,17 @@ String _withoutMarkdownCode(String source) {
       fenceCharacter = 0;
       fenceLength = 0;
       fenceQuoteDepth = 0;
+      fenceListIndent = 0;
     }
 
     if (fenceCharacter != 0) {
       maskRange(lineStart, lineEnd);
-      final fenceContent = fenceQuoteDepth == 0 ? line : content;
+      final listPrefix = ' ' * fenceListIndent;
+      final fenceContent = fenceQuoteDepth == 0 && line.startsWith(listPrefix)
+          ? line.substring(fenceListIndent)
+          : fenceQuoteDepth == 0
+              ? line
+              : content;
       final match = fenceEnd.firstMatch(fenceContent);
       if (match != null &&
           match.group(1)!.codeUnitAt(0) == fenceCharacter &&
@@ -212,6 +221,7 @@ String _withoutMarkdownCode(String source) {
         fenceCharacter = 0;
         fenceLength = 0;
         fenceQuoteDepth = 0;
+        fenceListIndent = 0;
       }
     } else {
       final match = fenceStart.firstMatch(content);
@@ -222,6 +232,7 @@ String _withoutMarkdownCode(String source) {
           fenceCharacter = fence.codeUnitAt(0);
           fenceLength = fence.length;
           fenceQuoteDepth = quoteDepth;
+          fenceListIndent = listIndent;
           maskRange(lineStart, lineEnd);
         }
       } else if (content.startsWith('    ') || content.startsWith('\t')) {
