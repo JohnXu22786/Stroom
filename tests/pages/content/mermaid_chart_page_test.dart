@@ -1950,6 +1950,65 @@ void main() {
     });
 
     testWidgets(
+      'editing a chart with a typed .mmd suffix saves one extension',
+      (tester) async {
+        const originalContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+        final originalRecord = TextRecord(
+          id: 'existing-chart-id',
+          name: 'existing-chart',
+          hash: computeTextHash(originalBytes),
+          format: 'mmd',
+          createdAt: DateTime.utc(2024, 1, 1),
+          size: originalBytes.length,
+          textLength: originalContent.length,
+        );
+        await TextManifest.writeText(
+          originalRecord.storagePath,
+          originalContent,
+        );
+        await TextManifest.addRecord(originalRecord);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: originalContent,
+            existingRecord: originalRecord,
+          ),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).first, editedContent);
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+        );
+        await tester.enterText(fileNameField, 'renamed-chart.mmd');
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final savedRecord = (await TextManifest.loadRecords()).single;
+        expect(savedRecord.id, originalRecord.id);
+        expect(savedRecord.name, 'renamed-chart');
+        expect(find.textContaining('renamed-chart.mmd'), findsOneWidget);
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          editedContent,
+        );
+      },
+    );
+
+    testWidgets(
       'committed chart edit still succeeds when old-file cleanup fails',
       (tester) async {
         final cleanupLogs = <String>[];
