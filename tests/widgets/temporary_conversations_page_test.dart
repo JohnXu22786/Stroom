@@ -20,7 +20,12 @@ Conversation _conv(String id, {bool isTemporary = false}) {
   );
 }
 
-Widget _testApp(List<Conversation> conversations) {
+Widget _testApp(
+  List<Conversation> conversations, {
+  Locale locale = const Locale('zh', 'CN'),
+  TextScaler textScaler = TextScaler.noScaling,
+  ThemeData? theme,
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -31,9 +36,14 @@ Widget _testApp(List<Conversation> conversations) {
       }),
     ],
     child: MaterialApp(
+      theme: theme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
       home: ConversationsPage(),
     ),
   );
@@ -67,6 +77,101 @@ void _expectCountdownAtExpiration(
 }
 
 void main() {
+  testWidgets('large French countdown stays inside a narrow conversation row',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _testApp(
+        [
+          Conversation(
+            id: 'large-countdown',
+            title: 'Conversation',
+            isTemporary: true,
+            temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 20)),
+          ),
+        ],
+        locale: const Locale('fr'),
+        textScaler: const TextScaler.linear(4),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final timer = tester.widget<Text>(
+      find.descendant(
+        of: find.byType(TemporaryCountdownCapsule),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(timer.data, matches(RegExp(r'^\d{2}:\d{2}$')));
+    expect(
+      tester.getRect(find.byType(TemporaryCountdownCapsule)).overlaps(
+            tester.getRect(find.text('Conversation')),
+          ),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('dark large countdown stays legible and below its title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _testApp(
+        [
+          Conversation(
+            id: 'dark-large-countdown',
+            title: 'Conversation',
+            isTemporary: true,
+            temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 20)),
+            temporaryPausedRemainingMilliseconds: 20 * 60 * 1000,
+          ),
+        ],
+        locale: const Locale('fr'),
+        textScaler: const TextScaler.linear(4),
+        theme: ThemeData.dark(useMaterial3: true),
+      ),
+    );
+    await tester.pump();
+
+    final capsuleFinder = find.byType(TemporaryCountdownCapsule);
+    final timerFinder = find.descendant(
+      of: capsuleFinder,
+      matching: find.byType(Text),
+    );
+    final timer = tester.widget<Text>(timerFinder);
+    final timerColor = timer.style!.color!;
+    final icon = tester.widget<Icon>(
+      find.descendant(of: capsuleFinder, matching: find.byType(Icon)),
+    );
+    final capsule = tester.widget<Container>(
+      find.descendant(of: capsuleFinder, matching: find.byType(Container)),
+    );
+    final pillColor = (capsule.decoration! as BoxDecoration).color!;
+    final titleRect = tester.getRect(find.text('Conversation'));
+    final timerRect = tester.getRect(capsuleFinder);
+
+    expect(Theme.of(tester.element(capsuleFinder)).brightness, Brightness.dark);
+    expect(timerColor, Colors.amber.shade100);
+    expect(icon.color, Colors.amber);
+    expect(timerColor.computeLuminance(),
+        greaterThan(pillColor.computeLuminance()));
+    expect(timer.data, '20:00');
+    expect(timerRect.top, greaterThanOrEqualTo(titleRect.bottom));
+    expect(timerRect.overlaps(titleRect), isFalse);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
       'temporary conversation shows countdown capsule and '
       'checked-bubble leading icon', (tester) async {
@@ -92,6 +197,10 @@ void main() {
     // 菜单开启项文案随状态变化。
     expect(find.text('对话temp-1'), findsOneWidget);
     expect(find.text('对话normal-1'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(TemporaryCountdownCapsule)).center.dy,
+      closeTo(tester.getRect(find.text('对话temp-1')).center.dy, 1),
+    );
     await tester.tap(find.byIcon(Icons.more_vert).first);
     await tester.pumpAndSettle();
     expect(find.text('保留对话'), findsOneWidget);
