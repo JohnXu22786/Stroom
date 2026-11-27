@@ -1,6 +1,9 @@
 import unittest
 
-from validate_macos_menu_localization import has_localization_build_membership
+from validate_macos_menu_localization import (
+    has_localization_build_membership,
+    read_localized_titles,
+)
 
 
 VALID_PROJECT = """
@@ -60,6 +63,61 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
         "en": "en.lproj/MainMenu.strings",
         "zh-Hans": "zh-Hans.lproj/MainMenu.strings",
     }
+
+    def test_reads_titles_with_single_line_and_multiline_block_comments(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = '''
+/* A legal comment before an entry. */
+"menu.file.title" = "File"; /* A trailing comment. */
+/* A multiline
+   comment that spans lines. */
+"menu.edit.title" = "Edit";
+'''
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            self.assertEqual(
+                read_localized_titles(path),
+                {"menu.file": "File", "menu.edit": "Edit"},
+            )
+
+    def test_reads_entry_tokens_separated_by_multiline_block_comment(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = '"menu.file.title" /* comment\ncontinued */ = "File";\n'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            self.assertEqual(read_localized_titles(path), {"menu.file": "File"})
+
+    def test_rejects_newline_inside_localized_title_id(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = '"menu\n.file.title" = "File";\n'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, r":1: invalid localized title entry"):
+                read_localized_titles(path)
+
+    def test_block_comments_do_not_hide_invalid_title_entries(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = '/* comment */\n"menu.file.title" = "File"\n'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, r":2: invalid localized title entry"):
+                read_localized_titles(path)
 
     def test_accepts_localized_resources_in_runner_resources_variant_group(self):
         self.assertTrue(
