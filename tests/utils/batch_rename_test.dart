@@ -572,6 +572,75 @@ void main() {
   });
 
   group('冲突检测：文件', () {
+    test('编号后缀策略允许同文件夹内不同扩展名使用相同基础名', () {
+      final p = plan(
+        [file('a', 'draft', format: 'txt')],
+        config: const BatchRenameConfig(
+          conflictStrategy: BatchRenameConflictStrategy.numberSuffix,
+          replace: BatchReplaceOp(
+            enabled: true,
+            find: 'draft',
+            replace: 'report',
+          ),
+        ),
+        allFiles: [file('other', 'report', format: 'md')],
+      );
+      final blocked = plan(
+        [file('a', 'draft', format: 'txt')],
+        config: const BatchRenameConfig(
+          replace: BatchReplaceOp(
+            enabled: true,
+            find: 'draft',
+            replace: 'report',
+          ),
+        ),
+        allFiles: [file('other', 'report', format: 'md')],
+      );
+
+      expect(p.results.single.baseName, 'report');
+      expect(p.results.single.error, isNull);
+      expect(p.canApply, isTrue);
+      expect(blocked.results.single.error, isNull);
+      expect(blocked.canApply, isTrue);
+    });
+
+    test('编号后缀策略仍为同扩展名冲突项分配后缀', () {
+      final p = plan(
+        [file('a', 'draft', format: 'TXT')],
+        config: const BatchRenameConfig(
+          conflictStrategy: BatchRenameConflictStrategy.numberSuffix,
+          replace: BatchReplaceOp(
+            enabled: true,
+            find: 'draft',
+            replace: 'report',
+          ),
+        ),
+        allFiles: [file('other', 'report', format: 'txt')],
+      );
+
+      expect(p.results.single.baseName, 'report (2)');
+      expect(p.results.single.newDisplay, 'report (2).TXT');
+      expect(p.results.single.error, isNull);
+      expect(p.canApply, isTrue);
+    });
+
+    test('阻止策略仍拒绝同扩展名同名文件', () {
+      final p = plan(
+        [file('a', 'draft', format: 'TXT')],
+        config: const BatchRenameConfig(
+          replace: BatchReplaceOp(
+            enabled: true,
+            find: 'draft',
+            replace: 'report',
+          ),
+        ),
+        allFiles: [file('other', 'report', format: 'txt')],
+      );
+
+      expect(p.results.single.error, isNotNull);
+      expect(p.canApply, isFalse);
+    });
+
     test('与未选中的同文件夹同名文件冲突', () {
       final p = plan(
         [file('a', 'x')],
