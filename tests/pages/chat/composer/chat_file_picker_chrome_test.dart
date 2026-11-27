@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -153,16 +154,10 @@ void main() {
         expect(find.bySemanticsLabel(label), findsOneWidget);
         final labelFinder = find.descendant(
           of: tab,
-          matching: find.text(label),
+          matching: find.byType(ConstrainedText),
         );
-        final labelStyle =
-            Theme.of(tester.element(labelFinder)).textTheme.labelLarge!;
-        final labelPainter = TextPainter(
-          text: TextSpan(text: label, style: labelStyle),
-          textDirection: TextDirection.ltr,
-          textScaler: const TextScaler.linear(3),
-          locale: const Locale('en', 'US'),
-        )..layout();
+        expect(labelFinder, findsOneWidget);
+        final labelPainter = _measureConstrainedText(tester, labelFinder);
         expect(
           labelPainter.width,
           lessThanOrEqualTo(tester.getSize(labelFinder).width),
@@ -174,6 +169,19 @@ void main() {
         expect(rect.bottom, lessThanOrEqualTo(640));
         await tester.tap(tab);
         await tester.pumpAndSettle();
+        final semanticsTab = find.bySemanticsLabel(label);
+        expect(
+          tester
+              .getSemantics(semanticsTab)
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected,
+          Tristate.isTrue,
+        );
+        expect(
+          find.byKey(Key('file_picker_tab_content_$type')),
+          findsOneWidget,
+        );
       }
 
       await tester.tap(find.byKey(const Key('file_picker_clear_btn')));
@@ -183,6 +191,45 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       textScale.dispose();
     }
+
+    final landscapeTextScale = ValueNotifier(3.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: landscapeTextScale,
+      locale: const Locale('en', 'US'),
+    );
+    tester.view.physicalSize = const Size(568, 320);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('file_picker_short_viewport_scroll')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('file_picker_preview_bar')), findsOneWidget);
+    final landscapeClear = find.byKey(const Key('file_picker_clear_btn'));
+    final landscapeConfirm = find.byKey(const Key('file_picker_confirm_btn'));
+    final landscapePreview = find.byKey(const Key('file_picker_preview_bar'));
+    final landscapeFile = find.text('picker-chrome-note.txt').first;
+    final landscapeViewport = const Rect.fromLTWH(0, 0, 568, 320);
+    await tester.ensureVisible(landscapeFile);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(landscapeFile).overlaps(landscapeViewport), isTrue);
+    await tester.ensureVisible(landscapePreview);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(landscapePreview).overlaps(landscapeViewport),
+      isTrue,
+    );
+    await tester.ensureVisible(landscapeConfirm);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(landscapeConfirm).overlaps(landscapeViewport),
+      isTrue,
+    );
+    expect(tester.getRect(landscapeClear).overlaps(landscapeViewport), isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    landscapeTextScale.dispose();
 
     final germanTextScale = ValueNotifier(1.0);
     await _openPicker(
@@ -245,21 +292,31 @@ void main() {
     ]) {
       final tab = find.byKey(Key('file_picker_tab_$type'));
       expect(find.bySemanticsLabel(label), findsOneWidget);
-      final labelFinder = find.descendant(of: tab, matching: find.text(label));
-      final labelStyle =
-          Theme.of(tester.element(labelFinder)).textTheme.labelLarge!;
-      final labelPainter = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-        textScaler: const TextScaler.linear(3),
-        locale: const Locale('de', 'DE'),
-      )..layout();
+      final labelFinder = find.descendant(
+        of: tab,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(labelFinder, findsOneWidget);
+      final labelPainter = _measureConstrainedText(tester, labelFinder);
       expect(
         labelPainter.width,
         lessThanOrEqualTo(tester.getSize(labelFinder).width),
       );
       await tester.tap(tab);
       await tester.pumpAndSettle();
+      final semanticsTab = find.bySemanticsLabel(label);
+      expect(
+        tester
+            .getSemantics(semanticsTab)
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+      expect(
+        find.byKey(Key('file_picker_tab_content_$type')),
+        findsOneWidget,
+      );
     }
     await tester.tap(clearButton);
     await tester.pump();

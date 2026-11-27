@@ -250,16 +250,54 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final expandedChrome =
         textScale >= 2 && MediaQuery.sizeOf(context).width <= 600;
+    final shortViewportChrome =
+        expandedChrome && MediaQuery.sizeOf(context).height <= 400;
     final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
-    final expandedTabRowHeight =
-        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8).clamp(
-      64.0,
-      80.0,
+    final expandedTabRowHeight = shortViewportChrome
+        ? 56.0
+        : ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8).clamp(
+            64.0,
+            80.0,
+          );
+    final clearRowHeight = shortViewportChrome
+        ? 56.0
+        : ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16).clamp(
+            56.0,
+            100.0,
+          );
+    final tabBarView = TabBarView(
+      controller: _tabController,
+      children: _FileTabType.values.map(_buildTabContent).toList(),
     );
-    final clearRowHeight =
-        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16).clamp(
-      56.0,
-      100.0,
+    final confirmationButton = SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          border: Border(
+            top: BorderSide(color: cs.outlineVariant, width: 0.5),
+          ),
+        ),
+        child: FilledButton.icon(
+          key: const Key('file_picker_confirm_btn'),
+          onPressed: _pendingReadCount > 0
+              ? null
+              : () {
+                  final result = _selectedItems.values.toList();
+                  Navigator.of(context).pop(result);
+                },
+          icon: const Icon(Icons.check, size: 18),
+          label: ConstrainedText(
+            hasSelection
+                ? l10n.appMediaConfirmSelectionCount(_selectedItems.length)
+                : l10n.appMediaConfirmSelection,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
     );
 
     return PopScope(
@@ -351,57 +389,36 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             ),
           ),
         ),
-        body: Column(
-          children: [
-            // Tab content
-            Expanded(
-              key: const Key('file_picker_content'),
-              child: TabBarView(
-                controller: _tabController,
-                children: _FileTabType.values.map((type) {
-                  return _buildTabContent(type);
-                }).toList(),
-              ),
-            ),
-
-            // Preview bar (bottom)
-            if (hasSelection) _buildPreviewBar(cs),
-
-            // Confirm button
-            SafeArea(
-              top: false,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  border: Border(
-                    top: BorderSide(color: cs.outlineVariant, width: 0.5),
-                  ),
+        body: shortViewportChrome
+            ? SingleChildScrollView(
+                key: const Key('file_picker_short_viewport_scroll'),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      key: const Key('file_picker_content'),
+                      height: 200,
+                      child: tabBarView,
+                    ),
+                    if (hasSelection) _buildPreviewBar(cs),
+                    confirmationButton,
+                  ],
                 ),
-                child: FilledButton.icon(
-                  key: const Key('file_picker_confirm_btn'),
-                  onPressed: _pendingReadCount > 0
-                      ? null
-                      : () {
-                          final result = _selectedItems.values.toList();
-                          Navigator.of(context).pop(result);
-                        },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: ConstrainedText(
-                    hasSelection
-                        ? l10n.appMediaConfirmSelectionCount(
-                            _selectedItems.length,
-                          )
-                        : l10n.appMediaConfirmSelection,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              )
+            : Column(
+                children: [
+                  // Tab content
+                  Expanded(
+                    key: const Key('file_picker_content'),
+                    child: tabBarView,
                   ),
-                ),
+
+                  // Preview bar (bottom)
+                  if (hasSelection) _buildPreviewBar(cs),
+
+                  // Confirm button
+                  confirmationButton,
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -534,7 +551,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
     return Column(
-      key: const Key('file_picker_tab_content'),
+      key: Key('file_picker_tab_content_${type.name}'),
       children: [
         // Folder path indicator
         if (!isRoot)

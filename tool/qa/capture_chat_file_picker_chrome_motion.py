@@ -171,6 +171,11 @@ def main():
                 )][1]
                 - first_rendered_python
             )
+            if first_render_capture_delay >= 1:
+                raise RuntimeError(
+                    'No Chromium screenshot completed during the one-second '
+                    'initial still; retry the route capture'
+                )
 
             if page_errors:
                 raise RuntimeError(f'Browser reported page errors: {page_errors}')

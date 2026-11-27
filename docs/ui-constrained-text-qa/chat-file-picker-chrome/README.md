@@ -27,16 +27,20 @@ a `MutationObserver` timestamp for the first rendered Clear semantics node to
 align the video timeline. This retains the full initial still even when the
 browser takes time to expose the semantics node.
 The regression measures 410.003 logical px of label text in a 312 logical px
-slot, checks the exact endpoint, hold and reverse, and verifies reduced motion
-leaves the full label static. The three browser screenshots are direct route
-captures.
+slot and checks the exact endpoint, hold and reverse. With reduced motion, the
+visual label stays stationary and uses a single-line ellipsis in that slot;
+the complete localized label remains available in route semantics. The three
+browser screenshots are direct route captures.
 
 At 1×, the original inline AppBar actions and icon tab layout remain in place.
 At 3× on a narrow viewport, the clear action gets its own row and the four tabs
 reflow to a text-first two-column layout. The full tab labels fit without
 motion; the selected tab keeps its primary-color underline. The production
-route test checks all four labels and their semantics, taps each tab, clears
-the selection, and checks that the layout reports no rendering exception. The
+route test checks all four labels and their semantics, verifies tab selection
+and the active page after each tap, clears the selection, and checks that the
+layout reports no rendering exception. A short 568 × 320 landscape case checks
+that the file list, Clear action, preview and confirmation remain reachable by
+scrolling after selection. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.
