@@ -188,8 +188,8 @@ void main() {
         ellipsis: '…',
       )..layout(maxWidth: tester.getSize(constrainedText).width);
       final travel = Duration(
-        milliseconds: ((naturalText.height - visibleText.height) / 24 * 1000)
-            .round(),
+        milliseconds:
+            ((naturalText.height - visibleText.height) / 24 * 1000).round(),
       );
       expect(naturalText.height, greaterThan(visibleText.height));
       await tester.pump(const Duration(milliseconds: 999));
@@ -198,9 +198,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
       expect(tester.getTopLeft(text).dy, lessThan(start.dy));
 
-      final clip = find
-          .ancestor(of: text, matching: find.byType(ClipRect))
-          .first;
+      final clip =
+          find.ancestor(of: text, matching: find.byType(ClipRect)).first;
       final viewport = tester.getRect(clip);
       await tester.pump(travel);
       await tester.pump(const Duration(milliseconds: 20));

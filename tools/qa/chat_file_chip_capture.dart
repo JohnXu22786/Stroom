@@ -18,8 +18,8 @@ Future<void> main() async {
     final format = dot < 0 ? 'txt' : fileName.substring(dot + 1);
     ManifestDatabase.enableTestMode();
     // ignore: invalid_use_of_visible_for_testing_member
-    TextManifest.readFileOverrideForTesting = (_) async =>
-        Uint8List.fromList([1, 2, 3]);
+    TextManifest.readFileOverrideForTesting =
+        (_) async => Uint8List.fromList([1, 2, 3]);
     await TextManifest.addRecord(
       TextRecord(
         name: name,
@@ -105,19 +105,18 @@ class _FileChipFixture extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final query = Uri.base.queryParameters;
-    final fileName =
-        query['file'] ??
+    final fileName = query['file'] ??
         switch (query['name']) {
           'fit' => 'notes.txt',
           'two-line' => 'annual.pdf',
           _ => 'quarterly-report-2024-final-archive-version.pdf',
         };
     final textStyle = DefaultTextStyle.of(context).style.merge(
-      TextStyle(
-        fontSize: 10,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        );
     final textLayout = TextPainter(
       text: TextSpan(text: fileName, style: textStyle),
       textDirection: Directionality.of(context),
