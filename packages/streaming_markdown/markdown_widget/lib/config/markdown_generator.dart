@@ -174,6 +174,7 @@ String _withoutMarkdownCode(String source) {
   var fenceLength = 0;
   var fenceQuoteDepth = 0;
   var fenceListIndent = 0;
+  final listContentIndents = <int>[];
   var lineStart = 0;
   while (lineStart < source.length) {
     var lineEnd = lineStart;
@@ -192,11 +193,32 @@ String _withoutMarkdownCode(String source) {
       quoteDepth++;
       content = content.substring(match.end);
     }
+    var leadingSpaces = 0;
+    while (leadingSpaces < content.length &&
+        content.codeUnitAt(leadingSpaces) == 32) {
+      leadingSpaces++;
+    }
+    if (fenceCharacter == 0 && content.trim().isNotEmpty) {
+      while (listContentIndents.isNotEmpty &&
+          leadingSpaces < listContentIndents.last) {
+        listContentIndents.removeLast();
+      }
+    }
+    if (listContentIndents.isNotEmpty &&
+        leadingSpaces >= listContentIndents.last) {
+      listIndent = listContentIndents.last;
+      content = content.substring(listIndent);
+    }
+    var foundListItem = false;
     while (true) {
       final match = listPrefix.matchAsPrefix(content);
       if (match == null) break;
+      foundListItem = true;
       listIndent += match.end;
       content = content.substring(match.end);
+    }
+    if (foundListItem && fenceCharacter == 0) {
+      listContentIndents.add(listIndent);
     }
 
     if (fenceCharacter != 0 && quoteDepth < fenceQuoteDepth) {

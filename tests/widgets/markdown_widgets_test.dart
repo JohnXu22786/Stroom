@@ -1051,6 +1051,12 @@ $$
       expect(parsedNodeCount, greaterThan(0));
 
       parsedNodeCount = 0;
+      const deeplyNestedListFence =
+          '- outer\n  - middle\n    - ```\n      __literal__\n      ```\n      __bold__';
+      previewGenerator.buildPlainTextPreview([deeplyNestedListFence]);
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
       const escapedLiteral = r'\__literal__';
       final escapedLiteralPreview = previewGenerator.buildPlainTextPreview([
         escapedLiteral,
