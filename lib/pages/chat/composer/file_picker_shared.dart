@@ -59,6 +59,37 @@ class PreviewChip extends StatelessWidget {
     this.onTap,
   });
 
+  /// Height required by this chip's two-line label at the current text scale.
+  /// The list gives every item the height of the tallest selected chip.
+  static double requiredHeight(
+    BuildContext context, {
+    required String fileName,
+    required bool isImage,
+  }) {
+    if (isImage) return 72;
+
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: fileName,
+        style: defaultStyle.merge(
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: 100);
+
+    // Include the 8 dp content padding on both sides and the 1 dp border.
+    return (textPainter.height + 17).clamp(72, double.infinity).toDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
