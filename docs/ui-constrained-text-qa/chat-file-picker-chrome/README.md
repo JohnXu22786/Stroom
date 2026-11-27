@@ -24,8 +24,9 @@ travel to the tail endpoint, its two-second hold, the return travel, and the
 two-second head hold. The full label remains in route semantics throughout.
 The Chromium recorder starts sampling at the fixture-selection click and uses
 a `MutationObserver` timestamp for the first rendered Clear semantics node to
-align the video timeline. This retains the full initial still even when the
-browser takes time to expose the semantics node.
+align the video timeline. It requires an actual screenshot request after first
+render to complete during the one-second still and checks sample coverage in
+both travel directions before publishing the staged clip and endpoint frames.
 The regression measures 410.003 logical px of label text in a 312 logical px
 slot and checks the exact endpoint, hold and reverse. With reduced motion, the
 visual label stays stationary and uses a single-line ellipsis in that slot;
@@ -39,8 +40,9 @@ motion; the selected tab keeps its primary-color underline. The production
 route test checks all four labels and their semantics, verifies tab selection
 and the active page after each tap, clears the selection, and checks that the
 layout reports no rendering exception. A short 568 × 320 landscape case checks
-that the file list, Clear action, preview and confirmation remain reachable by
-scrolling after selection. The
+that the file list, Clear action, preview and confirmation remain reachable
+with a vertical drag after selection, including just above the short-height
+threshold. The
 de-DE case also checks the full title and long Clear label in semantics; Clear
 scrolls through the existing `ConstrainedText` behavior after its initial
 still period. No localized label is shortened.

@@ -10,6 +10,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / 'docs/ui-constrained-text-qa/chat-file-picker-chrome'
 FRAMES = OUTPUT / '.chat-file-picker-motion-frames'
+STAGING = OUTPUT / '.chat-file-picker-motion-stage'
 SERVER_LOG = OUTPUT / '.chat-file-picker-web.log'
 PREVIEW = OUTPUT / 'chat-file-picker-de-DE-clear-reveal-320x640.webm'
 HEAD_CAPTURE = OUTPUT / 'chat-file-picker-de-DE-320x640-scale3-clear-head-browser.png'
@@ -27,7 +28,9 @@ CYCLE_SECONDS = 1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS + 2
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(FRAMES, ignore_errors=True)
+    shutil.rmtree(STAGING, ignore_errors=True)
     FRAMES.mkdir()
+    STAGING.mkdir()
     server = subprocess.Popen(
         [
             'flutter', 'run', '--release', '--no-pub', '-d', 'web-server',
@@ -97,10 +100,6 @@ def main():
             selection_started = time.monotonic()
             row.evaluate('element => element.click()')
             frame_count = math.ceil(CYCLE_SECONDS * FRAME_RATE) + 1
-            tail_index = math.ceil((1 + TRAVEL_SECONDS) * FRAME_RATE)
-            return_head_index = round(
-                (1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS) * FRAME_RATE
-            )
             raw_frames = []
             first_rendered_at = None
             first_rendered_python = None
@@ -111,13 +110,16 @@ def main():
                 delay = target - time.monotonic()
                 if delay > 0:
                     time.sleep(delay)
+                frame_requested_at = time.monotonic()
                 frame_path = FRAMES / f'raw-{capture_index:04d}.png'
                 page.screenshot(path=str(frame_path))
                 # A screenshot is only available after Chromium finishes
                 # capturing it. Use that time so a slow capture cannot place
                 # a later visual state earlier on the video timeline.
                 frame_captured_at = time.monotonic()
-                raw_frames.append((frame_path, frame_captured_at))
+                raw_frames.append(
+                    (frame_path, frame_requested_at, frame_captured_at)
+                )
                 first_rendered_at = page.evaluate('window.__clearFirstRenderedAt')
                 if first_rendered_at is not None and first_rendered_python is None:
                     first_rendered_python = sync_python + (
@@ -135,19 +137,109 @@ def main():
             if first_rendered_at is None or first_rendered_python is None:
                 raise RuntimeError('Clear first-render timestamp was not recorded')
 
-            # Capture starts at the selection click so browser/semantics latency
-            # cannot skip the reveal. Rebase the screenshots to the first
-            # rendered Clear frame and duplicate only within the initial still.
+            opening_frames = [
+                (frame_path, requested_at, captured_at)
+                for frame_path, requested_at, captured_at in raw_frames
+                if (
+                    requested_at >= first_rendered_python
+                    and captured_at < first_rendered_python + 1
+                )
+            ]
+            if not opening_frames:
+                raise RuntimeError(
+                    'No screenshot was requested after Clear first rendered '
+                    'and completed during the one-second initial still'
+                )
+            opening_frame, _, opening_frame_captured_at = min(
+                opening_frames,
+                key=lambda frame: frame[2],
+            )
+            first_render_capture_delay = (
+                opening_frame_captured_at - first_rendered_python
+            )
+
+            # Rebase captures to first render. Only the verified screenshot
+            # taken during the initial still may be duplicated into frame 0.
             frame_paths = {}
-            for frame_path, frame_captured_at in raw_frames:
+            for frame_path, requested_at, frame_captured_at in raw_frames:
+                if requested_at < first_rendered_python:
+                    continue
                 elapsed = frame_captured_at - first_rendered_python
-                frame_index = math.floor(elapsed * FRAME_RATE)
+                frame_index = math.ceil(elapsed * FRAME_RATE)
                 if 0 <= frame_index < frame_count:
                     frame_paths[frame_index] = frame_path
             if not frame_paths:
                 raise RuntimeError('No captured frames followed the Clear render')
-            first_frame_index = min(frame_paths)
-            first_frame = frame_paths[first_frame_index]
+            first_frame_index = math.ceil(
+                first_render_capture_delay * FRAME_RATE
+            )
+            first_frame = opening_frame
+            frame_paths[first_frame_index] = opening_frame
+
+            # Each travel interval must contain real Chromium samples with no
+            # sustained gaps before missing frame slots are filled for encode.
+            travel_sample_counts = {}
+            travel_max_gaps = {}
+            for label, travel_start, travel_end in (
+                ('forward', 1, 1 + TRAVEL_SECONDS),
+                (
+                    'return',
+                    1 + TRAVEL_SECONDS + 2,
+                    1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS,
+                ),
+            ):
+                first_travel_index = math.ceil(travel_start * FRAME_RATE)
+                last_travel_index = math.ceil(travel_end * FRAME_RATE)
+                sampled_indices = sorted(
+                    index
+                    for index in frame_paths
+                    if first_travel_index <= index <= last_travel_index
+                )
+                expected_samples = last_travel_index - first_travel_index + 1
+                if len(sampled_indices) < math.ceil(expected_samples * 0.75):
+                    raise RuntimeError(
+                        f'{label.title()} travel has only '
+                        f'{len(sampled_indices)}/{expected_samples} real samples'
+                    )
+                gaps = [
+                    right - left - 1
+                    for left, right in zip(
+                        [first_travel_index - 1, *sampled_indices],
+                        [*sampled_indices, last_travel_index + 1],
+                    )
+                ]
+                if gaps and max(gaps) > 2:
+                    raise RuntimeError(
+                        f'{label.title()} travel has a sustained '
+                        f'{max(gaps)}-frame capture gap'
+                    )
+                travel_sample_counts[label] = len(sampled_indices)
+                travel_max_gaps[label] = max(gaps, default=0)
+
+            def completed_endpoint_capture(elapsed_seconds):
+                endpoint_at = first_rendered_python + elapsed_seconds
+                candidates = [
+                    (frame_path, captured_at)
+                    for frame_path, requested_at, captured_at in raw_frames
+                    if (
+                        requested_at >= first_rendered_python
+                        and endpoint_at <= captured_at <= endpoint_at + 0.5
+                    )
+                ]
+                if not candidates:
+                    raise RuntimeError(
+                        f'No real browser screenshot captured the '
+                        f'{elapsed_seconds:.3f}s motion endpoint'
+                    )
+                return min(candidates, key=lambda frame: frame[1])[0]
+
+            tail_endpoint_capture = completed_endpoint_capture(
+                1 + TRAVEL_SECONDS
+            )
+            returned_head_capture = completed_endpoint_capture(
+                1 + TRAVEL_SECONDS + 2 + TRAVEL_SECONDS
+            )
+
             for frame_index in range(first_frame_index + 1):
                 frame_paths[frame_index] = first_frame
             previous_frame = first_frame
@@ -157,25 +249,15 @@ def main():
                     previous_frame,
                     FRAMES / f'frame-{frame_index:04d}.png',
                 )
-            shutil.copyfile(FRAMES / 'frame-0000.png', HEAD_CAPTURE)
-            shutil.copyfile(FRAMES / f'frame-{tail_index:04d}.png', TAIL_CAPTURE)
+            shutil.copyfile(FRAMES / 'frame-0000.png', STAGING / HEAD_CAPTURE.name)
             shutil.copyfile(
-                FRAMES / f'frame-{return_head_index:04d}.png',
-                RETURN_HEAD_CAPTURE,
+                tail_endpoint_capture,
+                STAGING / TAIL_CAPTURE.name,
             )
-            first_render_capture_delay = (
-                raw_frames[next(
-                    index
-                    for index, (_, frame_captured_at) in enumerate(raw_frames)
-                    if frame_captured_at >= first_rendered_python
-                )][1]
-                - first_rendered_python
+            shutil.copyfile(
+                returned_head_capture,
+                STAGING / RETURN_HEAD_CAPTURE.name,
             )
-            if first_render_capture_delay >= 1:
-                raise RuntimeError(
-                    'No Chromium screenshot completed during the one-second '
-                    'initial still; retry the route capture'
-                )
 
             if page_errors:
                 raise RuntimeError(f'Browser reported page errors: {page_errors}')
@@ -188,18 +270,25 @@ def main():
                 '-framerate', str(FRAME_RATE), '-i',
                 str(FRAMES / 'frame-%04d.png'),
                 '-c:v', 'libvpx-vp9', '-b:v', '1M', '-pix_fmt', 'yuv420p',
-                str(PREVIEW),
+                str(STAGING / PREVIEW.name),
             ],
             check=True,
             cwd=ROOT,
         )
         duration = float(subprocess.run(
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-             '-of', 'csv=p=0', str(PREVIEW)],
+             '-of', 'csv=p=0', str(STAGING / PREVIEW.name)],
             check=True, capture_output=True, text=True,
         ).stdout.strip())
         if duration < CYCLE_SECONDS - 0.3:
             raise RuntimeError(f'Motion preview is short: {duration:.2f}s')
+        for staged_name, final_path in (
+            (HEAD_CAPTURE.name, HEAD_CAPTURE),
+            (TAIL_CAPTURE.name, TAIL_CAPTURE),
+            (RETURN_HEAD_CAPTURE.name, RETURN_HEAD_CAPTURE),
+            (PREVIEW.name, PREVIEW),
+        ):
+            (STAGING / staged_name).replace(final_path)
         print({
             'preview': str(PREVIEW.relative_to(ROOT)),
             'viewport': '320x640 logical px',
@@ -212,6 +301,8 @@ def main():
             'first_render_capture_delay_seconds': round(
                 first_render_capture_delay, 3
             ),
+            'travel_sample_counts': travel_sample_counts,
+            'travel_max_missing_frames': travel_max_gaps,
             'page_errors': page_errors,
         })
     finally:
@@ -222,6 +313,7 @@ def main():
             server.kill()
             server.wait()
         shutil.rmtree(FRAMES, ignore_errors=True)
+        shutil.rmtree(STAGING, ignore_errors=True)
         SERVER_LOG.unlink(missing_ok=True)
 
 

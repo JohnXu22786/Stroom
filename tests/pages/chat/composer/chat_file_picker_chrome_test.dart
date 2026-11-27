@@ -145,8 +145,8 @@ void main() {
       );
 
       for (final (type, label) in [
-        ('text', 'Text'),
         ('image', 'Images'),
+        ('text', 'Text'),
         ('video', 'Videos'),
         ('audio', 'Audio'),
       ]) {
@@ -210,17 +210,27 @@ void main() {
     final landscapeConfirm = find.byKey(const Key('file_picker_confirm_btn'));
     final landscapePreview = find.byKey(const Key('file_picker_preview_bar'));
     final landscapeFile = find.text('picker-chrome-note.txt').first;
+    final landscapeScroll =
+        find.byKey(const Key('file_picker_short_viewport_scroll'));
     final landscapeViewport = const Rect.fromLTWH(0, 0, 568, 320);
-    await tester.ensureVisible(landscapeFile);
-    await tester.pumpAndSettle();
     expect(tester.getRect(landscapeFile).overlaps(landscapeViewport), isTrue);
-    await tester.ensureVisible(landscapePreview);
+    final previewTopBeforeDrag = tester.getTopLeft(landscapePreview).dy;
+    await tester.drag(landscapeScroll, const Offset(0, -300));
     await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(landscapePreview).dy,
+      lessThan(previewTopBeforeDrag),
+    );
     expect(
       tester.getRect(landscapePreview).overlaps(landscapeViewport),
       isTrue,
     );
-    await tester.ensureVisible(landscapeConfirm);
+    tester.view.physicalSize = const Size(568, 401);
+    await tester.pumpAndSettle();
+    expect(landscapeScroll, findsOneWidget);
+    tester.view.physicalSize = const Size(568, 320);
+    await tester.pumpAndSettle();
+    await tester.drag(landscapeScroll, const Offset(0, -500));
     await tester.pumpAndSettle();
     expect(
       tester.getRect(landscapeConfirm).overlaps(landscapeViewport),
@@ -228,7 +238,9 @@ void main() {
     );
     expect(tester.getRect(landscapeClear).overlaps(landscapeViewport), isTrue);
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.tap(landscapeConfirm);
+    await tester.pumpAndSettle();
+    expect(find.text('Open picker'), findsOneWidget);
     landscapeTextScale.dispose();
 
     final germanTextScale = ValueNotifier(1.0);
@@ -285,8 +297,8 @@ void main() {
     expect(tester.getTopLeft(clearText).dx, greaterThan(clearEndRect.left));
 
     for (final (type, label) in [
-      ('text', 'Text'),
       ('image', 'Bilder'),
+      ('text', 'Text'),
       ('video', 'Videos'),
       ('audio', 'Audio'),
     ]) {

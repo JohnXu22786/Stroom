@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' show max;
 import 'dart:typed_data';
 import 'dart:ui' show SemanticsRole;
 
@@ -250,24 +251,49 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final expandedChrome =
         textScale >= 2 && MediaQuery.sizeOf(context).width <= 600;
-    final shortViewportChrome =
-        expandedChrome && MediaQuery.sizeOf(context).height <= 400;
     final tabLabelStyle = Theme.of(context).textTheme.labelLarge;
-    final expandedTabRowHeight = shortViewportChrome
-        ? 56.0
-        : ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8).clamp(
-            64.0,
-            80.0,
-          );
-    final clearRowHeight = shortViewportChrome
-        ? 56.0
-        : ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16).clamp(
-            56.0,
-            100.0,
-          );
+    final standardExpandedTabRowHeight =
+        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.35 + 8)
+            .clamp(64.0, 80.0)
+            .toDouble();
+    final standardClearRowHeight =
+        ((tabLabelStyle?.fontSize ?? 14) * textScale * 1.5 + 16)
+            .clamp(56.0, 100.0)
+            .toDouble();
+    const previewBarHeight = 106.0;
+    const confirmationBarHeight = kMinInteractiveDimension + 16.0;
+    final mediaSize = MediaQuery.sizeOf(context);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final estimatedBodyHeight = mediaSize.height -
+        viewPadding.top -
+        viewPadding.bottom -
+        kToolbarHeight -
+        standardExpandedTabRowHeight * 2 -
+        (hasSelection ? standardClearRowHeight : 0) -
+        (hasSelection ? previewBarHeight : 0) -
+        confirmationBarHeight;
+    final shortViewportChrome = expandedChrome && estimatedBodyHeight < 96;
+    final expandedTabRowHeight =
+        shortViewportChrome ? 56.0 : standardExpandedTabRowHeight;
+    final clearRowHeight = shortViewportChrome ? 56.0 : standardClearRowHeight;
+    final maxShortViewportRows = _tabData.values.fold<int>(1, (largest, data) {
+      final rows = data.records.length + data.allFolders.length + 1;
+      return max(largest, rows);
+    });
+    final shortViewportTabContentHeight = max(
+      200.0,
+      maxShortViewportRows * 112.0 + 48,
+    ).toDouble();
     final tabBarView = TabBarView(
       controller: _tabController,
-      children: _FileTabType.values.map(_buildTabContent).toList(),
+      children: _FileTabType.values
+          .map(
+            (type) => _buildTabContent(
+              type,
+              shortViewport: shortViewportChrome,
+            ),
+          )
+          .toList(),
     );
     final confirmationButton = SafeArea(
       top: false,
@@ -396,7 +422,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   children: [
                     SizedBox(
                       key: const Key('file_picker_content'),
-                      height: 200,
+                      height: shortViewportTabContentHeight,
                       child: tabBarView,
                     ),
                     if (hasSelection) _buildPreviewBar(cs),
@@ -514,7 +540,10 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // Tab content builder
   // ====================================================================
 
-  Widget _buildTabContent(_FileTabType type) {
+  Widget _buildTabContent(
+    _FileTabType type, {
+    required bool shortViewport,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final loading = _tabLoading[type] ?? true;
@@ -549,6 +578,34 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     );
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
+    final listItems = <Widget>[
+      // Back button (when in subfolder)
+      if (!isRoot) _buildBackItem(type, currentFolder),
+
+      // Subfolders
+      for (final folder in subFolders)
+        _buildFolderItem(type, folder, currentFolder),
+
+      // Files
+      for (final record in currentFiles) _buildFileItem(type, record),
+    ];
+    final emptyState = Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.folder_open_outlined,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isRoot ? l10n.chatFilePickerEmpty : l10n.appMediaEmptyFolder,
+            style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
 
     return Column(
       key: Key('file_picker_tab_content_${type.name}'),
@@ -577,47 +634,29 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             ),
           ),
 
-        // File list
-        Expanded(
-          child: !hasContent
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.folder_open_outlined,
-                        size: 48,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        isRoot
-                            ? l10n.chatFilePickerEmpty
-                            : l10n.appMediaEmptyFolder,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+        // In the short viewport path, the enclosing dialog body owns the one
+        // vertical scroll position. Keeping this list non-scrollable lets
+        // gestures reach the preview and confirmation below it.
+        if (shortViewport)
+          if (!hasContent)
+            SizedBox(height: 200, child: emptyState)
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: listItems,
+              ),
+            )
+        else
+          Expanded(
+            child: !hasContent
+                ? emptyState
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    children: listItems,
                   ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  children: [
-                    // Back button (when in subfolder)
-                    if (!isRoot) _buildBackItem(type, currentFolder),
-
-                    // Subfolders
-                    for (final folder in subFolders)
-                      _buildFolderItem(type, folder, currentFolder),
-
-                    // Files
-                    for (final record in currentFiles)
-                      _buildFileItem(type, record),
-                  ],
-                ),
-        ),
+          ),
       ],
     );
   }
