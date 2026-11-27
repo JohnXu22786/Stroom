@@ -18,14 +18,47 @@ http.Client createAssistantCatalogClient({
         );
       }
       final addresses = await lookup(uri.host);
-      if (addresses.isEmpty || addresses.any(isBlockedAddress)) {
-        throw const FormatException(
-          'Assistant host resolved to a blocked network address.',
-        );
-      }
-      return Socket.startConnect(addresses.first, uri.port);
+      return connectToAllowedAssistantCatalogAddress<ConnectionTask<Socket>>(
+        addresses: addresses,
+        port: uri.port,
+        isBlockedAddress: isBlockedAddress,
+        connect: (address, port) async {
+          final task = await Socket.startConnect(address, port);
+          try {
+            await task.socket;
+            return task;
+          } on SocketException {
+            task.cancel();
+            rethrow;
+          }
+        },
+      );
     };
   return IOClient(httpClient);
+}
+
+Future<T> connectToAllowedAssistantCatalogAddress<T>({
+  required List<String> addresses,
+  required int port,
+  required bool Function(String address) isBlockedAddress,
+  required Future<T> Function(String address, int port) connect,
+}) async {
+  if (addresses.isEmpty || addresses.any(isBlockedAddress)) {
+    throw const FormatException(
+      'Assistant host resolved to a blocked network address.',
+    );
+  }
+
+  SocketException? lastConnectionError;
+  for (final address in addresses) {
+    try {
+      return await connect(address, port);
+    } on SocketException catch (error) {
+      lastConnectionError = error;
+    }
+  }
+
+  throw lastConnectionError!;
 }
 
 Future<List<String>> lookupAssistantCatalogAddresses(String host) async =>
