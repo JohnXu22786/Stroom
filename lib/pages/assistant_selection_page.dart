@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -140,33 +141,67 @@ class AssistantSelectionPage extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      DragSortArea(
-                        // 与旧 GridView 相同的几何：
-                        // SliverGridDelegateWithMaxCrossAxisExtent(
-                        //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
-                        wrap: false,
-                        grid: true,
-                        gridMaxCrossAxisExtent: 220,
-                        gridCrossAxisSpacing: 12,
-                        gridMainAxisSpacing: 12,
-                        gridChildAspectRatio: 0.85,
-                        dragDelay: const Duration(milliseconds: 600),
-                        dragHighlightColor: dragHighlightColor,
-                        draggedItemOpacity: 0.88,
-                        values: [for (final a in assistants) a.id],
-                        onReorder: (from, to) => ref
-                            .read(assistantProvider.notifier)
-                            .reorderAssistant(from, to),
-                        itemBuilder: (context, index, id) {
-                          final assistant = assistants[index];
-                          return AssistantCard(
-                            assistant: assistant,
-                            pressHighlightColor: pressHighlightColor,
-                            onTap: () =>
-                                _onAssistantSelected(context, ref, assistant),
-                            // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
-                            onMenu: () =>
-                                _showAssistantMenu(context, ref, assistant),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const maxCrossAxisExtent = 220.0;
+                          const crossAxisSpacing = 12.0;
+                          const defaultAspectRatio = 0.85;
+                          final columns = math.max(
+                            1,
+                            (constraints.maxWidth /
+                                    (maxCrossAxisExtent + crossAxisSpacing))
+                                .ceil(),
+                          );
+                          final cellWidth = (constraints.maxWidth -
+                                  (columns - 1) * crossAxisSpacing) /
+                              columns;
+                          final textScaler = MediaQuery.textScalerOf(context);
+                          final scaledContentHeight = 56 +
+                              12 +
+                              textScaler.scale(15) * 1.2 +
+                              4 +
+                              textScaler.scale(12) * 1.2 * 2 +
+                              32 +
+                              28 * (textScaler.scale(1) - 1).clamp(0, 1);
+                          final cellHeight = math.max(
+                            cellWidth / defaultAspectRatio,
+                            scaledContentHeight,
+                          );
+
+                          return DragSortArea(
+                            // Keep the familiar grid proportions at 1× while
+                            // making enough vertical room for enlarged text.
+                            wrap: false,
+                            grid: true,
+                            gridMaxCrossAxisExtent: maxCrossAxisExtent,
+                            gridCrossAxisSpacing: crossAxisSpacing,
+                            gridMainAxisSpacing: 12,
+                            gridChildAspectRatio: cellWidth / cellHeight,
+                            dragDelay: const Duration(milliseconds: 600),
+                            dragHighlightColor: dragHighlightColor,
+                            draggedItemOpacity: 0.88,
+                            values: [for (final a in assistants) a.id],
+                            onReorder: (from, to) => ref
+                                .read(assistantProvider.notifier)
+                                .reorderAssistant(from, to),
+                            itemBuilder: (context, index, id) {
+                              final assistant = assistants[index];
+                              return AssistantCard(
+                                assistant: assistant,
+                                pressHighlightColor: pressHighlightColor,
+                                onTap: () => _onAssistantSelected(
+                                  context,
+                                  ref,
+                                  assistant,
+                                ),
+                                // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                                onMenu: () => _showAssistantMenu(
+                                  context,
+                                  ref,
+                                  assistant,
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
