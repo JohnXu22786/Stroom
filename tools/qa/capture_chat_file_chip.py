@@ -120,6 +120,37 @@ try:
             page.wait_for_timeout(150)
             return metrics[-1] if len(metrics) > before else None
 
+        def capture_picker(scale: int):
+            params = {
+                "route": "picker",
+                "file": "annual.pdf",
+                "scale": scale,
+                "theme": "light",
+            }
+            query = "&".join(f"{key}={value}" for key, value in params.items())
+            page.goto(f"{URL}?{query}", wait_until="load", timeout=120_000)
+            page.wait_for_timeout(2_500)
+            # The fixture's only record is the first text row. Click its body
+            # so the production dialog loads the file and shows the real chip.
+            page.mouse.click(180, 140 if scale == 1 else 165)
+            page.wait_for_timeout(500)
+            screenshot = page.screenshot()
+            if Image.open(BytesIO(screenshot)).size != (320, 640):
+                raise RuntimeError("Unexpected production dialog screenshot size")
+            return screenshot
+
+        picker_fit = capture_picker(1)
+        (OUTPUT / "chat-file-picker-dialog-annual-320x640-scale1-light.png").write_bytes(
+            picker_fit
+        )
+        screenshots.append("chat-file-picker-dialog-annual-320x640-scale1-light.png")
+
+        picker_scaled = capture_picker(3)
+        (OUTPUT / "chat-file-picker-dialog-annual-320x640-scale3-light.png").write_bytes(
+            picker_scaled
+        )
+        screenshots.append("chat-file-picker-dialog-annual-320x640-scale3-light.png")
+
         navigate("fit", 1, "light")
         (OUTPUT / "chat-file-chip-fitting-320x640-scale1-light.png").write_bytes(
             page.screenshot()
