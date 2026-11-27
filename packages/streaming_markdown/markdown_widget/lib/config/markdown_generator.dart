@@ -169,6 +169,7 @@ String _withoutMarkdownCode(String source) {
   final fenceStart = RegExp(r'^ {0,3}(`{3,}|~{3,})');
   final fenceEnd = RegExp(r'^ {0,3}(`{3,}|~{3,})[ \t]*$');
   final quotePrefix = RegExp(r'^ {0,3}>[ \t]?');
+  final listPrefix = RegExp(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])[ \t]+');
   var fenceCharacter = 0;
   var fenceLength = 0;
   var fenceQuoteDepth = 0;
@@ -183,6 +184,11 @@ String _withoutMarkdownCode(String source) {
       final match = quotePrefix.matchAsPrefix(content);
       if (match == null) break;
       quoteDepth++;
+      content = content.substring(match.end);
+    }
+    while (true) {
+      final match = listPrefix.matchAsPrefix(content);
+      if (match == null) break;
       content = content.substring(match.end);
     }
 
@@ -222,21 +228,33 @@ String _withoutMarkdownCode(String source) {
   }
 
   final sourceWithoutFences = String.fromCharCodes(codeUnits);
-  final pendingRuns = <int, int>{};
-  for (final run in RegExp(r'`+').allMatches(sourceWithoutFences)) {
+  final runs = RegExp(r'`+').allMatches(sourceWithoutFences).toList();
+  final nextRunByLength = <int, int>{};
+  final nextMatchingRun = List<int>.filled(runs.length, -1);
+  for (var i = runs.length - 1; i >= 0; i--) {
+    final run = runs[i];
     final runLength = run.end - run.start;
-    final pendingStart = pendingRuns.remove(runLength);
-    if (pendingStart != null) {
-      // Backslashes do not escape backticks inside a code span.
-      maskRange(pendingStart, run.end);
-      continue;
-    }
+    nextMatchingRun[i] = nextRunByLength[runLength] ?? -1;
+    nextRunByLength[runLength] = i;
+  }
 
+  var runIndex = 0;
+  while (runIndex < runs.length) {
+    final run = runs[runIndex];
     var backslashCount = 0;
     for (var i = run.start - 1; i >= 0 && codeUnits[i] == 92; i--) {
       backslashCount++;
     }
-    if (!backslashCount.isOdd) pendingRuns[runLength] = run.start;
+    final closingRunIndex = nextMatchingRun[runIndex];
+    if (backslashCount.isOdd || closingRunIndex == -1) {
+      runIndex++;
+      continue;
+    }
+
+    // Once a run opens a code span, different-length runs inside it cannot
+    // pair with delimiters that follow the span.
+    maskRange(run.start, runs[closingRunIndex].end);
+    runIndex = closingRunIndex + 1;
   }
   return String.fromCharCodes(codeUnits);
 }

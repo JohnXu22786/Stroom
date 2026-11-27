@@ -862,6 +862,34 @@ $$
         quotedCode,
       );
       expect(parsedNodeCount, 0);
+
+      parsedNodeCount = 0;
+      const unclosedListFence = '- ```\n  __literal__';
+      final listFencePreview = previewGenerator.buildPlainTextPreview([
+        unclosedListFence,
+      ]);
+      expect(
+        ((listFencePreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unclosedListFence,
+      );
+      expect(parsedNodeCount, 0);
+
+      const mixedBacktickRuns = r'`x `` y ` __bold__ ``z``';
+      final mixedBacktickPreview = previewGenerator.buildPlainTextPreview([
+        mixedBacktickRuns,
+      ]);
+      final mixedBacktickSpan = _unwrapLinkRecognizerLifecycle(
+        (mixedBacktickPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(mixedBacktickSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(parsedNodeCount, greaterThan(0));
     });
 
     test('renders display math and bold in the bounded streaming preview', () {
