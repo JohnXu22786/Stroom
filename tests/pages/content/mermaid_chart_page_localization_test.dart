@@ -26,6 +26,12 @@ Widget _buildTestApp({
   );
 }
 
+bool _hasTextFieldHint(TextField field, String expected) {
+  final hint = field.decoration?.hint;
+  final visualHint = hint is ExcludeSemantics ? hint.child : hint;
+  return visualHint is ConstrainedText && visualHint.data == expected;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -96,9 +102,8 @@ void main() {
     final fileNameField = find.byWidgetPredicate(
       (widget) =>
           widget is TextField &&
-          widget.decoration?.hint is ConstrainedText &&
-          (widget.decoration!.hint! as ConstrainedText).data ==
-              'Enter a filename (.mmd added automatically)',
+          _hasTextFieldHint(
+              widget, 'Enter a filename (.mmd added automatically)'),
     );
     await tester.enterText(fileNameField, '');
     await tester.tap(find.text('Done'));

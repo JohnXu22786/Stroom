@@ -352,51 +352,63 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true,
-        title: ConstrainedText(
-          strings.batchDlgSavePreset,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 60,
-          decoration: InputDecoration(
-            label: ConstrainedText(
-              strings.batchDlgPresetName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            helper: Text(
-              strings.batchDlgPresetHint,
-              softWrap: true,
+      builder: (ctx) {
+        final dialogTheme = Theme.of(ctx);
+        final helperStyle =
+            (dialogTheme.textTheme.bodySmall ?? const TextStyle())
+                .copyWith(
+                  color: dialogTheme.useMaterial3
+                      ? dialogTheme.colorScheme.onSurfaceVariant
+                      : dialogTheme.hintColor,
+                )
+                .merge(dialogTheme.inputDecorationTheme.helperStyle);
+        return AlertDialog(
+          scrollable: true,
+          title: ConstrainedText(
+            strings.batchDlgSavePreset,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 60,
+            decoration: InputDecoration(
+              label: ConstrainedText(
+                strings.batchDlgPresetName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              helper: Text(
+                strings.batchDlgPresetHint,
+                style: helperStyle,
+                softWrap: true,
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: ConstrainedText(
-              strings.batchDlgCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: ConstrainedText(
+                strings.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty)
-                Navigator.pop(ctx, controller.text.trim());
-            },
-            child: ConstrainedText(
-              strings.batchDlgSave,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            FilledButton(
+              onPressed: () {
+                if (controller.text.trim().isNotEmpty)
+                  Navigator.pop(ctx, controller.text.trim());
+              },
+              child: ConstrainedText(
+                strings.batchDlgSave,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
     // Route animations may still hold the controller until the next frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());

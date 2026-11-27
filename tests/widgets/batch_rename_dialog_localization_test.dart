@@ -91,10 +91,22 @@ void main() {
     expect(field.decoration!.helper, isA<Text>());
     expect(field.decoration!.helperText, isNull);
     final helperContext = tester.element(find.text(l10n.batchDlgPresetHint));
+    final helperWidget =
+        tester.widget<Text>(find.text(l10n.batchDlgPresetHint));
+    final theme = Theme.of(helperContext);
+    final effectiveHelperStyle =
+        (theme.textTheme.bodySmall ?? const TextStyle())
+            .copyWith(
+              color: theme.useMaterial3
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.hintColor,
+            )
+            .merge(theme.inputDecorationTheme.helperStyle);
+    expect(helperWidget.style, effectiveHelperStyle);
     final helperText = TextPainter(
       text: TextSpan(
         text: l10n.batchDlgPresetHint,
-        style: DefaultTextStyle.of(helperContext).style,
+        style: helperWidget.style,
       ),
       textDirection: Directionality.of(helperContext),
       textScaler: MediaQuery.textScalerOf(helperContext),

@@ -28,6 +28,12 @@ import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
+bool _hasTextFieldHint(TextField field, String expected) {
+  final hint = field.decoration?.hint;
+  final visualHint = hint is ExcludeSemantics ? hint.child : hint;
+  return visualHint is ConstrainedText && visualHint.data == expected;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -5220,9 +5226,7 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data ==
-                  '输入文件名（自动添加 .mmd 后缀）',
+              _hasTextFieldHint(widget, '输入文件名（自动添加 .mmd 后缀）'),
         );
 
         Future<void> saveWithName(
@@ -5304,9 +5308,7 @@ void main() {
         final fileNameField = find.byWidgetPredicate(
           (widget) =>
               widget is TextField &&
-              widget.decoration?.hint is ConstrainedText &&
-              (widget.decoration!.hint! as ConstrainedText).data ==
-                  '输入文件名（自动添加 .mmd 后缀）',
+              _hasTextFieldHint(widget, '输入文件名（自动添加 .mmd 后缀）'),
         );
 
         await tester.tap(find.byIcon(Icons.save));

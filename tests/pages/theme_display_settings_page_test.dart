@@ -500,6 +500,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(_buildGermanThemePage());
     await tester.pump();
     await tester.drag(
@@ -515,8 +516,10 @@ void main() {
       tester.element(find.byKey(const Key('language-search-field'))),
     )!
         .languageSearchHint;
-    expect(field.decoration!.hint, isA<ConstrainedText>());
-    expect((field.decoration!.hint! as ConstrainedText).data, hint);
+    expect(field.decoration!.hint, isA<ExcludeSemantics>());
+    final visualHint =
+        (field.decoration!.hint! as ExcludeSemantics).child as ConstrainedText;
+    expect(visualHint.data, hint);
     expect(field.decoration!.hintText, isNull);
     final hintFinder = find.byWidgetPredicate(
       (widget) => widget is ConstrainedText && widget.data == hint,
@@ -526,6 +529,15 @@ void main() {
       greaterThan(tester.getSize(hintFinder).width),
     );
     await tester.tap(find.byKey(const Key('language-search-field')));
+    await tester.pump();
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('language-search-field')))
+          .getSemanticsData()
+          .hint,
+      hint,
+    );
+    semantics.dispose();
     await tester.enterText(
         find.byKey(const Key('language-search-field')), 'sprache');
     await tester.pump();
@@ -542,8 +554,9 @@ void main() {
     final wideField = tester.widget<TextField>(
       find.byKey(const Key('language-search-field')),
     );
-    expect(wideField.decoration!.hint, isA<ConstrainedText>());
-    final wideHint = wideField.decoration!.hint! as ConstrainedText;
+    expect(wideField.decoration!.hint, isA<ExcludeSemantics>());
+    final wideHint = (wideField.decoration!.hint! as ExcludeSemantics).child
+        as ConstrainedText;
     final wideHintFinder = find.byWidgetPredicate(
       (widget) => widget is ConstrainedText && widget.data == wideHint.data,
     );

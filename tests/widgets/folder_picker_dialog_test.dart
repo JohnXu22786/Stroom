@@ -45,6 +45,7 @@ void main() {
     testWidgets('localized narrow field hints remain available and editable', (
       tester,
     ) async {
+      final semantics = tester.ensureSemantics();
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
       tester.platformDispatcher.textScaleFactorTestValue = 2;
@@ -86,18 +87,23 @@ void main() {
       )!;
       expect(
         fields.map((field) => field.decoration!.hint),
-        everyElement(isA<ConstrainedText>()),
+        everyElement(isA<ExcludeSemantics>()),
         reason:
             'Both finite field hints should use ConstrainedText; current hintText values: '
             '${fields.map((field) => field.decoration!.hintText).toList()}',
       );
+      final visualFileNameHint =
+          (fields[0].decoration!.hint! as ExcludeSemantics).child
+              as ConstrainedText;
       expect(
-        (fields[0].decoration!.hint! as ConstrainedText).data,
+        visualFileNameHint.data,
         l10n.chatSaveFilenameHint,
       );
-      expect(fields[1].decoration!.hint, isA<ConstrainedText>());
+      final visualFolderNameHint =
+          (fields[1].decoration!.hint! as ExcludeSemantics).child
+              as ConstrainedText;
       expect(
-        (fields[1].decoration!.hint! as ConstrainedText).data,
+        visualFolderNameHint.data,
         l10n.folderPickerFolderNameHint,
       );
       for (final hint in [
@@ -117,6 +123,11 @@ void main() {
       await tester.ensureVisible(fileNameField);
       await tester.pump();
       await tester.tap(fileNameField);
+      await tester.pump();
+      expect(
+        tester.getSemantics(fileNameField).getSemanticsData().hint,
+        l10n.chatSaveFilenameHint,
+      );
       await tester.enterText(fileNameField, 'datei.md');
       await tester.pump();
       expect(fileNameController.text, 'datei.md');
@@ -125,6 +136,12 @@ void main() {
       await tester.ensureVisible(newFolderField);
       await tester.pump();
       await tester.tap(newFolderField);
+      await tester.pump();
+      expect(
+        tester.getSemantics(newFolderField).getSemanticsData().hint,
+        l10n.folderPickerFolderNameHint,
+      );
+      semantics.dispose();
       await tester.enterText(newFolderField, 'Neuer Ordner');
       await tester.pump();
       expect(

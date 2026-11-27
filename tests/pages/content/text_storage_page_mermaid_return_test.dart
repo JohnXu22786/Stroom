@@ -30,6 +30,12 @@ class _GatedTextRecordsNotifier extends TextRecordsNotifier {
   }
 }
 
+bool _hasTextFieldHint(TextField field, String expected) {
+  final hint = field.decoration?.hint;
+  final visualHint = hint is ExcludeSemantics ? hint.child : hint;
+  return visualHint is ConstrainedText && visualHint.data == expected;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -95,10 +101,7 @@ void main() {
       await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
       await tester.pump();
       final folderNameField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField &&
-            widget.decoration?.hint is ConstrainedText &&
-            (widget.decoration!.hint! as ConstrainedText).data == '输入文件夹名称',
+        (widget) => widget is TextField && _hasTextFieldHint(widget, '输入文件夹名称'),
       );
       await tester.enterText(folderNameField, folderName);
       await tester.tap(

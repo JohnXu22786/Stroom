@@ -117,23 +117,28 @@ class _ThemeDisplaySettingsPageState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 children: [
-                  TextField(
-                    key: const Key('language-search-field'),
-                    controller: _languageSearchController,
-                    onChanged: (query) =>
-                        setState(() => _languageQuery = query),
-                    decoration: InputDecoration(
-                      hint: ConstrainedText(
-                        strings.languageSearchHint,
-                        style: languageSearchHintStyle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  Semantics(
+                    hint: strings.languageSearchHint,
+                    child: TextField(
+                      key: const Key('language-search-field'),
+                      controller: _languageSearchController,
+                      onChanged: (query) =>
+                          setState(() => _languageQuery = query),
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedText(
+                            strings.languageSearchHint,
+                            style: languageSearchHintStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        isDense: true,
                       ),
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      isDense: true,
                     ),
                   ),
                   const Divider(height: 24),
