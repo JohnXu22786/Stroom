@@ -58,7 +58,7 @@ class AutolinkExtensionSyntax extends InlineSyntax {
     // https://github.github.com/gfm/#autolinks-extension-.
     if (startMatch[1] != null && parser.pos > 0) {
       final precededBy = String.fromCharCode(parser.charAt(parser.pos - 1));
-      const validPrecedingChars = {'\n', ' ', '*', '_', '~', '(', '>'};
+      const validPrecedingChars = {'\n', ' ', '\t', '*', '_', '~', '(', '>'};
       if (!validPrecedingChars.contains(precededBy)) {
         return false;
       }
