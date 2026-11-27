@@ -262,7 +262,6 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
 
     if (result == null || result == SaveAction.cancel) {
       // User cancelled the save dialog — return to editor.
-      _editedBytes = null;
       return;
     }
 
