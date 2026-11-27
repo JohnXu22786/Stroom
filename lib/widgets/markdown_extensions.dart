@@ -2249,7 +2249,7 @@ final MarkdownGenerator markdownGenerator = MarkdownGenerator(
 /// split into (text segments around tool calls).
 int countOccurrences(String text, String lowerQuery) {
   if (lowerQuery.isEmpty) return 0;
-  final lower = text.toLowerCase();
+  final lower = _lowerSearchText(text);
   var count = 0;
   var start = 0;
   while (true) {
@@ -2782,21 +2782,31 @@ class SearchHighlightTextNode extends SpanNode {
       return TextSpan(text: text, style: effectiveStyle);
     }
     final spans = <InlineSpan>[];
-    final lower = text.toLowerCase();
+    final folded = _foldSearchText(text);
     var start = 0;
+    var sourceStart = 0;
     var ordinal = 0;
     while (true) {
-      final idx = lower.indexOf(lowerQuery, start);
+      final idx = folded.text.indexOf(lowerQuery, start);
       if (idx == -1) break;
-      if (idx > start) {
+      final matchStart = folded.sourceStarts[idx];
+      final matchEnd = folded.sourceEnds[idx + lowerQuery.length - 1];
+      final highlightStart =
+          matchStart < sourceStart ? sourceStart : matchStart;
+      final highlightEnd =
+          matchEnd < highlightStart ? highlightStart : matchEnd;
+      if (highlightStart > sourceStart) {
         spans.add(
-          TextSpan(text: text.substring(start, idx), style: effectiveStyle),
+          TextSpan(
+            text: text.substring(sourceStart, highlightStart),
+            style: effectiveStyle,
+          ),
         );
       }
       final isCurrent = startGlobalIndex + ordinal == currentGlobalIndex;
       spans.add(
         TextSpan(
-          text: text.substring(idx, idx + lowerQuery.length),
+          text: text.substring(highlightStart, highlightEnd),
           style: effectiveStyle?.copyWith(
             backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
             color: Colors.black87,
@@ -2806,13 +2816,56 @@ class SearchHighlightTextNode extends SpanNode {
       );
       ordinal++;
       start = idx + lowerQuery.length;
+      sourceStart = highlightEnd;
     }
-    if (start < text.length) {
-      spans.add(TextSpan(text: text.substring(start), style: effectiveStyle));
+    if (sourceStart < text.length) {
+      spans.add(
+        TextSpan(text: text.substring(sourceStart), style: effectiveStyle),
+      );
     }
     return TextSpan(children: spans);
   }
 }
+
+/// The folded search text plus a source range for each folded UTF-16 unit.
+/// Multiple folded units can map to one source character, as with U+0130.
+class _FoldedSearchText {
+  final String text;
+  final List<int> sourceStarts;
+  final List<int> sourceEnds;
+
+  const _FoldedSearchText(this.text, this.sourceStarts, this.sourceEnds);
+}
+
+/// Lowercases text while retaining the original UTF-16 range for each folded
+/// code unit. Dart's lowercase conversion is simple (one-code-point) on some
+/// runtimes and full (expanding) on others, so spell out U+0130's Unicode
+/// default lowercase mapping to keep search behavior consistent.
+_FoldedSearchText _foldSearchText(String source) {
+  final folded = _lowerSearchText(source);
+  final sourceStarts = <int>[];
+  final sourceEnds = <int>[];
+  var sourceOffset = 0;
+
+  for (final rune in source.runes) {
+    final originalLength = rune > 0xFFFF ? 2 : 1;
+    final originalEnd = sourceOffset + originalLength;
+    final lower = _lowercaseSearchRune(rune);
+    for (var index = 0; index < lower.length; index++) {
+      sourceStarts.add(sourceOffset);
+      sourceEnds.add(originalEnd);
+    }
+    sourceOffset = originalEnd;
+  }
+
+  return _FoldedSearchText(folded, sourceStarts, sourceEnds);
+}
+
+String _lowerSearchText(String source) =>
+    source.replaceAll('\u0130', 'i\u0307').toLowerCase();
+
+String _lowercaseSearchRune(int rune) =>
+    rune == 0x0130 ? 'i\u0307' : String.fromCharCode(rune).toLowerCase();
 
 /// Renders inline code the same way the library's [CodeNode] does, but as a
 /// plain (non-element) span that never accepts child text nodes.
@@ -2849,7 +2902,7 @@ MarkdownGenerator buildSearchMarkdownGenerator({
   required int occurrenceOffset,
   required int currentMatchIndex,
 }) {
-  final lowerQuery = query.toLowerCase();
+  final lowerQuery = _lowerSearchText(query);
   var counter = occurrenceOffset;
   return MarkdownGenerator(
     inlineSyntaxList: [LatexSyntax(), BrSyntax()],

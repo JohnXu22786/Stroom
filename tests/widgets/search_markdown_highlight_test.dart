@@ -872,6 +872,24 @@ void main() {
   });
 
   group('SearchHighlightTextNode', () {
+    test('maps expanded lowercase offsets back to original text', () {
+      final spans = _spansOf(
+        buildSearchMarkdownGenerator(
+          query: 'i\u0307',
+          messageFirstMatchIndex: 0,
+          occurrenceOffset: 0,
+          currentMatchIndex: 0,
+        ),
+        '😀x\u0130y',
+      );
+      final highlighted = spans.where(
+        (span) => span.style?.backgroundColor == Colors.orangeAccent,
+      );
+
+      expect(highlighted.map((span) => span.text), ['\u0130']);
+      expect(_plainText(spans), '😀x\u0130y');
+    });
+
     test('splits text around occurrences and keeps plain segments', () {
       final node = SearchHighlightTextNode(
         text: 'aaa term bbb term ccc',
