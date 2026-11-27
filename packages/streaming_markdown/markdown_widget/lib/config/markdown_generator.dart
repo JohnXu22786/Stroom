@@ -322,7 +322,11 @@ int _inlineLinkDestinationEnd(String source, int start) {
   var i = start;
   while (i < source.length) {
     final codeUnit = source.codeUnitAt(i);
-    if (codeUnit == 92) {
+    // Inline link destinations cannot cross a line ending. Let the scanner
+    // resume after malformed link syntax so later emphasis remains visible.
+    if (codeUnit == 10 || codeUnit == 13) {
+      return -1;
+    } else if (codeUnit == 92) {
       i++;
     } else if (inAngleDestination) {
       if (codeUnit == 62) inAngleDestination = false;

@@ -806,6 +806,19 @@ $$
       );
       expect(parsedNodeCount, 0);
 
+      const linkWithLineBreak = '[x](url\n__bold__)';
+      final linkWithLineBreakPreview =
+          markdownGenerator.buildPlainTextPreview([linkWithLineBreak]);
+      final linkWithLineBreakSpan = _unwrapLinkRecognizerLifecycle(
+        (linkWithLineBreakPreview.single as Padding).child!,
+      ) as Text;
+      expect(
+        _leafSpanWithText(linkWithLineBreakSpan.textSpan!, 'bold')
+            ?.style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+
       final unmatchedLinkMarkers = '](' * 1024;
       final unmatchedLinkPreview = previewGenerator.buildPlainTextPreview([
         unmatchedLinkMarkers,
