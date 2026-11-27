@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 // ============================================================================
 // LabeledTextField — label + description + text field.
@@ -18,6 +19,8 @@ class LabeledTextField extends StatefulWidget {
   final TextInputType keyboardType;
   final int? maxLines;
   final List<String>? suggestions;
+  final bool constrainedHint;
+  final MaterialStatesController? hintStatesController;
 
   const LabeledTextField({
     super.key,
@@ -29,6 +32,8 @@ class LabeledTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.maxLines,
     this.suggestions,
+    this.constrainedHint = false,
+    this.hintStatesController,
   });
 
   @override
@@ -269,18 +274,41 @@ class _LabeledTextFieldState extends State<LabeledTextField>
                     if (e.buttons & kPrimaryButton != 0) _showOverlay();
                   }
                 : null,
-            child: TextField(
-              controller: widget.controller,
-              focusNode: _focusNode,
-              // 无备选值的字段不接管 onTapOutside，保持默认失焦行为。
-              onTapOutside: _hasSuggestions ? _handleTapOutside : null,
-              decoration: InputDecoration(
-                hintText: widget.hintText,
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: widget.keyboardType,
-              maxLines: widget.maxLines,
-            ),
+            child: widget.constrainedHint && widget.hintText != null
+                ? Semantics(
+                    hint: widget.hintText,
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      statesController: widget.hintStatesController,
+                      // 无备选值的字段不接管 onTapOutside，保持默认失焦行为。
+                      onTapOutside: _hasSuggestions ? _handleTapOutside : null,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            widget.hintText!,
+                            statesController: widget.hintStatesController!,
+                            maxLines: widget.maxLines ?? 1,
+                          ),
+                        ),
+                        border: const OutlineInputBorder(),
+                      ),
+                      keyboardType: widget.keyboardType,
+                      maxLines: widget.maxLines,
+                    ),
+                  )
+                : TextField(
+                    controller: widget.controller,
+                    focusNode: _focusNode,
+                    // 无备选值的字段不接管 onTapOutside，保持默认失焦行为。
+                    onTapOutside: _hasSuggestions ? _handleTapOutside : null,
+                    decoration: InputDecoration(
+                      hintText: widget.hintText,
+                      border: const OutlineInputBorder(),
+                    ),
+                    keyboardType: widget.keyboardType,
+                    maxLines: widget.maxLines,
+                  ),
           ),
         ),
       ],
@@ -449,6 +477,8 @@ class LlmToggleTextField extends StatelessWidget {
   final String? hintText;
   final bool required;
   final TextInputType keyboardType;
+  final bool constrainedHint;
+  final MaterialStatesController? hintStatesController;
 
   const LlmToggleTextField({
     super.key,
@@ -460,6 +490,8 @@ class LlmToggleTextField extends StatelessWidget {
     this.hintText,
     this.required = false,
     this.keyboardType = TextInputType.text,
+    this.constrainedHint = false,
+    this.hintStatesController,
   });
 
   @override
@@ -495,15 +527,34 @@ class LlmToggleTextField extends StatelessWidget {
                 ),
               ),
             if (enabled)
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: keyboardType,
-              ),
+              constrainedHint && hintText != null
+                  ? Semantics(
+                      hint: hintText,
+                      child: TextField(
+                        controller: controller,
+                        statesController: hintStatesController,
+                        decoration: InputDecoration(
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              hintText!,
+                              statesController: hintStatesController!,
+                            ),
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: keyboardType,
+                      ),
+                    )
+                  : TextField(
+                      controller: controller,
+                      decoration: InputDecoration(
+                        hintText: hintText,
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: keyboardType,
+                    ),
           ],
         ),
       ),

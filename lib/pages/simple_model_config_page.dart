@@ -23,6 +23,7 @@ class SimpleModelConfigPage extends StatefulWidget {
 class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
+  final _nameHintStates = MaterialStatesController();
   late List<CustomParam> _customParams;
   bool _isSaving = false;
 
@@ -41,6 +42,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   void dispose() {
     _nameController.dispose();
     _modelIdController.dispose();
+    _nameHintStates.dispose();
     super.dispose();
   }
 
@@ -181,11 +183,20 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              hintText: AppLocalizations.of(context)!.modelNameHint,
-              border: OutlineInputBorder(),
+          Semantics(
+            hint: AppLocalizations.of(context)!.modelNameHint,
+            child: TextField(
+              controller: _nameController,
+              statesController: _nameHintStates,
+              decoration: InputDecoration(
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.modelNameHint,
+                    statesController: _nameHintStates,
+                  ),
+                ),
+                border: OutlineInputBorder(),
+              ),
             ),
           ),
           const SizedBox(height: 16),

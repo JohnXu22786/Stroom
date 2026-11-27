@@ -50,6 +50,11 @@ class _McpServerConfigDialogState
   final _argsController = TextEditingController();
   final _urlController = TextEditingController();
   final _apiKeyController = TextEditingController();
+  final _nameHintStates = MaterialStatesController();
+  final _commandHintStates = MaterialStatesController();
+  final _urlHintStates = MaterialStatesController();
+  final _apiKeyHintStates = MaterialStatesController();
+  final _descriptionHintStates = MaterialStatesController();
 
   McpTransportType _transportType = McpTransportType.sse;
   bool _isSaving = false;
@@ -254,6 +259,11 @@ class _McpServerConfigDialogState
     _argsController.dispose();
     _urlController.dispose();
     _apiKeyController.dispose();
+    _nameHintStates.dispose();
+    _commandHintStates.dispose();
+    _urlHintStates.dispose();
+    _apiKeyHintStates.dispose();
+    _descriptionHintStates.dispose();
     super.dispose();
   }
 
@@ -680,15 +690,24 @@ class _McpServerConfigDialogState
                 ),
                 const SizedBox(height: 8),
                 if (_isEditMode && !_isVendor)
-                  TextField(
-                    controller: _nameController,
-                    enabled: !_isSaving,
-                    decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!.mcpServerNameHint,
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.label, color: Colors.teal),
+                  Semantics(
+                    hint: AppLocalizations.of(context)!.mcpServerNameHint,
+                    child: TextField(
+                      controller: _nameController,
+                      statesController: _nameHintStates,
+                      enabled: !_isSaving,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.mcpServerNameHint,
+                            statesController: _nameHintStates,
+                          ),
+                        ),
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.label, color: Colors.teal),
+                      ),
+                      onChanged: (_) => _checkUnsavedChanges(),
                     ),
-                    onChanged: (_) => _checkUnsavedChanges(),
                   )
                 else
                   ReadOnlyField(
@@ -707,16 +726,27 @@ class _McpServerConfigDialogState
                   ),
                   const SizedBox(height: 8),
                   if (_isEditMode && !_isVendor)
-                    TextField(
-                      controller: _commandController,
-                      enabled: !_isSaving,
-                      decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpCommandExample,
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.terminal, color: Colors.orange),
+                    Semantics(
+                      hint: AppLocalizations.of(context)!.mcpCommandExample,
+                      child: TextField(
+                        controller: _commandController,
+                        statesController: _commandHintStates,
+                        enabled: !_isSaving,
+                        decoration: InputDecoration(
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!.mcpCommandExample,
+                              statesController: _commandHintStates,
+                            ),
+                          ),
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(
+                            Icons.terminal,
+                            color: Colors.orange,
+                          ),
+                        ),
+                        onChanged: (_) => _checkUnsavedChanges(),
                       ),
-                      onChanged: (_) => _checkUnsavedChanges(),
                     )
                   else
                     ReadOnlyField(
@@ -760,16 +790,24 @@ class _McpServerConfigDialogState
                   ),
                   const SizedBox(height: 8),
                   if (_isEditMode && !_isVendor)
-                    TextField(
-                      controller: _urlController,
-                      enabled: !_isSaving,
-                      decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpSseUrlExample,
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.link, color: Colors.blue),
+                    Semantics(
+                      hint: AppLocalizations.of(context)!.mcpSseUrlExample,
+                      child: TextField(
+                        controller: _urlController,
+                        statesController: _urlHintStates,
+                        enabled: !_isSaving,
+                        decoration: InputDecoration(
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!.mcpSseUrlExample,
+                              statesController: _urlHintStates,
+                            ),
+                          ),
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.link, color: Colors.blue),
+                        ),
+                        onChanged: (_) => _checkUnsavedChanges(),
                       ),
-                      onChanged: (_) => _checkUnsavedChanges(),
                     )
                   else
                     ReadOnlyField(
@@ -786,36 +824,46 @@ class _McpServerConfigDialogState
                 SectionHeader(title: AppLocalizations.of(context)!.mcpApiKey),
                 const SizedBox(height: 8),
                 if (_isEditMode)
-                  TextField(
-                    controller: _apiKeyController,
-                    enabled: !_isSaving,
-                    decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!.mcpApiKeyHint,
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(
-                        Icons.vpn_key,
-                        color: Colors.amber,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureApiKey
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  Semantics(
+                    hint: AppLocalizations.of(context)!.mcpApiKeyHint,
+                    child: TextField(
+                      controller: _apiKeyController,
+                      statesController: _apiKeyHintStates,
+                      enabled: !_isSaving,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.mcpApiKeyHint,
+                            statesController: _apiKeyHintStates,
+                          ),
                         ),
-                        tooltip: _obscureApiKey
-                            ? AppLocalizations.of(context)!.mcpShowKey
-                            : AppLocalizations.of(context)!.mcpHideKey,
-                        onPressed: _isSaving
-                            ? null
-                            : () => setState(
-                                  () => _obscureApiKey = !_obscureApiKey,
-                                ),
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(
+                          Icons.vpn_key,
+                          color: Colors.amber,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureApiKey
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            size: 20,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          tooltip: _obscureApiKey
+                              ? AppLocalizations.of(context)!.mcpShowKey
+                              : AppLocalizations.of(context)!.mcpHideKey,
+                          onPressed: _isSaving
+                              ? null
+                              : () => setState(
+                                    () => _obscureApiKey = !_obscureApiKey,
+                                  ),
+                        ),
                       ),
+                      obscureText: _obscureApiKey,
+                      onChanged: (_) => _checkUnsavedChanges(),
                     ),
-                    obscureText: _obscureApiKey,
-                    onChanged: (_) => _checkUnsavedChanges(),
                   )
                 else
                   ReadOnlyField(
@@ -834,18 +882,27 @@ class _McpServerConfigDialogState
                 ),
                 const SizedBox(height: 8),
                 if (_isEditMode && !_isVendor)
-                  TextField(
-                    controller: _descriptionController,
-                    enabled: !_isSaving,
-                    decoration: InputDecoration(
-                      hintText:
-                          AppLocalizations.of(context)!.mcpDescriptionHint,
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.description, color: Colors.teal),
+                  Semantics(
+                    hint: AppLocalizations.of(context)!.mcpDescriptionHint,
+                    child: TextField(
+                      controller: _descriptionController,
+                      statesController: _descriptionHintStates,
+                      enabled: !_isSaving,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.mcpDescriptionHint,
+                            statesController: _descriptionHintStates,
+                            maxLines: 2,
+                          ),
+                        ),
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.description, color: Colors.teal),
+                      ),
+                      maxLines: 2,
+                      minLines: 1,
+                      onChanged: (_) => _checkUnsavedChanges(),
                     ),
-                    maxLines: 2,
-                    minLines: 1,
-                    onChanged: (_) => _checkUnsavedChanges(),
                   )
                 else
                   ReadOnlyField(
