@@ -31,9 +31,10 @@ double _naturalWidth(WidgetTester tester, Finder finder) {
   return painter.width;
 }
 
-Widget _buildGermanThemePage() => ProviderScope(
+Widget _buildGermanThemePage({ThemeData? theme}) => ProviderScope(
       overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
       child: MaterialApp(
+        theme: theme,
         locale: const Locale('de', 'DE'),
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -564,6 +565,19 @@ void main() {
       _naturalWidth(tester, wideHintFinder),
       lessThanOrEqualTo(tester.getSize(wideHintFinder).width),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('language search hint tolerates a sparse text theme', (
+    tester,
+  ) async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildGermanThemePage(theme: ThemeData(textTheme: const TextTheme())),
+    );
+
+    expect(find.byKey(const Key('language-search-field')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

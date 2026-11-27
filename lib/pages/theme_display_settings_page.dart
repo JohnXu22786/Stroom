@@ -35,8 +35,11 @@ class _ThemeDisplaySettingsPageState
     final strings = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final languageSearchHintStyle = (theme.useMaterial3
-            ? theme.textTheme.bodyLarge!
-            : theme.textTheme.titleMedium!)
+            ? theme.textTheme.bodyLarge
+            : theme.textTheme.titleMedium) ??
+        theme.textTheme.bodyMedium ??
+        const TextStyle();
+    final styledLanguageSearchHint = languageSearchHintStyle
         .copyWith(
           color: theme.useMaterial3
               ? theme.colorScheme.onSurfaceVariant
@@ -128,7 +131,7 @@ class _ThemeDisplaySettingsPageState
                         hint: ExcludeSemantics(
                           child: ConstrainedText(
                             strings.languageSearchHint,
-                            style: languageSearchHintStyle,
+                            style: styledLanguageSearchHint,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

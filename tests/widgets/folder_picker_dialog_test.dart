@@ -15,8 +15,13 @@ Widget _buildTestApp(Widget body) {
   );
 }
 
-Widget _buildLocalizedFolderPickerApp(Widget body, {Locale? locale}) {
+Widget _buildLocalizedFolderPickerApp(
+  Widget body, {
+  Locale? locale,
+  ThemeData? theme,
+}) {
   return MaterialApp(
+    theme: theme,
     locale: locale ?? const Locale('de', 'DE'),
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
@@ -166,6 +171,39 @@ void main() {
           lessThanOrEqualTo(tester.getSize(hintFinder).width),
         );
       }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('field hints tolerate a sparse text theme', (tester) async {
+      final fileNameController = TextEditingController();
+      addTearDown(fileNameController.dispose);
+      await tester.pumpWidget(
+        _buildLocalizedFolderPickerApp(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => FolderPickerDialog.show(
+                context,
+                availableFolders: const {},
+                onCreateFolder: (_) async => null,
+                fileNameController: fileNameController,
+                fileNameHintText:
+                    AppLocalizations.of(context)!.chatSaveFilenameHint,
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+          theme: ThemeData(textTheme: const TextTheme()),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+      );
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     });
 

@@ -261,9 +261,11 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     final fileNameHint =
         widget.fileNameHintText ?? strings.folderPickerFileNameHint;
     final folderNameHint = strings.folderPickerFolderNameHint;
-    final hintStyle = (theme.useMaterial3
-            ? theme.textTheme.bodyLarge!
-            : theme.textTheme.titleMedium!)
+    final hintStyle = ((theme.useMaterial3
+                ? theme.textTheme.bodyLarge
+                : theme.textTheme.titleMedium) ??
+            theme.textTheme.bodyMedium ??
+            const TextStyle())
         .copyWith(
           color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
         )
