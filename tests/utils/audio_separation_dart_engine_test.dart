@@ -134,6 +134,19 @@ void _extractAudioInIsolateForTesting(List<Object?> args) {
   }
 }
 
+Future<void> _extractAudioAsyncInIsolateForTesting(List<Object?> args) async {
+  final response = args[0] as SendPort;
+  try {
+    await AudioSeparationEngine().extractAudio(
+      videoBytes: args[1] as Uint8List,
+      videoFormat: 'mp4',
+    );
+    response.send('returned');
+  } catch (error) {
+    response.send(error.toString());
+  }
+}
+
 /// Helper: write a 64-bit big-endian integer to 8 bytes.
 Uint8List _u64be(int v) {
   // Use only low 32 bits for safety on 32-bit platforms
@@ -1361,6 +1374,67 @@ void main() {
 
       expect(result, equals('Exception: No audio track found in video'));
     });
+
+    test(
+      'rejects malformed unknown nested boxes in both parser paths',
+      () async {
+        final valid = buildMinimalMp4WithPcmAudio(pcmFrames: 2);
+        final minfHeader = _findFourCc(valid, 'minf') - 4;
+        final childHeader = minfHeader + 8;
+
+        for (final malformedSize in [0, 7, 0x1000]) {
+          final malformed = Uint8List.fromList(valid);
+          malformed.setRange(
+            childHeader,
+            childHeader + 4,
+            _u32be(malformedSize),
+          );
+          malformed.setRange(childHeader + 4, childHeader + 8, _fourCc('free'));
+
+          final response = ReceivePort();
+          final isolate = await Isolate.spawn(
+            _extractAudioInIsolateForTesting,
+            [response.sendPort, malformed],
+          );
+          final Object? syncResult;
+          try {
+            syncResult = await response.first.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => 'timed-out',
+            );
+          } finally {
+            isolate.kill(priority: Isolate.immediate);
+            response.close();
+          }
+
+          expect(
+            syncResult,
+            equals('Exception: No audio track found in video'),
+          );
+
+          final asyncResponse = ReceivePort();
+          final asyncIsolate = await Isolate.spawn(
+            _extractAudioAsyncInIsolateForTesting,
+            [asyncResponse.sendPort, malformed],
+          );
+          final Object? asyncResult;
+          try {
+            asyncResult = await asyncResponse.first.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => 'timed-out',
+            );
+          } finally {
+            asyncIsolate.kill(priority: Isolate.immediate);
+            asyncResponse.close();
+          }
+
+          expect(
+            asyncResult,
+            equals('Exception: No audio track found in video'),
+          );
+        }
+      },
+    );
 
     test('preserves HE-AAC/SBR config and output frame timing', () async {
       // Cover AOT 5 and the backward-compatible AOT 2 + sync-extension form.
