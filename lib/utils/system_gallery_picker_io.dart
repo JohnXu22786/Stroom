@@ -55,8 +55,12 @@ Future<List<XFile>> collectConstrainedGalleryImageFiles(
 ) async {
   final files = <XFile>[];
   for (final createFile in createFiles) {
-    final file = await createFile();
-    if (file != null) files.add(file);
+    try {
+      final file = await createFile();
+      if (file != null) files.add(file);
+    } on Exception {
+      // A failed asset must not discard other successfully constrained files.
+    }
   }
   return files;
 }

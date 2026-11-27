@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/system_gallery_picker_io.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
@@ -25,6 +24,7 @@ void main() {
             return Future<Uint8List?>.value(null);
           },
         ),
+        () => throw PlatformException(code: 'thumbnail_unavailable'),
         () => createConstrainedGalleryImageFile(
           title: 'second-photo.png',
           width: 4000,
