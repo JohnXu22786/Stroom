@@ -251,7 +251,7 @@ class AnkiApkgImporter {
             {
               'decks': jsonEncode(tgtDecks),
               'models': jsonEncode(tgtModels),
-              'mod': now,
+              'mod': nowSec,
               'dty': 1,
             },
             where: 'id = 1');
