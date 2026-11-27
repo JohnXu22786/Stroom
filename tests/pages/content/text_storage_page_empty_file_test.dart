@@ -250,6 +250,72 @@ void main() {
     }
   });
 
+  testWidgets('text storage actions grow to fit scaled labels', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final width in [320.0, 800.0]) {
+      tester.view.physicalSize = Size(width, 640);
+      for (final scale in [1.0, 4.0]) {
+        for (final themeMode in [ThemeMode.light, ThemeMode.dark]) {
+          await tester.pumpWidget(
+            _buildApp(
+              locale: const Locale('fr', 'FR'),
+              textScaleFactor: scale,
+              themeMode: themeMode,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final buttons = find.byType(ElevatedButton);
+          expect(buttons, findsNWidgets(2));
+          final buttonRects = buttons
+              .evaluate()
+              .map((element) => tester.getRect(find.byWidget(element.widget)))
+              .toList();
+          expect(buttonRects[0].height, buttonRects[1].height);
+
+          final expectedHeight = scale == 1 ? 48.0 : greaterThan(48.0);
+          expect(buttonRects[0].height, expectedHeight);
+          final icons = [
+            find.byIcon(Icons.add_circle_outline),
+            find.byIcon(Icons.file_download_outlined),
+          ];
+          for (var index = 0; index < 2; index++) {
+            final label = ['Nouveau', 'Importer'][index];
+            final textRect = tester.getRect(find.text(label));
+            final iconRect = tester.getRect(icons[index]);
+            final buttonRect = buttonRects[index];
+            expect(textRect.top, greaterThanOrEqualTo(buttonRect.top));
+            expect(textRect.bottom, lessThanOrEqualTo(buttonRect.bottom));
+            expect(iconRect.top, greaterThanOrEqualTo(buttonRect.top));
+            expect(iconRect.bottom, lessThanOrEqualTo(buttonRect.bottom));
+            expect(textRect.left, greaterThanOrEqualTo(iconRect.right));
+          }
+          expect(tester.takeException(), isNull);
+        }
+      }
+    }
+
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpWidget(
+      _buildApp(
+        locale: const Locale('fr', 'FR'),
+        textScaleFactor: 4,
+        allowMotion: true,
+      ),
+    );
+    await tester.pump();
+    for (final label in ['Nouveau', 'Importer']) {
+      final start = tester.getTopLeft(find.text(label));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(tester.getTopLeft(find.text(label)).dx, lessThan(start.dx));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('captures the clipped format reveal at 2x text scale', (
     tester,
   ) async {

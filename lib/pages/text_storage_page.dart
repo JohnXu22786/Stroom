@@ -687,8 +687,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       child: Row(
         children: [
           Expanded(
-            child: SizedBox(
-              height: 48,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: ElevatedButton.icon(
                 onPressed: _createNewText,
                 style: ElevatedButton.styleFrom(
@@ -708,8 +708,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: SizedBox(
-              height: 48,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: ElevatedButton.icon(
                 onPressed: _importTextFile,
                 style: ElevatedButton.styleFrom(
