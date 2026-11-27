@@ -498,6 +498,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(_buildGermanThemePage());
     await tester.pump();
