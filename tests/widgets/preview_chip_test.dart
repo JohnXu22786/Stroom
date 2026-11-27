@@ -134,6 +134,86 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('measurement includes the one dp border inset', (tester) async {
+      Widget scaledChip(double scale) => MaterialApp(
+            theme: ThemeData(
+              useMaterial3: true,
+              textTheme: const TextTheme(bodyMedium: TextStyle(height: 1.2)),
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: PreviewChip(
+                fileName: 'notes.pdf',
+                bytes: validPng,
+                isImage: false,
+                onRemove: () {},
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(scaledChip(1));
+      final initialContext = tester.element(find.byType(PreviewChip));
+      final initialStyle = DefaultTextStyle.of(initialContext).style.merge(
+            TextStyle(
+              fontSize: 10,
+              color: Theme.of(initialContext).colorScheme.onSurfaceVariant,
+            ),
+          );
+      final initialText = TextPainter(
+        text: TextSpan(text: 'notes.pdf', style: initialStyle),
+        textDirection: Directionality.of(initialContext),
+        locale: Localizations.maybeLocaleOf(initialContext),
+      )..layout();
+      final scale = 99.5 / initialText.width;
+      expect(scale, greaterThan(1));
+
+      await tester.pumpWidget(scaledChip(scale));
+      final chip = find.byType(PreviewChip);
+      final context = tester.element(chip);
+      final style = DefaultTextStyle.of(context).style.merge(
+            TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          );
+      final textWidth = tester.getSize(find.byType(ConstrainedText)).width;
+      final naturalText = TextPainter(
+        text: TextSpan(text: 'notes.pdf', style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+      )..layout();
+      final wrappedText = TextPainter(
+        text: TextSpan(text: 'notes.pdf', style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+        maxLines: 2,
+        ellipsis: '…',
+      )..layout(maxWidth: textWidth);
+
+      expect(textWidth, closeTo(99, 0.01));
+      expect(naturalText.width, greaterThan(99));
+      expect(naturalText.width, lessThan(100));
+      expect(wrappedText.computeLineMetrics(), hasLength(2));
+      expect(
+        PreviewChip.requiredHeight(
+          context,
+          fileName: 'notes.pdf',
+          isImage: false,
+        ),
+        greaterThanOrEqualTo(wrappedText.height + 17),
+      );
+      expect(
+        tester.getSize(chip).height,
+        greaterThanOrEqualTo(wrappedText.height + 17),
+      );
+    });
+
     testWidgets('long names reveal vertically and pause offscreen or reduced', (
       tester,
     ) async {
