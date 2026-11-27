@@ -1273,7 +1273,7 @@ void main() {
             of: card,
             matching: find.byIcon(Icons.refresh),
           );
-          await tester.ensureVisible(resetButton);
+          await _scrollToReasoning(tester, resetButton);
           await tester.tap(resetButton);
           await tester.pumpAndSettle();
           await _selectAdditionalParamType(tester, 'mode', '字符串');
