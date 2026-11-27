@@ -123,14 +123,14 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                   final buttonStates = const <WidgetState>{};
                   final buttonTextStyle =
                       buttonStyle?.textStyle?.resolve(buttonStates) ??
-                      theme.textTheme.labelLarge ??
-                      const TextStyle(fontSize: 14);
+                          theme.textTheme.labelLarge ??
+                          const TextStyle(fontSize: 14);
                   final buttonPadding =
                       buttonStyle?.padding?.resolve(buttonStates) ??
-                      const EdgeInsets.symmetric(horizontal: 16);
+                          const EdgeInsets.symmetric(horizontal: 16);
                   final buttonMinWidth =
                       buttonStyle?.minimumSize?.resolve(buttonStates)?.width ??
-                      64;
+                          64;
                   final textScaler = MediaQuery.textScalerOf(context);
                   double buttonWidth(String label) {
                     final painter = TextPainter(
@@ -152,77 +152,76 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                     textDirection: Directionality.of(context),
                     textScaler: textScaler,
                   )..layout();
-                  final minInlineWidth =
-                      math.max(28, indexPainter.width) +
+                  final minInlineWidth = math.max(28, indexPainter.width) +
                       buttonWidth(l10n.update) +
                       buttonWidth(l10n.skip) +
                       8 +
                       48;
 
                   Widget indexLabel() => ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 28),
-                    child: Text(
-                      indexText,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  );
+                        constraints: const BoxConstraints(minWidth: 28),
+                        child: Text(
+                          indexText,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      );
 
                   Widget voiceIdLabel() => Text(
-                    entry.id,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  );
+                        entry.id,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      );
 
                   Widget updateButton({double? width}) => SizedBox(
-                    width: width ?? buttonWidth(l10n.update),
-                    child: TextButton(
-                      style: width == null
-                          ? null
-                          : TextButton.styleFrom(
-                              alignment: AlignmentDirectional.centerEnd,
-                            ),
-                      onPressed: () => _handleUpdate(i),
-                      child: Text(l10n.update),
-                    ),
-                  );
+                        width: width ?? buttonWidth(l10n.update),
+                        child: TextButton(
+                          style: width == null
+                              ? null
+                              : TextButton.styleFrom(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                ),
+                          onPressed: () => _handleUpdate(i),
+                          child: Text(l10n.update),
+                        ),
+                      );
 
                   Widget skipButton({double? width}) => SizedBox(
-                    width: width ?? buttonWidth(l10n.skip),
-                    child: TextButton(
-                      style: width == null
-                          ? null
-                          : TextButton.styleFrom(
-                              alignment: AlignmentDirectional.centerEnd,
-                            ),
-                      onPressed: () => _handleSkip(i),
-                      child: Text(l10n.skip),
-                    ),
-                  );
+                        width: width ?? buttonWidth(l10n.skip),
+                        child: TextButton(
+                          style: width == null
+                              ? null
+                              : TextButton.styleFrom(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                ),
+                          onPressed: () => _handleSkip(i),
+                          child: Text(l10n.skip),
+                        ),
+                      );
 
                   Widget actionButtons() => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      updateButton(),
-                      const SizedBox(width: 4),
-                      skipButton(),
-                    ],
-                  );
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          updateButton(),
+                          const SizedBox(width: 4),
+                          skipButton(),
+                        ],
+                      );
 
                   Widget stackedActionButtons(double availableWidth) => Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        updateButton(width: availableWidth),
-                        skipButton(width: availableWidth),
-                      ],
-                    ),
-                  );
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            updateButton(width: availableWidth),
+                            skipButton(width: availableWidth),
+                          ],
+                        ),
+                      );
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),

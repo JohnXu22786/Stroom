@@ -25,46 +25,48 @@ Widget _localizedApp({
   required Widget home,
   bool disableAnimations = false,
   bool useMaterial3 = false,
-}) => MaterialApp(
-  locale: locale,
-  supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  theme: ThemeData(useMaterial3: useMaterial3),
-  builder: disableAnimations
-      ? (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
-        )
-      : null,
-  home: home,
-);
+}) =>
+    MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      theme: ThemeData(useMaterial3: useMaterial3),
+      builder: disableAnimations
+          ? (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: child!,
+              )
+          : null,
+      home: home,
+    );
 
 Widget _voiceDialog({
   required int count,
   Locale locale = const Locale('fr'),
   bool disableAnimations = false,
   bool useMaterial3 = true,
-}) => _localizedApp(
-  locale: locale,
-  disableAnimations: disableAnimations,
-  useMaterial3: useMaterial3,
-  home: Scaffold(
-    body: DuplicateResolveDialog(
-      working: [
-        for (var i = 0; i < count; i++)
-          VoiceEntry(name: 'Voice $i', id: 'duplicate'),
-      ],
-      idToFirstIdx: const {'duplicate': 0},
-      pending: List.generate(count, (i) => i),
-      onComplete: (_) {},
-    ),
-  ),
-);
+}) =>
+    _localizedApp(
+      locale: locale,
+      disableAnimations: disableAnimations,
+      useMaterial3: useMaterial3,
+      home: Scaffold(
+        body: DuplicateResolveDialog(
+          working: [
+            for (var i = 0; i < count; i++)
+              VoiceEntry(name: 'Voice $i', id: 'duplicate'),
+          ],
+          idToFirstIdx: const {'duplicate': 0},
+          pending: List.generate(count, (i) => i),
+          onComplete: (_) {},
+        ),
+      ),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -137,9 +139,8 @@ void main() {
 
     final index = find.text('1.');
     expect(index, findsOneWidget);
-    final prefix = find
-        .ancestor(of: index, matching: find.byType(ConstrainedBox))
-        .first;
+    final prefix =
+        find.ancestor(of: index, matching: find.byType(ConstrainedBox)).first;
     expect(tester.getSize(prefix).width, closeTo(28, 1));
     expect(find.byType(OverflowBar), findsNothing);
     expect(tester.takeException(), isNull);
@@ -161,9 +162,8 @@ void main() {
     final index = find.text('1234.');
     expect(index, findsOneWidget);
     final paragraph = tester.renderObject<RenderParagraph>(index);
-    final prefix = find
-        .ancestor(of: index, matching: find.byType(ConstrainedBox))
-        .first;
+    final prefix =
+        find.ancestor(of: index, matching: find.byType(ConstrainedBox)).first;
     expect(paragraph.maxLines, 1);
     expect(paragraph.didExceedMaxLines, isFalse);
     expect(tester.getSize(prefix).width, greaterThan(28));
@@ -214,9 +214,8 @@ void main() {
       tester.getRect(actionButtons.first).top,
       greaterThanOrEqualTo(tester.getRect(find.text('duplicate')).bottom),
     );
-    final dialogCenter = tester
-        .getCenter(find.byType(DuplicateResolveDialog))
-        .dx;
+    final dialogCenter =
+        tester.getCenter(find.byType(DuplicateResolveDialog)).dx;
     final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)))!;
     for (final label in [l10n.update, l10n.skip]) {
       final labelFinder = find.text(label);
