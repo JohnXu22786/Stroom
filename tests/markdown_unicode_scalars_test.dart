@@ -2,6 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
 void main() {
+  test('reference labels fold lowercase sharp s to ss', () {
+    expect(
+      markdown.markdownToHtml('[text][Straße]\n\n[STRASSE]: /target'),
+      '<p><a href="/target">text</a></p>\n',
+    );
+  });
+
+  test('reference labels fold Greek final sigma to sigma', () {
+    expect(
+      markdown.markdownToHtml('[text][ΟΣ]\n\n[ος]: /target'),
+      '<p><a href="/target">text</a></p>\n',
+    );
+  });
+
   test('reference links fold supplementary-plane letters', () {
     expect(
       markdown.markdownToHtml('[text][𐐨]\n\n[𐐀]: /target'),
