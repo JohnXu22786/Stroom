@@ -547,7 +547,10 @@ class TaskExecutor {
 
         // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
         if (!(cancelToken?.isCancelled ?? false)) {
-          resources = await probeMediaResources(resources);
+          resources = await probeMediaResources(
+            resources,
+            cancelToken: cancelToken,
+          );
         }
 
         markExecutorStep(
@@ -651,7 +654,10 @@ class TaskExecutor {
 
       // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
       if (!(cancelToken?.isCancelled ?? false)) {
-        resources = await probeMediaResources(resources);
+        resources = await probeMediaResources(
+          resources,
+          cancelToken: cancelToken,
+        );
       }
 
       markExecutorStep(
