@@ -18,7 +18,7 @@ def focused_capture(page, path):
         'x': 0,
         'y': 68 if width > 400 else 76,
         'width': width,
-        'height': 70 if width > 400 else 90,
+        'height': 70 if width > 400 else 64,
     })
     return captured_at
 
@@ -114,11 +114,15 @@ with sync_playwright() as playwright:
     context.close()
     output_video = ROOT / 'chat-search-hint-fr-reveal-return.webm'
     concat_file = frames / 'frames.txt'
-    concat_lines = []
+    # The preview timeline starts at the trigger. Hold the first captured
+    # leading-position frame for the time spent laying out the hint and
+    # capturing that first sample, then preserve every measured frame interval.
+    concat_lines = [
+        f"file '{frame_paths[0].resolve()}'",
+        f'duration {frame_times[0]:.9f}',
+    ]
     for index, frame_path in enumerate(frame_paths):
-        if index == 0 and len(frame_times) > 1:
-            duration = frame_times[index + 1]
-        elif index + 1 < len(frame_times):
+        if index + 1 < len(frame_times):
             duration = frame_times[index + 1] - frame_times[index]
         else:
             duration = cycle_duration - frame_times[index]
