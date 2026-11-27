@@ -7,6 +7,8 @@ import time
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from capture_notification_banner_helpers import require_banner_seen
+
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/qa/vertical_notification_banner"
 URL = "http://127.0.0.1:8892"
@@ -58,6 +60,8 @@ with sync_playwright() as playwright:
             wait = 0.1 - (time.monotonic() - frame_times[-1])
             if wait > 0:
                 time.sleep(wait)
+
+        require_banner_seen(banner_seen, len(frame_times))
 
         manifest = frames / "frames.txt"
         lines = []
