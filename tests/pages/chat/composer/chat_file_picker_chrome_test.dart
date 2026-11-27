@@ -32,6 +32,7 @@ Future<void> _openPicker(
   required ThemeData theme,
   required ValueNotifier<double> textScale,
   required Locale locale,
+  bool disableAnimations = false,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -46,8 +47,10 @@ Future<void> _openPicker(
       builder: (context, child) => ValueListenableBuilder<double>(
         valueListenable: textScale,
         builder: (context, scale, _) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: disableAnimations,
+          ),
           child: RepaintBoundary(key: _captureKey, child: child!),
         ),
       ),
@@ -73,6 +76,18 @@ Future<void> _openPicker(
 
 Future<void> _expectScreenshot(WidgetTester tester, String path) async {
   await expectLater(find.byKey(_captureKey), matchesGoldenFile(path));
+}
+
+TextPainter _measureConstrainedText(WidgetTester tester, Finder finder) {
+  final widget = tester.widget<ConstrainedText>(finder);
+  final context = tester.element(finder);
+  final style = DefaultTextStyle.of(context).style.merge(widget.style);
+  return TextPainter(
+    text: TextSpan(text: widget.data, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.maybeLocaleOf(context),
+  )..layout();
 }
 
 void main() {
@@ -192,15 +207,36 @@ void main() {
       of: clearButton,
       matching: find.text(germanClearLabel),
     );
-    expect(
-      find.descendant(of: clearButton, matching: find.byType(ConstrainedText)),
-      findsOneWidget,
+    final clearConstrainedText = find.descendant(
+      of: clearButton,
+      matching: find.byType(ConstrainedText),
     );
+    expect(clearConstrainedText, findsOneWidget);
     final clearTextX = tester.getTopLeft(clearText).dx;
     await tester.pump(const Duration(seconds: 1));
     expect(tester.getTopLeft(clearText).dx, closeTo(clearTextX, 0.01));
-    await tester.pump(const Duration(seconds: 18));
-    expect(tester.getTopLeft(clearText).dx, lessThan(clearTextX));
+    final clearPainter = _measureConstrainedText(tester, clearConstrainedText);
+    final clearSlotWidth = tester.getSize(clearConstrainedText).width;
+    final clearTravel = Duration(
+      milliseconds: ((clearPainter.width - clearSlotWidth) / 24 * 1000).round(),
+    );
+    expect(clearPainter.width, greaterThan(clearSlotWidth));
+    await tester.pump(clearTravel + const Duration(milliseconds: 20));
+    final clearClip = find
+        .ancestor(of: clearText, matching: find.byType(ClipRect))
+        .first;
+    final clearClipRect = tester.getRect(clearClip);
+    final clearEndRect = tester.getRect(clearText);
+    expect(clearEndRect.right, closeTo(clearClipRect.right, 2));
+    await _expectScreenshot(
+      tester,
+      '../../../../docs/ui-constrained-text-qa/chat-file-picker-chrome/chat-file-picker-de-DE-320x640-scale3-clear-end.png',
+    );
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(tester.getTopLeft(clearText).dx, closeTo(clearEndRect.left, 0.01));
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getTopLeft(clearText).dx, greaterThan(clearEndRect.left));
 
     for (final (type, label) in [
       ('text', 'Text'),
@@ -233,6 +269,31 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     germanTextScale.dispose();
+
+    final reducedMotionScale = ValueNotifier(3.0);
+    await _openPicker(
+      tester,
+      theme: ThemeData.light(useMaterial3: true),
+      textScale: reducedMotionScale,
+      locale: const Locale('de', 'DE'),
+      disableAnimations: true,
+    );
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpAndSettle();
+    final reducedMotionText = find.descendant(
+      of: find.byKey(const Key('file_picker_clear_btn')),
+      matching: find.text(germanClearLabel),
+    );
+    final reducedMotionX = tester.getTopLeft(reducedMotionText).dx;
+    await tester.pump(const Duration(seconds: 30));
+    expect(
+      tester.getTopLeft(reducedMotionText).dx,
+      closeTo(reducedMotionX, 0.01),
+    );
+    expect(find.bySemanticsLabel(germanClearLabel), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    reducedMotionScale.dispose();
 
     semantics.dispose();
     addTearDown(tester.view.resetPhysicalSize);

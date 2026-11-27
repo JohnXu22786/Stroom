@@ -12,6 +12,17 @@ logical pixels.
 | After | en-US | 320 × 640 | 1 | 3× | Light | [Narrow layout](chat-file-picker-en-320x640-scale3-light.png) |
 | After | en-US | 320 × 640 | 1 | 3× | Dark | [Dark theme](chat-file-picker-en-320x640-scale3-dark.png) |
 | After | de-DE | 320 × 640 | 1 | 3× | Light | [Longer German labels](chat-file-picker-de-DE-320x640-scale3-light.png) |
+| After | de-DE | 320 × 640 | 1 | 3× | Light | [Clear label at full-text endpoint](chat-file-picker-de-DE-320x640-scale3-clear-end.png) |
+
+The [German Clear reveal preview](chat-file-picker-de-DE-clear-reveal-320x640.webm)
+uses the production route capture as its backdrop and animates the complete
+Roboto label over the measured 312-pixel slot at 4 frames per second. It shows
+the one-second still period, a continuous 24 logical px/s travel to the exact
+endpoint, and the full label held there. The route regression separately
+measures the real `ConstrainedText` widget, checks its exact endpoint, two-second
+hold and reverse, and verifies reduced motion leaves the full label static
+while retaining its complete semantics. The endpoint screenshot is a direct
+production-route capture.
 
 At 1×, the original inline AppBar actions and icon tab layout remain in place.
 At 3× on a narrow viewport, the clear action gets its own row and the four tabs
