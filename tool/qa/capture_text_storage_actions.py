@@ -108,7 +108,8 @@ def main() -> None:
             )
             reveal_page.on("pageerror", lambda error: errors.append(str(error)))
             reveal_page.goto(
-                f"http://127.0.0.1:{port}/?locale=fr-FR&scale=4&theme=dark",
+                f"http://127.0.0.1:{port}/?locale=fr-FR&scale=4&theme=dark"
+                "&reducedMotion=false",
                 wait_until="load",
                 timeout=120_000,
             )
