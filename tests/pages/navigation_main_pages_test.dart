@@ -106,9 +106,8 @@ Future<void> _expectSamePageFilesTapResetsFolder(
   await tester.pumpWidget(_buildTestApp(screenSize: screenSize));
   await _pumpPageAnimations(tester);
 
-  final filesDestination = screenSize.height > screenSize.width
-      ? _navTab('文件')
-      : find.text('文件');
+  final filesDestination =
+      screenSize.height > screenSize.width ? _navTab('文件') : find.text('文件');
   await tester.tap(filesDestination);
   await _pumpPageAnimations(tester);
   expect(find.byKey(const Key('files_page')), findsOneWidget);
