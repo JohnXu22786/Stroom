@@ -175,7 +175,9 @@ void main() {
     expect(fab.foregroundColor, colorScheme.onError);
   });
 
-  testWidgets('label width budget is nonnegative below 100dp', (tester) async {
+  testWidgets('label budget stays valid for an 80dp MediaQuery width', (
+    tester,
+  ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(320, 640);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -201,6 +203,30 @@ void main() {
       (box) => box.constraints.maxWidth == 0,
     );
     expect(zeroWidthConstraint.constraints.isNormalized, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('production FAB remains visible at a 240dp viewport', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 640);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      _app(locale: const Locale('en'), conversations: _conversations(1)),
+    );
+    await _selectEveryConversation(tester, 1);
+
+    final fab = find.byType(FloatingActionButton);
+    final fabRect = tester.getRect(fab);
+    expect(fabRect.left, greaterThanOrEqualTo(0));
+    expect(fabRect.right, lessThanOrEqualTo(240));
+    expect(
+      find.descendant(of: fab, matching: find.byIcon(Icons.delete)),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 }

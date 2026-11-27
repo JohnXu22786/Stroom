@@ -6,8 +6,8 @@ in-memory conversations, enables selection through the page's checklist action,
 and selects each row through the UI.
 The page shows `123 selected` / `123 sélectionné` in the screenshots. Flutter
 Web virtualizes the list and does not expose each checkbox's checked value in
-its row semantics, so the harness tracks 123 distinct row clicks and confirms
-the visible selected count in the resulting page capture.
+its row semantics, so the harness tracks 123 distinct row clicks and OCR-checks
+the rendered numeric count in the app bar before accepting each screenshot.
 
 The static captures cover fitting English at 800×640, text scale 1, and cramped
 French at 320×640, text scale 3. The French capture shows all 123 conversations
@@ -31,6 +31,13 @@ python3 tool/qa/capture_conversations_delete_fab.py
 
 The script starts `flutter run --release --no-pub -d web-server`, drives the
 production page with Playwright and system Chromium, checks that the red FAB
-pixels remain inside each screenshot, and encodes the motion preview with
-FFmpeg. It writes the two PNGs and WebM in this directory. The in-memory app
-fixture is in `tool/qa/conversations_delete_fab_capture.dart`.
+pixels remain inside each screenshot, checks the selected count with Tesseract
+OCR, and encodes the motion preview with FFmpeg. It writes the two PNGs and WebM
+in this directory. The in-memory app fixture is in
+`tool/qa/conversations_delete_fab_capture.dart`.
+
+The sub-100dp widget case checks only that the label width budget remains a
+normalized nonnegative constraint. Its physical scaffold remains 320dp wide so
+the test does not imply that the whole ConversationsPage supports an 80dp
+viewport. A separate production-page widget test checks the complete FAB bounds
+at a 240dp viewport, the smallest width tested with the ConversationsPage shell.

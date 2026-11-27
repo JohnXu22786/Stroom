@@ -34,6 +34,30 @@ def wait_for_rendered_flutter(page):
 def capture_page(page, output):
     image_bytes = page.screenshot(path=str(output))
     image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    header = image.crop((0, 0, image.width, min(56, image.height)))
+    header_bytes = BytesIO()
+    header.save(header_bytes, format="PNG")
+    ocr = subprocess.run(
+        [
+            "tesseract",
+            "stdin",
+            "stdout",
+            "--psm",
+            "7",
+            "-c",
+            "tessedit_char_whitelist=0123456789",
+        ],
+        input=header_bytes.getvalue(),
+        capture_output=True,
+        check=True,
+    )
+    selected_count = ocr.stdout.decode().strip()
+    if selected_count != "123":
+        raise RuntimeError(
+            f"Expected the rendered page to show 123 selected, OCR found "
+            f"{selected_count!r} in {output}"
+        )
+
     red_pixels = [
         (x, y)
         for y in range(540, image.height)
@@ -52,7 +76,7 @@ def capture_page(page, output):
     )
     if bounds[0] < 0 or bounds[2] >= image.width or bounds[3] >= image.height:
         raise RuntimeError(f"Delete FAB escaped viewport in {output}: {bounds}")
-    return bounds
+    return bounds, selected_count
 
 
 server_log = SERVER_LOG.open("w")
@@ -196,11 +220,11 @@ try:
 
         english_selection = select_one(800, "en", 1)
         english = OUTPUT / "delete-fab-en-800x640-scale1.png"
-        english_bounds = capture_page(page, english)
+        english_bounds, english_count = capture_page(page, english)
 
         french_selection = select_one(320, "fr", 3)
         french = OUTPUT / "delete-fab-fr-320x640-scale3.png"
-        french_bounds = capture_page(page, french)
+        french_bounds, french_count = capture_page(page, french)
 
         # Record one frame every 500 ms at normal playback speed. This keeps the
         # initial pause and full forward/return cycle while sampling smoothly.
@@ -258,8 +282,10 @@ try:
             "selection": {
                 "english_selected_rows": english_selection[0],
                 "english_checked_aria_verified": english_selection[1],
+                "english_rendered_count_ocr": english_count,
                 "french_selected_rows": french_selection[0],
                 "french_checked_aria_verified": french_selection[1],
+                "french_rendered_count_ocr": french_count,
             },
             "device_pixel_ratio": 1,
             "fixture": "production ConversationsPage, 123 in-memory conversations selected through UI",
