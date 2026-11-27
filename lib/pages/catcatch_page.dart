@@ -326,32 +326,41 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   // ====================================================================
 
   Widget _buildEmptyState(ColorScheme colorScheme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.add_circle_outline,
-            size: 64,
-            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _l10n.catCatchEmptyState,
-            style: TextStyle(
-              fontSize: 16,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        key: const Key('catcatch_empty_state_scroll'),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Column(
+              key: const Key('catcatch_empty_state_content'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.add_circle_outline,
+                  size: 64,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _l10n.catCatchEmptyState,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _l10n.catCatchEmptyStateHint,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            _l10n.catCatchEmptyStateHint,
-            style: TextStyle(
-              fontSize: 13,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -615,6 +624,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     return SafeArea(
       top: false,
       child: Container(
+        key: const Key('catcatch_bottom_bar'),
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         decoration: BoxDecoration(
