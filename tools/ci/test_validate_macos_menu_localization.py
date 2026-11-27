@@ -84,6 +84,50 @@ class ValidateMacosMenuLocalizationTest(unittest.TestCase):
                 {"menu.file": "File", "menu.edit": "Edit"},
             )
 
+    def test_decodes_localized_value_escapes_and_preserves_unicode(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        contents = (
+            r'"menu.file.title" = "Line\nquote: \" backslash: \\ café 東京 '
+            r'Unicode: \U6771\U4EAC \UD83D\UDE00 octal: \101\204";'
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "MainMenu.strings"
+            path.write_text(contents, encoding="utf-8")
+
+            self.assertEqual(
+                read_localized_titles(path),
+                {
+                    "menu.file": (
+                        'Line\nquote: " backslash: \\ café 東京 '
+                        "Unicode: 東京 😀 octal: AÃ"
+                    )
+                },
+            )
+
+    def test_rejects_malformed_and_unsupported_localized_value_escapes(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        invalid_values = (
+            r'"menu.file.title" = "bad\q";',
+            r'"menu.file.title" = "bad\'";',
+            r'"menu.file.title" = "bad\U12";',
+            r'"menu.file.title" = "bad\UDE00";',
+            r'"menu.file.title" = "bad\777";',
+            '"menu.file.title" = "bad\\";',
+        )
+        for contents in invalid_values:
+            with self.subTest(contents=contents), TemporaryDirectory() as directory:
+                path = Path(directory) / "MainMenu.strings"
+                path.write_text(contents, encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ValueError, r":1: invalid localized title entry"
+                ):
+                    read_localized_titles(path)
+
     def test_reads_entry_tokens_separated_by_multiline_block_comment(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
