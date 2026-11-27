@@ -75,6 +75,7 @@ try:
 
     errors = []
     metrics = []
+    metric_times = {}
     screenshots = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -88,14 +89,17 @@ try:
             reduced_motion="no-preference",
         )
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.on(
-            "console",
-            lambda message: metrics.append(message.text)
-            if "CHAT_FILE_CHIP_METRIC:" in message.text
-            else errors.append(f"console {message.type}: {message.text}")
-            if message.type == "error"
-            else None,
-        )
+        def record_console(message):
+            if "CHAT_FILE_CHIP_METRIC:" in message.text:
+                metrics.append(message.text)
+                if message.text.startswith("CHAT_FILE_CHIP_METRIC:long "):
+                    # The metric is emitted during the long-name widget's first
+                    # build, just before layout starts the one-second timer.
+                    metric_times["long"] = time.monotonic()
+            elif message.type == "error":
+                errors.append(f"console {message.type}: {message.text}")
+
+        page.on("console", record_console)
 
         def navigate(name: str, scale: int, theme: str, extra: dict | None = None):
             before = len(metrics)
@@ -130,13 +134,23 @@ try:
             query = "&".join(f"{key}={value}" for key, value in params.items())
             page.goto(f"{URL}?{query}", wait_until="load", timeout=120_000)
             page.wait_for_timeout(2_500)
-            # The fixture's only record is the first text row. Click its body
-            # so the production dialog loads the file and shows the real chip.
-            page.mouse.click(180, 140 if scale == 1 else 165)
+            # The fixture's only record is the first text row. Click its
+            # checkbox directly so the production dialog loads the file and
+            # shows the real chip at both text scales.
+            checkbox_y = 140 if scale == 1 else 165
+            page.mouse.click(38, checkbox_y)
             page.wait_for_timeout(500)
             screenshot = page.screenshot()
             if Image.open(BytesIO(screenshot)).size != (320, 640):
                 raise RuntimeError("Unexpected production dialog screenshot size")
+            checkbox_color = Image.open(BytesIO(screenshot)).convert("RGB").getpixel(
+                (30, checkbox_y)
+            )
+            if checkbox_color[2] - checkbox_color[0] < 40:
+                raise RuntimeError(
+                    f"Production route did not select annual.pdf at scale {scale}×; "
+                    f"checkbox pixel was {checkbox_color}"
+                )
             return screenshot
 
         picker_fit = capture_picker(1)
@@ -185,6 +199,11 @@ try:
         screenshots.append("chat-file-chip-two-line-320x640-scale3-light.png")
 
         long_metric = navigate("long", 3, "light", {"motion": "on"})
+        if "long" not in metric_times:
+            raise RuntimeError(
+                "Missing the first long-name layout timestamp; "
+                "cannot preserve the initial motion pause"
+            )
         long_layout = re.search(
             r"lines=(\d+) height=([\d.]+) twoLineHeight=([\d.]+) exceedsTwo=(true|false)",
             long_metric or "",
@@ -199,18 +218,39 @@ try:
             travel_seconds = 8.96
 
         page.wait_for_timeout(150)
+        start_frame = page.screenshot()
         (OUTPUT / "chat-file-chip-long-name-start-320x640-scale3-light.png").write_bytes(
-            page.screenshot()
+            start_frame
         )
         screenshots.append("chat-file-chip-long-name-start-320x640-scale3-light.png")
 
         cycle_seconds = 1 + 2 * travel_seconds + 4
         frame_rate = 8
         frame_count = math.ceil(cycle_seconds * frame_rate)
+        # `navigate` waits for the first nonblank render and a settle frame, so
+        # the widget's initial timer has already elapsed when frame capture
+        # begins. Repeat the first rendered still for that elapsed interval to
+        # preserve the complete one-second on-screen pause in the video. Fail
+        # rather than emit an invalid preview if capture starts after motion.
+        elapsed_before_capture = max(
+            0,
+            time.monotonic() - metric_times.get("long", time.monotonic()),
+        )
+        if elapsed_before_capture >= 1:
+            raise RuntimeError(
+                "Motion capture started after the long-name initial pause"
+            )
+        initial_hold_frames = min(
+            frame_count,
+            math.ceil(elapsed_before_capture * frame_rate),
+        )
+        for index in range(initial_hold_frames):
+            (FRAMES / f"frame-{index:03d}.png").write_bytes(start_frame)
+
         frame_start = time.monotonic()
-        for index in range(frame_count):
+        for index in range(initial_hold_frames, frame_count):
             page.screenshot(path=str(FRAMES / f"frame-{index:03d}.png"))
-            target = frame_start + (index + 1) / frame_rate
+            target = frame_start + (index - initial_hold_frames + 1) / frame_rate
             delay = target - time.monotonic()
             if delay > 0:
                 page.wait_for_timeout(round(delay * 1000))
@@ -257,6 +297,12 @@ try:
             "long_name_metric": long_metric,
             "motion": "start, vertical endpoint pause, return, and second endpoint pause",
             "motion_preview_seconds": round(frame_count / frame_rate, 2),
+            "motion_elapsed_before_capture_seconds": round(
+                elapsed_before_capture, 3
+            ),
+            "motion_initial_hold_seconds": round(
+                initial_hold_frames / frame_rate, 3
+            ),
             "page_errors": errors,
         }
     )

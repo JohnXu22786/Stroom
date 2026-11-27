@@ -21,7 +21,9 @@ callback is a no-op, no input is focused, and the software keyboard is closed.
 - The long-name screenshot and WebM preview show the two-line viewport,
   vertical reveal, the 2 s endpoint pause, return, and the second 2 s endpoint
   pause. The 23 s preview includes the measured 1 s initial delay and both
-  travel legs.
+  travel legs. The capture script timestamps the first long-name layout metric
+  and repeats the first rendered still for the elapsed build-to-capture time,
+  preserving the full initial pause in the exported video.
 
 Run `python3 tools/qa/capture_chat_file_chip.py` from the repository root to
 rebuild the screenshots and motion preview.
