@@ -6,6 +6,7 @@ import time
 from playwright.sync_api import sync_playwright
 
 from capture_render_readiness import (
+    capture_video_frames,
     navigate_and_wait_for_flutter_render,
     write_video_frame_manifest,
 )
@@ -49,36 +50,17 @@ with sync_playwright() as playwright:
     )
     await_motion_seconds = 15
     frame_rate = 10
-    capture_started_at = time.monotonic()
-    capture_deadline = capture_started_at + await_motion_seconds
     with tempfile.TemporaryDirectory(
         prefix="topic-metadata-video-", dir=OUTPUT
     ) as temporary_frames:
         frames = Path(temporary_frames)
-        frame_times = []
-        next_frame_at = capture_started_at
-        frame_number = 0
-        while next_frame_at < capture_deadline:
-            frame_time = time.monotonic()
-            video_page.screenshot(
-                path=str(frames / f"frame-{frame_number:04d}.png"),
-                timeout=max(1, round((capture_deadline - frame_time) * 1_000)),
-            )
-            frame_times.append(frame_time)
-            frame_number += 1
-            next_frame_at = capture_started_at + frame_number / frame_rate
-            wait_milliseconds = round(
-                (next_frame_at - time.monotonic()) * 1_000
-            )
-            if wait_milliseconds > 0:
-                video_page.wait_for_timeout(
-                    min(
-                        wait_milliseconds,
-                        max(1, round((capture_deadline - time.monotonic()) * 1_000)),
-                    )
-                )
+        capture_started_at = time.monotonic()
+        capture_deadline = capture_started_at + await_motion_seconds
+        frame_times = capture_video_frames(
+            video_page, frames, capture_started_at, capture_deadline, frame_rate
+        )
         manifest = write_video_frame_manifest(
-            frames, frame_times, capture_deadline
+            frames, frame_times, capture_started_at, capture_deadline
         )
         video_page.close()
         video_context.close()

@@ -5,17 +5,20 @@ from PIL import Image, ImageStat
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 
-def write_video_frame_manifest(frame_directory, frame_times, capture_deadline):
+def write_video_frame_manifest(
+    frame_directory, frame_times, capture_started_at, capture_deadline
+):
     """Write an FFmpeg manifest spanning the complete post-readiness capture."""
     if not frame_times:
         raise ValueError("Cannot encode a video preview without captured frames")
 
+    manifest_frame_times = [capture_started_at, *frame_times[1:]]
     lines = []
-    for index, frame_time in enumerate(frame_times):
+    for index, frame_time in enumerate(manifest_frame_times):
         lines.append(f"file 'frame-{index:04d}.png'\n")
         next_time = (
-            frame_times[index + 1]
-            if index + 1 < len(frame_times)
+            manifest_frame_times[index + 1]
+            if index + 1 < len(manifest_frame_times)
             else capture_deadline
         )
         lines.append(f"duration {max(next_time - frame_time, 0.04):.6f}\n")
@@ -24,6 +27,37 @@ def write_video_frame_manifest(frame_directory, frame_times, capture_deadline):
     manifest = frame_directory / "frames.txt"
     manifest.write_text("".join(lines), encoding="utf-8")
     return manifest
+
+
+def capture_video_frames(
+    page, frame_directory, capture_started_at, capture_deadline, frame_rate=10
+):
+    """Capture frames until the wall-clock deadline and return their timestamps."""
+    frame_times = []
+    frame_number = 0
+    next_frame_at = capture_started_at
+    while next_frame_at < capture_deadline:
+        frame_time = time.monotonic()
+        remaining = capture_deadline - frame_time
+        if remaining <= 0:
+            break
+
+        page.screenshot(
+            path=str(frame_directory / f"frame-{frame_number:04d}.png"),
+            timeout=max(1, round(remaining * 1_000)),
+        )
+        frame_times.append(frame_time)
+        frame_number += 1
+        next_frame_at = capture_started_at + frame_number / frame_rate
+        wait_milliseconds = round((next_frame_at - time.monotonic()) * 1_000)
+        if wait_milliseconds > 0:
+            remaining = capture_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            page.wait_for_timeout(
+                min(wait_milliseconds, max(1, round(remaining * 1_000)))
+            )
+    return frame_times
 
 
 def remaining_timeout_ms(deadline, failure_message):
@@ -91,7 +125,7 @@ def wait_for_flutter_render(
         while True:
             rendered = Image.open(
                 BytesIO(
-                    page.screenshot(
+                    page.locator("flt-glass-pane canvas").first.screenshot(
                         timeout=remaining_timeout_ms(deadline, failure_message)
                     )
                 )

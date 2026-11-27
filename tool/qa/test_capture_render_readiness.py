@@ -4,10 +4,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageStat
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from capture_render_readiness import (
+    capture_video_frames,
     navigate_and_wait_for_flutter_render,
     wait_for_flutter_render,
     write_video_frame_manifest,
@@ -40,6 +41,8 @@ class FakePage:
         screenshot_error=False,
         clock=None,
         navigation_seconds=0,
+        screenshot_seconds=0,
+        unrelated_page_image=None,
     ):
         self.screenshots = iter(screenshots)
         self.rendered_texts = iter(rendered_texts)
@@ -47,6 +50,9 @@ class FakePage:
         self.screenshot_error = screenshot_error
         self.clock = clock
         self.navigation_seconds = navigation_seconds
+        self.screenshot_seconds = screenshot_seconds
+        self.unrelated_page_image = unrelated_page_image
+        self.last_locator_selector = None
         self.screenshot_count = 0
         self.press_timeout = None
         self.wait_for_function_count = 0
@@ -58,6 +64,11 @@ class FakePage:
             self.clock.now += self.navigation_seconds
 
     def locator(self, _selector):
+        self.last_locator_selector = _selector
+        return self
+
+    @property
+    def first(self):
         return self
 
     def focus(self, timeout=None):
@@ -83,9 +94,11 @@ class FakePage:
         except StopIteration:
             raise PlaywrightTimeoutError("expected text did not appear")
 
-    def screenshot(self, timeout=None):
+    def screenshot(self, path=None, timeout=None):
         self.screenshot_timeout = timeout
         self.screenshot_count += 1
+        if self.clock:
+            self.clock.now += self.screenshot_seconds
         if self.screenshot_error:
             raise PlaywrightTimeoutError("screenshot timed out")
         try:
@@ -93,15 +106,19 @@ class FakePage:
         except StopIteration:
             return png_bytes("white")
 
-    def wait_for_timeout(self, _milliseconds):
-        pass
+    def wait_for_timeout(self, milliseconds):
+        if self.clock:
+            self.clock.now += milliseconds / 1_000
 
 
 class CaptureRenderReadinessTest(unittest.TestCase):
     def test_video_frame_manifest_preserves_full_capture_interval(self):
         with tempfile.TemporaryDirectory() as temporary_frames:
             manifest = write_video_frame_manifest(
-                Path(temporary_frames), [0, 5, 10], capture_deadline=15
+                Path(temporary_frames),
+                [10.37, 15, 20],
+                capture_started_at=10,
+                capture_deadline=25,
             )
             lines = manifest.read_text(encoding="utf-8").splitlines()
 
@@ -137,6 +154,27 @@ class CaptureRenderReadinessTest(unittest.TestCase):
         )
 
         self.assertEqual(page.screenshot_count, 3)
+        self.assertEqual(page.last_locator_selector, "flt-glass-pane canvas")
+
+    def test_unrelated_page_pixels_do_not_satisfy_flutter_surface_readiness(self):
+        page = FakePage(
+            [png_bytes("white")],
+            ["Stimmen bearbeiten"],
+            unrelated_page_image=png_bytes("navy"),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "nonblank"):
+            wait_for_flutter_render(
+                page,
+                (2, 2),
+                "Stimmen bearbeiten",
+                timeout=0.01,
+                poll_interval=0,
+            )
+
+        unrelated_page = Image.open(BytesIO(page.unrelated_page_image))
+        self.assertGreater(max(ImageStat.Stat(unrelated_page).stddev), 1)
+        self.assertEqual(page.last_locator_selector, "flt-glass-pane canvas")
 
     def test_fails_explicitly_when_expected_content_never_appears(self):
         page = FakePage([png_bytes("navy")], [""])
@@ -194,6 +232,19 @@ class CaptureRenderReadinessTest(unittest.TestCase):
         self.assertLessEqual(page.evaluate_timeout, 1_000)
         self.assertLessEqual(page.wait_for_function_timeout, 1_000)
         self.assertLessEqual(page.screenshot_timeout, 1_000)
+
+    def test_stops_after_wall_clock_deadline_before_scheduled_frame_time(self):
+        clock = FakeClock(0)
+        page = FakePage([], [], clock=clock, screenshot_seconds=0.16)
+
+        with tempfile.TemporaryDirectory() as temporary_frames:
+            with patch("capture_render_readiness.time.monotonic", clock.monotonic):
+                frame_times = capture_video_frames(
+                    page, Path(temporary_frames), 0, 0.25, frame_rate=10
+                )
+
+        self.assertEqual(len(frame_times), 2)
+        self.assertEqual(page.screenshot_count, 2)
 
 
 if __name__ == "__main__":
