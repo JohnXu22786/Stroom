@@ -999,7 +999,12 @@ class TaskExecutor {
       try {
         final response = await dio.get(
           playlist.url,
-          options: Options(headers: headersForUrl(playlist.url)),
+          cancelToken: cancelToken,
+          options: Options(
+            headers: headersForUrl(playlist.url),
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 30),
+          ),
         );
         if (response.data is! String ||
             (response.data as String).trim().isEmpty) {
@@ -1018,6 +1023,7 @@ class TaskExecutor {
       } finally {
         dio.close();
       }
+      if (cancelToken?.isCancelled ?? false) return;
       await M3U8Parser.parsePlaylistWithDetails(
         content,
         playlist.url,

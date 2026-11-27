@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -37,6 +38,45 @@ class _PlaylistAdapter implements HttpClientAdapter {
         Headers.contentTypeHeader: ['application/vnd.apple.mpegurl'],
       },
     );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _HeldPlaylistAdapter implements HttpClientAdapter {
+  final started = Completer<void>();
+  final response = Completer<ResponseBody>();
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    if (!started.isCompleted) started.complete();
+    cancelFuture?.then((_) {
+      if (!response.isCompleted) {
+        response.completeError(
+          DioException(requestOptions: options, type: DioExceptionType.cancel),
+        );
+      }
+    });
+    return response.future;
+  }
+
+  void release() {
+    if (!response.isCompleted) {
+      response.complete(
+        ResponseBody.fromString(
+          '#EXTM3U\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST',
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/vnd.apple.mpegurl'],
+          },
+        ),
+      );
+    }
   }
 
   @override
@@ -239,6 +279,246 @@ encrypted-segment.ts
             .failed,
         isTrue,
       );
+    },
+  );
+
+  test(
+    'cancels a retry while HLS playlist revalidation is pending',
+    () async {
+      const playlistUrl = 'https://example.com/retry-cancel.m3u8';
+      const segmentUrl = 'https://example.com/segment.ts';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'hls-retry-cancel',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'playlist',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      final cancelToken = CancelToken();
+      final adapter = _HeldPlaylistAdapter();
+      final updates = <CatCatchTask>[];
+      final retry = TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        cancelToken: cancelToken,
+        playlistDioFactory: () => Dio()..httpClientAdapter = adapter,
+        onUpdate: updates.add,
+      );
+
+      await adapter.started.future.timeout(const Duration(seconds: 1));
+      cancelToken.cancel('retry cancelled');
+
+      try {
+        expect(await retry.timeout(const Duration(milliseconds: 250)), isNull);
+      } finally {
+        adapter.release();
+      }
+
+      expect(updates, hasLength(1));
+      expect(updates.single.status, TaskStatus.running);
+      expect(updates.single.steps.any((step) => step.failed), isFalse);
+    },
+  );
+
+  test(
+    'skips playlist parsing when cancellation arrives with the response',
+    () async {
+      const originalReferer = 'https://source.example/video';
+      final variantServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final variantUrl =
+          'http://${variantServer.address.address}:${variantServer.port}/variant.m3u8';
+      const playlistUrl = 'https://example.com/cancel-after-response.m3u8';
+      const segmentUrl = 'https://example.com/saved-segment.ts';
+      var variantRequests = 0;
+      final serverRequests = variantServer.listen((request) async {
+        variantRequests++;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.text
+          ..write('#EXTM3U\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST');
+        await request.response.close();
+      });
+      final master = '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+$variantUrl
+''';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'saved-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'hls-retry-cancel-after-master-response',
+        url: originalReferer,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'master',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      final cancelToken = CancelToken();
+      final dio = Dio()
+        ..httpClientAdapter = _PlaylistAdapter({playlistUrl: master});
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onResponse: (response, handler) {
+            cancelToken.cancel('retry cancelled after master response');
+            handler.next(response);
+          },
+        ),
+      );
+      final updates = <CatCatchTask>[];
+
+      try {
+        await HttpOverrides.runWithHttpOverrides(
+          () => TaskExecutor.retryFromStep(
+            task: task,
+            fromStep: StepType.downloading,
+            cancelToken: cancelToken,
+            playlistDioFactory: () => dio,
+            onUpdate: updates.add,
+          ),
+          _RealHttpOverrides(),
+        );
+      } finally {
+        await serverRequests.cancel();
+        await variantServer.close(force: true);
+      }
+
+      expect(variantRequests, 0);
+      expect(updates, hasLength(1));
+      expect(updates.single.status, TaskStatus.running);
+      expect(updates.single.steps.any((step) => step.failed), isFalse);
+    },
+  );
+
+  test(
+    'cancels retry while a variant playlist response is held',
+    () async {
+      final variantServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requestReceived = Completer<void>();
+      final releaseResponse = Completer<void>();
+      final variantUrl =
+          'http://${variantServer.address.address}:${variantServer.port}/variant.m3u8';
+      const playlistUrl = 'https://example.com/held-child-master.m3u8';
+      const segmentUrl = 'https://example.com/saved-segment.ts';
+      final serverRequests = variantServer.listen((request) async {
+        if (!requestReceived.isCompleted) requestReceived.complete();
+        await releaseResponse.future;
+        try {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType.text
+            ..write('#EXTM3U\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST');
+          await request.response.close();
+        } on SocketException {
+          // The retry cancels the held child request before the response is released.
+        }
+      });
+      final master = '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+$variantUrl
+''';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'saved-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'hls-retry-cancel-held-child',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'master',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      final cancelToken = CancelToken();
+      final updates = <CatCatchTask>[];
+      final retry = HttpOverrides.runWithHttpOverrides(
+        () => TaskExecutor.retryFromStep(
+          task: task,
+          fromStep: StepType.downloading,
+          cancelToken: cancelToken,
+          playlistDioFactory: () => Dio()
+            ..httpClientAdapter = _PlaylistAdapter({playlistUrl: master}),
+          onUpdate: updates.add,
+        ),
+        _RealHttpOverrides(),
+      );
+
+      try {
+        await requestReceived.future.timeout(const Duration(seconds: 1));
+        cancelToken.cancel('retry cancelled during child playlist fetch');
+        expect(await retry.timeout(const Duration(milliseconds: 250)), isNull);
+      } finally {
+        if (!releaseResponse.isCompleted) releaseResponse.complete();
+        await serverRequests.cancel();
+        await variantServer.close(force: true);
+      }
+
+      expect(updates, hasLength(1));
+      expect(updates.single.status, TaskStatus.running);
+      expect(updates.single.steps.any((step) => step.failed), isFalse);
     },
   );
 
