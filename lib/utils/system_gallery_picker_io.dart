@@ -10,7 +10,7 @@ import '../l10n/app_localizations.dart';
 
 import '../widgets/constrained_text.dart';
 
-Future<XFile> createConstrainedGalleryImageFile({
+Future<XFile?> createConstrainedGalleryImageFile({
   required String title,
   required int width,
   required int height,
@@ -24,9 +24,7 @@ Future<XFile> createConstrainedGalleryImageFile({
   })
   thumbnailDataWithSize,
 }) async {
-  if (width <= 0 || height <= 0) {
-    throw StateError('Could not determine image dimensions for $title.');
-  }
+  if (width <= 0 || height <= 0) return null;
 
   final scale = math.min(
     1.0,
@@ -43,15 +41,24 @@ Future<XFile> createConstrainedGalleryImageFile({
     format: ThumbnailFormat.jpeg,
     quality: imageQuality ?? 100,
   );
-  if (thumbnail == null) {
-    throw StateError('Could not create a constrained image for $title.');
-  }
+  if (thumbnail == null) return null;
 
   return XFile.fromData(
     thumbnail,
     name: '${p.basenameWithoutExtension(title)}.jpg',
     mimeType: 'image/jpeg',
   );
+}
+
+Future<List<XFile>> collectConstrainedGalleryImageFiles(
+  Iterable<Future<XFile?> Function()> createFiles,
+) async {
+  final files = <XFile>[];
+  for (final createFile in createFiles) {
+    final file = await createFile();
+    if (file != null) files.add(file);
+  }
+  return files;
 }
 
 Future<List<XFile>> pickNativeGalleryMedia(
@@ -98,25 +105,28 @@ Future<List<XFile>> pickNativeGalleryMedia(
   );
   if (assets == null || assets.isEmpty) return [];
 
+  if (!isVideo &&
+      (maxWidth != null || maxHeight != null || imageQuality != null)) {
+    return collectConstrainedGalleryImageFiles(
+      assets.map(
+        (asset) => () async {
+          final title = await asset.titleAsync;
+          return createConstrainedGalleryImageFile(
+            title: title,
+            width: asset.width,
+            height: asset.height,
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+            imageQuality: imageQuality,
+            thumbnailDataWithSize: asset.thumbnailDataWithSize,
+          );
+        },
+      ),
+    );
+  }
+
   final files = <XFile>[];
   for (final asset in assets) {
-    if (!isVideo &&
-        (maxWidth != null || maxHeight != null || imageQuality != null)) {
-      final title = await asset.titleAsync;
-      files.add(
-        await createConstrainedGalleryImageFile(
-          title: title,
-          width: asset.width,
-          height: asset.height,
-          maxWidth: maxWidth,
-          maxHeight: maxHeight,
-          imageQuality: imageQuality,
-          thumbnailDataWithSize: asset.thumbnailDataWithSize,
-        ),
-      );
-      continue;
-    }
-
     final file = await asset.originFile;
     if (file == null) continue;
     files.add(XFile(file.path, name: await asset.titleAsync));

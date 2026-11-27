@@ -6,13 +6,13 @@ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 void main() {
   test(
-    'missing constrained thumbnail fails instead of exposing the original',
+    'missing thumbnail omits only that selection and preserves the rest',
     () async {
       var requestedSize = const ThumbnailSize(0, 0);
       var requestedQuality = 0;
 
-      await expectLater(
-        createConstrainedGalleryImageFile(
+      final files = await collectConstrainedGalleryImageFiles([
+        () => createConstrainedGalleryImageFile(
           title: 'large-photo.png',
           width: 4000,
           height: 3000,
@@ -25,12 +25,24 @@ void main() {
             return Future<Uint8List?>.value(null);
           },
         ),
-        throwsA(isA<StateError>()),
-      );
+        () => createConstrainedGalleryImageFile(
+          title: 'second-photo.png',
+          width: 4000,
+          height: 3000,
+          maxWidth: 800,
+          maxHeight: 600,
+          imageQuality: 72,
+          thumbnailDataWithSize: (size, {required format, required quality}) {
+            return Future<Uint8List?>.value(Uint8List.fromList([4, 5, 6]));
+          },
+        ),
+      ]);
 
       expect(requestedSize.width, 800);
       expect(requestedSize.height, 600);
       expect(requestedQuality, 72);
+      expect(files, hasLength(1));
+      expect(await files.single.readAsBytes(), [4, 5, 6]);
     },
   );
 
@@ -51,7 +63,8 @@ void main() {
       },
     );
 
-    expect(file.mimeType, 'image/jpeg');
+    expect(file, isNotNull);
+    expect(file!.mimeType, 'image/jpeg');
     expect(await file.readAsBytes(), [1, 2, 3]);
   });
 }
