@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/batch_rename.dart';
 import 'package:stroom/utils/batch_rename_execution.dart';
@@ -175,6 +177,88 @@ void main() {
     expect(result.remaining, 1);
     expect(result.canUndo, isTrue);
     expect(disk.calls, ['a']);
+  });
+
+  test('读取项目快照期间取消时不启动下一次改名', () async {
+    final disk = _Disk([file('a', 'a')], {});
+    final plan = computeBatchRenamePlan(
+        items: disk.files,
+        allFiles: disk.files,
+        allFolders: {},
+        bridge: bridge,
+        config:
+            const BatchRenameConfig(numbering: BatchNumberOp(enabled: true)));
+    final snapshotReadStarted = Completer<void>();
+    final finishSnapshotRead = Completer<void>();
+    var snapshotReads = 0;
+    var cancel = false;
+    final resultFuture = executeBatchRename(
+        plan: plan,
+        bridge: bridge,
+        readSnapshot: () async {
+          snapshotReads++;
+          if (snapshotReads == 2) {
+            snapshotReadStarted.complete();
+            await finishSnapshotRead.future;
+          }
+          return disk.read();
+        },
+        renameFile: disk.renameFile,
+        renameFolder: disk.renameFolder,
+        shouldCancel: () => cancel);
+
+    await snapshotReadStarted.future;
+    cancel = true;
+    finishSnapshotRead.complete();
+    final result = await resultFuture;
+
+    expect(disk.calls, isEmpty);
+    expect(result.cancelled, isTrue);
+    expect(result.completed, isEmpty);
+    expect(result.remaining, 1);
+  });
+
+  test('取消期间发现快照变化时拒绝后续改名并禁用撤销', () async {
+    final disk = _Disk([file('a', 'a'), file('b', 'b')], {});
+    final plan = computeBatchRenamePlan(
+        items: disk.files,
+        allFiles: disk.files,
+        allFolders: {},
+        bridge: bridge,
+        config:
+            const BatchRenameConfig(numbering: BatchNumberOp(enabled: true)));
+    final snapshotReadStarted = Completer<void>();
+    final finishSnapshotRead = Completer<void>();
+    var snapshotReads = 0;
+    var cancel = false;
+    final resultFuture = executeBatchRename(
+        plan: plan,
+        bridge: bridge,
+        readSnapshot: () async {
+          snapshotReads++;
+          if (snapshotReads == 4) {
+            snapshotReadStarted.complete();
+            await finishSnapshotRead.future;
+          }
+          return disk.read();
+        },
+        renameFile: disk.renameFile,
+        renameFolder: disk.renameFolder,
+        shouldCancel: () => cancel);
+
+    await snapshotReadStarted.future;
+    disk.files = [file('a', '1_a'), file('b', 'external edit')];
+    cancel = true;
+    finishSnapshotRead.complete();
+    final result = await resultFuture;
+
+    expect(disk.calls, ['a']);
+    expect(result.cancelled, isFalse);
+    expect(result.completed, hasLength(1));
+    expect(result.remaining, 1);
+    expect(result.error, contains('文件列表已变化'));
+    expect(result.verified, isFalse);
+    expect(result.canUndo, isFalse);
   });
 
   test('后续编辑阻止撤销，回调静默未生效不能报告成功', () async {

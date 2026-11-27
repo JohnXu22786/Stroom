@@ -180,7 +180,8 @@ Future<BatchRenameExecution> _run(
           total: entries.length,
           cancelled: true);
     try {
-      if (!expected.sameNames(await readSnapshot())) {
+      final current = await readSnapshot();
+      if (!expected.sameNames(current)) {
         return BatchRenameExecution(
             completed: completed,
             after: expected,
@@ -188,6 +189,12 @@ Future<BatchRenameExecution> _run(
             error: '执行期间文件列表已变化，已停止后续操作',
             verified: false);
       }
+      if (shouldCancel?.call() ?? false)
+        return BatchRenameExecution(
+            completed: completed,
+            after: expected,
+            total: entries.length,
+            cancelled: true);
       final oldName = entry.isFolder
           ? entry.id.split('/').last
           : expected.files.firstWhere((f) => f.id == entry.id).name;
