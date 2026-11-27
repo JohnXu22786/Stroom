@@ -471,7 +471,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         // provider（Riverpod 调试断言），推迟到帧后执行。
         final oldConvId = oldWidget.conversationId;
         final oldTextSnapshot = _textController.text;
-        final oldAttsSnapshot = _draftAttachmentSnapshot();
+        final oldAttsSnapshot = _draftAttachmentSnapshot(oldWidget);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (oldConvId == null) return;
           try {

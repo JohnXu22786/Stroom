@@ -620,6 +620,9 @@ void main() {
     testWidgets('切换对话：旧对话草稿（文字+附件）保存，新对话附件恢复', (tester) async {
       final container = _buildContainer();
       final attA = readyImage(id: 'att-a', hash: 'hash-a');
+      // Runtime pending attachments can have no explicit owner yet; a
+      // conversation switch must snapshot them with the old widget identity.
+      attA.conversationId = null;
       final attB = readyImage(id: 'att-b', hash: 'hash-b');
       attB.conversationId = 'conv-2';
 
@@ -656,6 +659,7 @@ void main() {
           .firstWhere((c) => c.id == 'conv-1');
       expect(conv1.draftText, '对话1的草稿');
       expect(conv1.draftAttachments.map((a) => a.id), ['att-a']);
+      expect(conv1.draftAttachments.single.conversationId, 'conv-1');
 
       // 对话2：附件草稿恢复为 B（A 的芯片不残留）
       expect(find.byKey(const ValueKey('pending_att_att-b')), findsOneWidget);
