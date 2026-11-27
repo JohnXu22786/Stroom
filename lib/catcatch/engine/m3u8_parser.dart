@@ -14,7 +14,7 @@ typedef M3U8HeadersForUrl = Map<String, String> Function(String url);
 /// 支持：
 /// - 单码率播放列表 (#EXTINF)
 /// - 多码率播放列表 (#EXT-X-STREAM-INF)，自动选择最高码率
-/// - AES-128 加密检测
+/// - HLS 加密检测
 /// - 相对路径 → 绝对 URL 转换
 class M3U8Parser {
   M3U8Parser._();
@@ -55,6 +55,10 @@ class M3U8Parser {
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
   }) async {
+    if (isEncrypted(content)) {
+      throw UnsupportedError('Encrypted HLS playlists are not supported');
+    }
+
     final lines = _normalizeLines(content);
     final segments = <M3U8PlaylistResource>[];
     var mediaSegmentCount = 0;
@@ -238,12 +242,20 @@ class M3U8Parser {
     return result;
   }
 
-  /// 检测是否使用 AES-128 加密
+  /// 检测是否启用了 HLS 加密。
   static bool isEncrypted(String content) {
-    return RegExp(
-      r'#EXT-X-KEY:.*?METHOD\s*=\s*AES-128',
-      caseSensitive: false,
-    ).hasMatch(content);
+    for (final line in _normalizeLines(content)) {
+      final trimmed = line.trim();
+      final tag = trimmed.startsWith('#EXT-X-KEY:')
+          ? '#EXT-X-KEY:'
+          : trimmed.startsWith('#EXT-X-SESSION-KEY:')
+              ? '#EXT-X-SESSION-KEY:'
+              : null;
+      if (tag == null) continue;
+      final attributes = _parseTagParams(trimmed.substring(tag.length));
+      if (attributes['METHOD']?.toUpperCase() != 'NONE') return true;
+    }
+    return false;
   }
 
   /// 提取 AES-128 密钥 URL

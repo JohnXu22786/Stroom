@@ -45,6 +45,78 @@ class _PlaylistAdapter implements HttpClientAdapter {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'fails encrypted HLS before treating downloaded ciphertext as media',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      const playlist = '''
+#EXTM3U
+#EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+#EXTINF:4.0,
+encrypted-segment.ts
+#EXT-X-ENDLIST
+''';
+      final task = CatCatchTask(
+        id: 'encrypted-hls',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+        ],
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.parsingPlaylist)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      final cancelToken = CancelToken();
+      CatCatchTask? finalTask;
+
+      try {
+        await TaskExecutor.retryFromStep(
+          task: task,
+          fromStep: StepType.parsingPlaylist,
+          cancelToken: cancelToken,
+          playlistDioFactory: () => Dio()
+            ..httpClientAdapter = _PlaylistAdapter({playlistUrl: playlist}),
+          onUpdate: (updated) {
+            finalTask = updated;
+            final parsing = updated.steps.firstWhere(
+              (step) => step.type == StepType.parsingPlaylist,
+            );
+            if (parsing.completed) cancelToken.cancel();
+          },
+        );
+      } finally {
+        cancelToken.cancel();
+      }
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('encrypted'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.parsingPlaylist)
+            .failed,
+        isTrue,
+      );
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .completed,
+        isFalse,
+      );
+    },
+  );
+
   test('keeps the merged container extension for each playlist', () async {
     const transportUrl = 'https://example.com/transport.m3u8';
     const fragmentedUrl = 'https://example.com/fragmented.m3u8';
