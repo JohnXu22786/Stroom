@@ -868,6 +868,14 @@ $$
         FontWeight.bold,
       );
 
+      const inlineCodeAcrossQuotedParagraphs = '> `unclosed\n>\n> __bold__`';
+      parsedNodeCount = 0;
+      previewGenerator.buildPlainTextPreview([
+        inlineCodeAcrossQuotedParagraphs,
+      ]);
+      expect(parsedNodeCount, greaterThan(0));
+
+      parsedNodeCount = 0;
       final unmatchedLinkMarkers = '](' * 1024;
       final unmatchedLinkPreview = previewGenerator.buildPlainTextPreview([
         unmatchedLinkMarkers,

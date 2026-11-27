@@ -246,9 +246,10 @@ String _withoutMarkdownCode(String source) {
 
   final sourceWithoutFences = String.fromCharCodes(codeUnits);
   final runs = RegExp(r'`+').allMatches(sourceWithoutFences).toList();
+  final paragraphSource = _withoutBlockQuotePrefixes(sourceWithoutFences);
   final paragraphBreaks = RegExp(
     r'(?:\r\n|\r|\n)[ \t]*(?:(?:\r\n|\r|\n)[ \t]*)+',
-  ).allMatches(sourceWithoutFences).toList();
+  ).allMatches(paragraphSource).toList();
   var paragraphIndex = 0;
   var paragraphBreakIndex = 0;
   final paragraphForRun = <int>[];
@@ -308,6 +309,35 @@ String _withoutMarkdownCode(String source) {
     // that follow it. The next exact-length run closes even after a backslash.
     maskRange(openingStart, runs[closingRunIndex].end);
     runIndex = closingRunIndex + 1;
+  }
+  return String.fromCharCodes(codeUnits);
+}
+
+String _withoutBlockQuotePrefixes(String source) {
+  final codeUnits = source.codeUnits.toList();
+  final quotePrefix = RegExp(r'^ {0,3}>[ \t]?');
+  var lineStart = 0;
+  while (lineStart < source.length) {
+    var lineEnd = lineStart;
+    while (lineEnd < source.length &&
+        codeUnits[lineEnd] != 10 &&
+        codeUnits[lineEnd] != 13) {
+      lineEnd++;
+    }
+    var prefixEnd = lineStart;
+    var content = source.substring(lineStart, lineEnd);
+    while (true) {
+      final match = quotePrefix.matchAsPrefix(content);
+      if (match == null) break;
+      prefixEnd += match.end;
+      content = content.substring(match.end);
+    }
+    for (var i = lineStart; i < prefixEnd; i++) {
+      codeUnits[i] = 32;
+    }
+    lineStart = lineEnd;
+    if (lineStart < source.length && codeUnits[lineStart] == 13) lineStart++;
+    if (lineStart < source.length && codeUnits[lineStart] == 10) lineStart++;
   }
   return String.fromCharCodes(codeUnits);
 }
