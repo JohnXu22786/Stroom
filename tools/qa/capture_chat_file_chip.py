@@ -171,7 +171,18 @@ try:
             }
             query = "&".join(f"{key}={value}" for key, value in params.items())
             page.goto(f"{URL}?{query}", wait_until="load", timeout=120_000)
-            page.wait_for_timeout(2_500)
+            dialog_deadline = time.monotonic() + 60
+            while time.monotonic() < dialog_deadline:
+                screenshot = page.screenshot()
+                image = Image.open(BytesIO(screenshot)).convert("RGB")
+                if max(ImageStat.Stat(image).stddev) > 1:
+                    break
+                page.wait_for_timeout(50)
+            else:
+                raise TimeoutError(
+                    f"Flutter Web did not render the production picker at {scale}×"
+                )
+            page.wait_for_timeout(100)
             # The fixture's only record is the first text row. Click the file
             # row directly so the production dialog loads the file and
             # shows the real chip at both text scales.
