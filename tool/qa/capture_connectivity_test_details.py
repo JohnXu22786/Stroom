@@ -66,10 +66,6 @@ with tempfile.TemporaryDirectory(prefix="stroom-connectivity-capture-") as build
                 wait_until="load",
                 timeout=120_000,
             )
-            placeholder = page.locator("flt-semantics-placeholder")
-            placeholder.wait_for(timeout=120_000)
-            placeholder.focus()
-            placeholder.press("Enter")
             page.wait_for_function(
                 "() => document.body.innerText.includes('MCP tools/list') "
                 "&& document.body.innerText.includes('Lokaler Vorschauwert')",
