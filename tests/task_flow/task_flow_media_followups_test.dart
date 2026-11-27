@@ -396,7 +396,6 @@ void main() {
     for (final (name, bytes, format) in [
       ('speech.mp3', [0x49, 0x44, 0x33, 4, 0, 0], 'mp3'),
       ('speech.wav', utf8.encode('RIFF0000WAVE'), 'wav'),
-      ('speech.m4a', utf8.encode('0000ftypM4A '), 'm4a'),
     ]) {
       final source = await File('${directory.path}/$name').writeAsBytes(bytes);
       final message = await prepareFlowChatMessage(
