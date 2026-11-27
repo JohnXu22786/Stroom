@@ -12,6 +12,9 @@ from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tool" / "qa"))
+from capture_build_dependencies import needs_rebuild
+
 STATE = Path("/workspace/.cloud-profile-state/vertical_result_dialog_scroll")
 TMP = STATE / "tmp"
 PUB_CACHE = STATE / "pub-cache"
@@ -28,10 +31,7 @@ environment = os.environ.copy()
 environment["TMPDIR"] = str(TMP)
 environment["PUB_CACHE"] = str(PUB_CACHE)
 capture_entrypoint = ROOT / "tool/qa/vertical_result_dialog_scroll_capture.dart"
-if (
-    not (WEB_BUILD / "index.html").exists()
-    or capture_entrypoint.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-):
+if needs_rebuild(ROOT, capture_entrypoint, WEB_BUILD / "index.html"):
     subprocess.run(
         [
             "/workspace/sdks/flutter/bin/flutter",

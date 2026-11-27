@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tool" / "qa"))
 
-from capture_build_dependencies import needs_rebuild  # noqa: E402
+from capture_build_dependencies import capture_build_inputs, needs_rebuild  # noqa: E402
 
 
 class CaptureBuildDependenciesTest(unittest.TestCase):
@@ -131,6 +131,43 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
         os.utime(self.nested_package_input, (newer_mtime, newer_mtime))
 
         self.assertTrue(needs_rebuild(self.root, self.entrypoint, self.bundle))
+
+    def test_vertical_result_dialog_capture_tracks_imported_dialog_source(self):
+        root = self.root / "vertical-result-dialog-capture"
+        entrypoint = root / "tool/qa/vertical_result_dialog_scroll_capture.dart"
+        entrypoint.parent.mkdir(parents=True)
+        entrypoint.write_text(
+            "import 'package:stroom/widgets/backup_restore_result_dialogs.dart';\n",
+            encoding="utf-8",
+        )
+        dialog_source = root / "lib/widgets/backup_restore_result_dialogs.dart"
+        dialog_source.parent.mkdir(parents=True)
+        dialog_source.write_text(
+            "import 'constrained_text.dart';\nclass BackupRestoreRestartDialog {}\n",
+            encoding="utf-8",
+        )
+        (dialog_source.parent / "constrained_text.dart").write_text(
+            "class ConstrainedText {}\n", encoding="utf-8"
+        )
+        (root / "pubspec.yaml").write_text("name: stroom\n", encoding="utf-8")
+        (root / "pubspec.lock").write_text("", encoding="utf-8")
+        (root / "l10n.yaml").write_text("", encoding="utf-8")
+        (root / "web").mkdir()
+        (root / "web/index.html").write_text("<html></html>\n", encoding="utf-8")
+        bundle = self.root / "build/vertical-result-dialog/index.html"
+        bundle.parent.mkdir(parents=True)
+        bundle.write_text("built bundle\n", encoding="utf-8")
+
+        inputs = capture_build_inputs(root, entrypoint)
+        self.assertIn(dialog_source.resolve(), inputs)
+
+        baseline_mtime = 1_700_000_000_000_000_000
+        for source in inputs:
+            os.utime(source, ns=(baseline_mtime, baseline_mtime))
+        os.utime(bundle, ns=(baseline_mtime + 1_000_000_000,) * 2)
+        os.utime(dialog_source, ns=(baseline_mtime + 2_000_000_000,) * 2)
+
+        self.assertTrue(needs_rebuild(root, entrypoint, bundle))
 
 
 if __name__ == "__main__":
