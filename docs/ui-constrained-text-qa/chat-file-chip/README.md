@@ -18,6 +18,11 @@ callback is a no-op, no input is focused, and the software keyboard is closed.
   clipping in the fixed-height tab strip and selected-state AppBar actions;
   those adjacent controls are tracked separately and are not hidden by the
   chip regression.
+- Production-route boundary tests derive the text slot from the rendered row
+  after the 0.5 dp border inset, icon, gap, and padding. A `notes.pdf` natural
+  width of 98.28 dp stays on one line in the 99 dp slot; 99.28 dp and 100.28 dp
+  widths wrap to two visible lines with the chip and parent bar containing the
+  full label bounds.
 - The long-name screenshot and WebM preview show the two-line viewport,
   vertical reveal, the 2 s endpoint pause, return, and the second 2 s endpoint
   pause. The 23 s preview includes the measured 1 s initial delay and both

@@ -142,7 +142,7 @@ void main() {
     );
   });
 
-  testWidgets('preview bar fits a filename at the two-line wrap boundary', (
+  testWidgets('preview bar keeps a name fitting the rendered 99 dp slot', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 640);
@@ -151,19 +151,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     const filename = 'notes.pdf';
-    const style = TextStyle(fontSize: 10, height: 1.2);
-    final naturalText = TextPainter(
-      text: const TextSpan(text: filename, style: style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final scale = 99.28 / naturalText.width;
     await _seedPdf(tester, 'notes');
-
-    await tester.pumpWidget(_buildTestApp((_) {}, textScale: scale));
-    await _openPicker(tester);
-    await tester.tap(find.byType(Checkbox).first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await _openAtTextScale(
+      tester,
+      textScale: await _scaleForNaturalTextWidth(tester, 97),
+    );
 
     final chip = find.byType(PreviewChip);
     final filenameLabel = find.descendant(
@@ -172,6 +164,8 @@ void main() {
     );
     final labelRect = tester.getRect(filenameLabel);
     final chipRect = tester.getRect(chip);
+    final chipRow = find.descendant(of: chip, matching: find.byType(Row));
+    final textSlotWidth = tester.getSize(chipRow).width - 20 - 4;
     final previewBarRect = tester.getRect(
       find.byKey(const Key('file_picker_preview_bar')),
     );
@@ -182,6 +176,12 @@ void main() {
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         );
+    final naturalText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
     final wrappedText = TextPainter(
       text: TextSpan(text: filename, style: chipStyle),
       textDirection: Directionality.of(context),
@@ -189,10 +189,146 @@ void main() {
       locale: Localizations.maybeLocaleOf(context),
       maxLines: 2,
       ellipsis: '…',
-    )..layout(maxWidth: 99);
+    )..layout(maxWidth: textSlotWidth);
     expect(tester.widget<ConstrainedText>(filenameLabel).data, filename);
+    expect(textSlotWidth, closeTo(99, 0.01));
+    expect(naturalText.width, closeTo(98.28, 0.5));
+    expect(naturalText.width, lessThan(textSlotWidth));
+    expect(labelRect.width, closeTo(99, 0.01));
+    expect(wrappedText.computeLineMetrics(), hasLength(1));
+    expect(labelRect.height, closeTo(wrappedText.height, 0.01));
+    expect(tester.getSize(chip).height, 72);
+    expect(previewBarRect.height, 106);
+    expect(labelRect.bottom, lessThanOrEqualTo(chipRect.bottom - 8));
+    expect(chipRect.bottom, lessThanOrEqualTo(previewBarRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('preview bar grows at the rendered 99 dp wrap boundary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const filename = 'notes.pdf';
+    await _seedPdf(tester, 'notes');
+    await _openAtTextScale(
+      tester,
+      textScale: await _scaleForNaturalTextWidth(tester, 97.88),
+    );
+    final chip = find.byType(PreviewChip);
+    final filenameLabel = find.descendant(
+      of: chip,
+      matching: find.byType(ConstrainedText),
+    );
+    final labelRect = tester.getRect(filenameLabel);
+    final chipRect = tester.getRect(chip);
+    final chipRow = find.descendant(of: chip, matching: find.byType(Row));
+    final textSlotWidth = tester.getSize(chipRow).width - 20 - 4;
+    final previewBar = find.byKey(const Key('file_picker_preview_bar'));
+    final previewBarRect = tester.getRect(previewBar);
+    final context = tester.element(chip);
+    final chipStyle = DefaultTextStyle.of(context).style.merge(
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        );
+    final naturalText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
+    final wrappedText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: textSlotWidth);
+    final requiredHeight = PreviewChip.requiredHeight(
+      context,
+      fileName: filename,
+      isImage: false,
+    );
+
+    expect(textSlotWidth, closeTo(99, 0.01));
+    expect(naturalText.width, closeTo(99.28, 0.2));
+    expect(naturalText.width, greaterThan(textSlotWidth));
+    expect(naturalText.width, lessThan(100));
+    expect(labelRect.width, closeTo(99, 0.01));
     expect(wrappedText.computeLineMetrics(), hasLength(2));
-    expect(labelRect.height, greaterThan(wrappedText.height - 0.01));
+    expect(labelRect.height, closeTo(wrappedText.height, 0.01));
+    expect(tester.getSize(chip).height, greaterThanOrEqualTo(requiredHeight));
+    expect(tester.getSize(previewBar).height, greaterThanOrEqualTo(106));
+    expect(labelRect.bottom, lessThanOrEqualTo(chipRect.bottom - 8));
+    expect(chipRect.bottom, lessThanOrEqualTo(previewBarRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('preview bar grows when text exceeds 100 dp', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const filename = 'notes.pdf';
+    await _seedPdf(tester, 'notes');
+
+    await _openAtTextScale(
+      tester,
+      textScale: await _scaleForNaturalTextWidth(tester, 98.86),
+    );
+    final chip = find.byType(PreviewChip);
+    final filenameLabel = find.descendant(
+      of: chip,
+      matching: find.byType(ConstrainedText),
+    );
+    final labelRect = tester.getRect(filenameLabel);
+    final chipRect = tester.getRect(chip);
+    final chipRow = find.descendant(of: chip, matching: find.byType(Row));
+    final textSlotWidth = tester.getSize(chipRow).width - 20 - 4;
+    final previewBar = find.byKey(const Key('file_picker_preview_bar'));
+    final previewBarRect = tester.getRect(previewBar);
+    final context = tester.element(chip);
+    final chipStyle = DefaultTextStyle.of(context).style.merge(
+          TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        );
+    final naturalText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
+    final wrappedText = TextPainter(
+      text: TextSpan(text: filename, style: chipStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: textSlotWidth);
+    final requiredHeight = PreviewChip.requiredHeight(
+      context,
+      fileName: filename,
+      isImage: false,
+    );
+
+    expect(textSlotWidth, closeTo(99, 0.01));
+    expect(naturalText.width, closeTo(100.28, 0.2));
+    expect(naturalText.width, greaterThan(100));
+    expect(labelRect.width, closeTo(99, 0.01));
+    expect(wrappedText.computeLineMetrics(), hasLength(2));
+    expect(labelRect.height, closeTo(wrappedText.height, 0.01));
+    expect(tester.getSize(chip).height, greaterThanOrEqualTo(requiredHeight));
+    expect(tester.getSize(previewBar).height, greaterThanOrEqualTo(106));
     expect(labelRect.bottom, lessThanOrEqualTo(chipRect.bottom - 8));
     expect(chipRect.bottom, lessThanOrEqualTo(previewBarRect.bottom));
     expect(tester.takeException(), isNull);
@@ -530,4 +666,46 @@ Future<void> _openPicker(WidgetTester tester) async {
   await tester.tap(find.text('Open Picker'));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
+}
+
+Future<void> _openAtTextScale(
+  WidgetTester tester, {
+  required double textScale,
+}) async {
+  await tester.pumpWidget(_buildTestApp((_) {}, textScale: textScale));
+  await _openPicker(tester);
+  await tester.tap(find.byType(Checkbox).first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+Future<double> _scaleForNaturalTextWidth(
+  WidgetTester tester,
+  double targetWidth,
+) async {
+  await tester.pumpWidget(_buildTestApp((_) {}, textScale: 1));
+  final context = tester.element(find.text('Open Picker'));
+  final style = DefaultTextStyle.of(context).style.merge(
+        TextStyle(
+          fontSize: 10,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+  var low = 1.0;
+  var high = 4.0;
+  for (var attempt = 0; attempt < 30; attempt++) {
+    final scale = (low + high) / 2;
+    final painter = TextPainter(
+      text: TextSpan(text: 'notes.pdf', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: TextScaler.linear(scale),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
+    if (painter.width < targetWidth) {
+      low = scale;
+    } else {
+      high = scale;
+    }
+  }
+  return (low + high) / 2;
 }
