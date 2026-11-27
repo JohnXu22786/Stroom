@@ -34,4 +34,24 @@ void main() {
     );
     expect(tags.map((tag) => tag.indicatorLength), [2, 1]);
   });
+
+  test('single tildes remain literal in GitHub Flavored Markdown', () {
+    expect(
+      markdown.markdownToHtml(
+        '~text~',
+        extensionSet: markdown.ExtensionSet.gitHubFlavored,
+      ),
+      '<p>~text~</p>\n',
+    );
+  });
+
+  test('double tildes produce strikethrough in GitHub Flavored Markdown', () {
+    expect(
+      markdown.markdownToHtml(
+        '~~text~~',
+        extensionSet: markdown.ExtensionSet.gitHubFlavored,
+      ),
+      '<p><del>text</del></p>\n',
+    );
+  });
 }
