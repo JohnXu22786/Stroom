@@ -283,11 +283,9 @@ void main() {
         await _createCollection(sourcePath);
         final packagePath = await _packageCollection(documents, sourcePath);
 
-        final importStartedAt =
-            DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final importStartedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
         await AnkiApkgImporter.import(packagePath);
-        final importFinishedAt =
-            DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final importFinishedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
         final col = (await collection.db.query('col')).single;
         final modified = col['mod'] as int;
