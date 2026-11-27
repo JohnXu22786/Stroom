@@ -1478,7 +1478,7 @@ class _Mp4Demuxer {
 
       while (_offset < moovEnd) {
         final childStart = _offset;
-        if (_offset + 8 > _data.length) break;
+        if (!_hasValidBoxAt(childStart, moovEnd)) return null;
 
         _readUint32(); // size
         final childType = _readString(4);
@@ -1548,7 +1548,7 @@ class _Mp4Demuxer {
       while (_offset < moovEnd) {
         await _yieldIfNeeded();
         final childStart = _offset;
-        if (_offset + 8 > _data.length) break;
+        if (!_hasValidBoxAt(childStart, moovEnd)) return null;
 
         _readUint32(); // size
         final childType = _readString(4);
@@ -1601,7 +1601,7 @@ class _Mp4Demuxer {
 
     while (_offset < trackEnd) {
       final childStart = _offset;
-      if (_offset + 8 > _data.length) break;
+      if (!_hasValidBoxAt(childStart, trackEnd)) return null;
 
       final childSize = _readUint32();
       final childType = _readString(4);
@@ -1635,6 +1635,7 @@ class _Mp4Demuxer {
 
         while (_offset < mdiaEnd) {
           final mcStart = _offset;
+          if (!_hasValidBoxAt(mcStart, mdiaEnd)) return null;
           final mcSize = _readUint32();
           final mcType = _readString(4);
 
@@ -1651,6 +1652,7 @@ class _Mp4Demuxer {
 
             while (_offset < minfEnd) {
               final icStart = _offset;
+              if (!_hasValidBoxAt(icStart, minfEnd)) return null;
               final icSize = _readUint32();
               final icType = _readString(4);
 
@@ -1668,10 +1670,12 @@ class _Mp4Demuxer {
                   }
 
                   if (scType == 'stsd') {
+                    final stsdEnd = scEnd;
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
                     for (var i = 0; i < entryCount; i++) {
                       final es = _offset;
+                      if (!_hasValidBoxAt(es, stsdEnd)) return null;
                       final entrySize = _readUint32();
                       final entryCodec = _readString(4);
                       _offset += 6; // reserved
@@ -1913,7 +1917,7 @@ class _Mp4Demuxer {
     while (_offset < trackEnd) {
       await _yieldIfNeeded();
       final childStart = _offset;
-      if (_offset + 8 > _data.length) break;
+      if (!_hasValidBoxAt(childStart, trackEnd)) return null;
 
       final childSize = _readUint32();
       final childType = _readString(4);
@@ -1950,6 +1954,7 @@ class _Mp4Demuxer {
         while (_offset < mdiaEnd) {
           await _yieldIfNeeded();
           final mcStart = _offset;
+          if (!_hasValidBoxAt(mcStart, mdiaEnd)) return null;
           final mcSize = _readUint32();
           final mcType = _readString(4);
 
@@ -1967,6 +1972,7 @@ class _Mp4Demuxer {
             while (_offset < minfEnd) {
               await _yieldIfNeeded();
               final icStart = _offset;
+              if (!_hasValidBoxAt(icStart, minfEnd)) return null;
               final icSize = _readUint32();
               final icType = _readString(4);
 
@@ -1985,11 +1991,13 @@ class _Mp4Demuxer {
                   }
 
                   if (scType == 'stsd') {
+                    final stsdEnd = scEnd;
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
                     for (var i = 0; i < entryCount; i++) {
                       await _yieldIfNeeded();
                       final es = _offset;
+                      if (!_hasValidBoxAt(es, stsdEnd)) return null;
                       final entrySize = _readUint32();
                       final entryCodec = _readString(4);
                       _offset += 6; // reserved
@@ -2840,6 +2848,14 @@ class _Mp4Demuxer {
         (_data[offset + 1] << 16) |
         (_data[offset + 2] << 8) |
         _data[offset + 3];
+  }
+
+  bool _hasValidBoxAt(int offset, int parentEnd) {
+    if (offset < 0 || parentEnd > _data.length || parentEnd - offset < 8) {
+      return false;
+    }
+    final boxSize = _boxSizeAt(offset);
+    return boxSize >= 8 && boxSize <= parentEnd - offset;
   }
 }
 
