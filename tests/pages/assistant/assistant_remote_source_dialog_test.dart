@@ -363,9 +363,7 @@ void main() {
     await tester.tap(find.text('Import file'));
     await tester.pumpAndSettle();
     expect(
-      container
-          .read(assistantProvider)
-          .where(
+      container.read(assistantProvider).where(
             (assistant) =>
                 assistant.remoteAssistantId == 'stroom.remote-defaults',
           ),
@@ -376,8 +374,8 @@ void main() {
     final savedAssistant = Assistant.fromMap(
       Map<String, dynamic>.from(
         savedRows.cast<Map>().firstWhere(
-          (row) => row['remoteAssistantId'] == 'stroom.remote-defaults',
-        ),
+              (row) => row['remoteAssistantId'] == 'stroom.remote-defaults',
+            ),
       ),
     );
     expect(savedAssistant.defaultModelName, 'Friendly Model | Provider A');
