@@ -7,7 +7,7 @@ remove action. Text beyond three lines continues to use the existing vertical
 `ConstrainedText` reveal.
 
 These production captures were refreshed after syncing the candidate with
-`main` at `b4772e1735ea5b37c16889f64d2eaa6647322e16`. The 33 focused media
+`main` at `cd5f070d4cc84894848ec6265c3aef4d39917dd3`. The 33 focused media
 picker widget tests, targeted analyzer, Dart 3.0 format check, Python capture
 script compile, and diff check passed on that synced candidate.
 
