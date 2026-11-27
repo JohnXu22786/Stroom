@@ -299,7 +299,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                               child: DropdownButton<String>(
                                 dropdownColor: StroomMenuStyle.surface(context),
                                 borderRadius: StroomMenuStyle.borderRadius,
-                                value: param.type,
+                                value: param.paramType.value,
                                 isDense: true,
                                 isExpanded: true,
                                 items: ParamType.values

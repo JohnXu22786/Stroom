@@ -1988,6 +1988,61 @@ $$
   });
 
   group('buildMessageMarkdownConfig - fence-aware streaming placeholder', () {
+    testWidgets('French Mermaid loading label fits at 3x text scale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      Widget buildApp(double textScale) => MaterialApp(
+            locale: const Locale('fr'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+              child: Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: 288,
+                    child: Builder(
+                      builder: (context) {
+                        final config = buildMessageMarkdownConfig(
+                          isDark: false,
+                          conversationIsStreaming: true,
+                          streamingMsgId: 'message',
+                          messageId: 'message',
+                          streamingText: '```mermaid\ngraph TD\nA-->B',
+                        );
+                        return config.pre.builder!(
+                            'graph TD\nA-->B', 'mermaid');
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(buildApp(1));
+      final card = find.byKey(const Key('mermaid_loading_card'));
+      expect(tester.getSize(card).height, 100);
+
+      await tester.pumpWidget(buildApp(3));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final label = find.text('Génération en cours…');
+      expect(label, findsOneWidget);
+      expect(tester.getRect(label).height, greaterThan(36));
+      final cardRect = tester.getRect(card);
+      expect(cardRect.height, greaterThan(100));
+      expect(tester.getRect(label).top, greaterThan(cardRect.top));
+      expect(tester.getRect(label).bottom, lessThan(cardRect.bottom));
+      expect(tester.takeException(), isNull);
+    });
+
     // Regression: during streaming only the mermaid block whose fence is
     // still OPEN shows "正在生成..."; blocks whose fence has closed render
     // immediately (and only once), even while the stream continues after

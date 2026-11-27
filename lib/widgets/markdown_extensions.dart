@@ -445,7 +445,9 @@ class _MermaidLoadingWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      height: 100,
+      key: const Key('mermaid_loading_card'),
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 100),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
@@ -454,22 +456,21 @@ class _MermaidLoadingWidget extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(height: 8),
-            Text(
-              AppLocalizations.of(context)!.markdownGenerating,
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(height: 8),
+          Text(
+            AppLocalizations.of(context)!.markdownGenerating,
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
       ),
     );
   }

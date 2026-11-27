@@ -329,6 +329,14 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final hasSelection = _selectedItems.isNotEmpty;
+    final mediaQuery = MediaQuery.of(context);
+    final view = View.of(context);
+    final viewportWidth = view.physicalSize.width / view.devicePixelRatio;
+    // Bound the clear action only when scaled text needs a finite slot; its
+    // ConstrainedText keeps the full label accessible and reveals clipped text.
+    final clearActionMaxWidth = mediaQuery.textScaler.scale(1) > 1
+        ? viewportWidth * 0.36
+        : viewportWidth;
 
     return PopScope(
       canPop: _isRoot,
@@ -357,15 +365,18 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
           ),
           actions: [
             if (widget.config.multiSelect && hasSelection)
-              TextButton(
-                key: const Key('media_picker_clear_btn'),
-                onPressed: _clearSelection,
-                child: ConstrainedText(
-                  AppLocalizations.of(context)!
-                      .appMediaClearSelection(_selectedItems.length),
-                  style: TextStyle(color: cs.primary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: clearActionMaxWidth),
+                child: TextButton(
+                  key: const Key('media_picker_clear_btn'),
+                  onPressed: _clearSelection,
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!
+                        .appMediaClearSelection(_selectedItems.length),
+                    style: TextStyle(color: cs.primary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
           ],
@@ -727,10 +738,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
   Widget _buildPreviewBar(ColorScheme cs) {
     final items = _selectedItems.entries.toList();
+    final headerBottomPadding =
+        MediaQuery.textScalerOf(context).scale(1) > 1 ? 8.0 : 2.0;
 
     return Container(
       key: const Key('media_picker_preview_bar'),
-      height: 106,
+      constraints: const BoxConstraints(minHeight: 106),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
@@ -740,7 +753,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+            padding: EdgeInsets.fromLTRB(12, 6, 12, headerBottomPadding),
             child: Text(
               AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
               style: TextStyle(
@@ -750,7 +763,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
               ),
             ),
           ),
-          Expanded(
+          SizedBox(
+            height: 72,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 8),
