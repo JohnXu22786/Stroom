@@ -12,6 +12,7 @@ import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Builds the test app with all required provider overrides.
 /// Uses a large screen size to avoid needing to scroll.
@@ -72,21 +73,24 @@ class _FailingProviderEntriesNotifier extends ProviderEntriesNotifier {
   }
 }
 
-Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
-    );
+Finder _fieldWithHint(String hint) => find.byWidgetPredicate((widget) {
+      if (widget is! TextField) return false;
+      if (widget.decoration?.hintText == hint) return true;
+      final decorationHint = widget.decoration?.hint;
+      return decorationHint is ExcludeSemantics &&
+          decorationHint.child is ConstrainedInputHint &&
+          (decorationHint.child as ConstrainedInputHint).data == hint;
+    });
+
+Finder _apiKeyFieldFinder() => _fieldWithHint('输入 API Key（可选）');
 
 Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
       (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
     );
 
-Finder _descriptionFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
-    );
+Finder _descriptionFieldFinder() => _fieldWithHint('输入此 MCP 服务器的描述信息（可选）');
 
-Finder _commandFieldFinder() => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '例如：npx',
-    );
+Finder _commandFieldFinder() => _fieldWithHint('例如：npx');
 
 Finder _argsFieldFinder() => find.byWidgetPredicate(
       (w) =>
@@ -95,11 +99,7 @@ Finder _argsFieldFinder() => find.byWidgetPredicate(
           (w.decoration!.prefixIcon as Icon).icon == Icons.list,
     );
 
-Finder _urlFieldFinder() => find.byWidgetPredicate(
-      (w) =>
-          w is TextField &&
-          w.decoration?.hintText == '例如：http://localhost:3001/sse',
-    );
+Finder _urlFieldFinder() => _fieldWithHint('例如：http://localhost:3001/sse');
 
 Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
       (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
