@@ -14,7 +14,7 @@ typedef M3U8HeadersForUrl = Map<String, String> Function(String url);
 /// 支持：
 /// - 单码率播放列表 (#EXTINF)
 /// - 多码率播放列表 (#EXT-X-STREAM-INF)，自动选择最高码率
-/// - AES-128 加密检测
+/// - HLS 加密检测
 /// - 相对路径 → 绝对 URL 转换
 class M3U8Parser {
   M3U8Parser._();
@@ -55,7 +55,38 @@ class M3U8Parser {
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
   }) async {
+    return _parsePlaylistWithDetails(
+      content,
+      baseUrl,
+      headersForUrl: headersForUrl,
+      visitedUrls: {_playlistUrlKey(baseUrl)},
+      variantDepth: 0,
+    );
+  }
+
+  static const _maxVariantDepth = 8;
+
+  static Future<
+      ({
+        List<String> resources,
+        List<M3U8PlaylistResource> playlistResources,
+        int mediaSegmentCount,
+        bool hasInitializationMap,
+      })> _parsePlaylistWithDetails(
+    String content,
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+    required Set<String> visitedUrls,
+    required int variantDepth,
+  }) async {
     final lines = _normalizeLines(content);
+    if (lines.isEmpty || lines.first.trim() != '#EXTM3U') {
+      throw FormatException('Invalid HLS playlist: missing #EXTM3U header');
+    }
+    if (isEncrypted(content)) {
+      throw UnsupportedError('Encrypted HLS playlists are not supported');
+    }
+
     final segments = <M3U8PlaylistResource>[];
     var mediaSegmentCount = 0;
     var hasInitializationMap = false;
@@ -70,23 +101,30 @@ class M3U8Parser {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
       final variants = _parseStreamInf(lines);
       if (variants.isEmpty) {
-        return (
-          resources: <String>[],
-          playlistResources: <M3U8PlaylistResource>[],
-          mediaSegmentCount: 0,
-          hasInitializationMap: false,
+        throw FormatException(
+          'Invalid HLS master playlist: no playable variants found',
         );
       }
       // 按带宽降序排序，选最高码率
       variants.sort((a, b) => (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0));
       final selectedUrl = _resolveUrl(variants.first.url, baseUrl);
+      if (variantDepth >= _maxVariantDepth) {
+        throw FormatException(
+            'Invalid HLS master playlist: nesting is too deep');
+      }
+      if (!visitedUrls.add(_playlistUrlKey(selectedUrl))) {
+        throw FormatException(
+            'Invalid HLS master playlist: cyclic variant URL');
+      }
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
       final subContent = await _fetchUrl(selectedUrl, headersForUrl);
-      return parsePlaylistWithDetails(
+      return _parsePlaylistWithDetails(
         subContent,
         selectedUrl,
         headersForUrl: headersForUrl,
+        visitedUrls: visitedUrls,
+        variantDepth: variantDepth + 1,
       );
     }
 
@@ -162,6 +200,9 @@ class M3U8Parser {
       }
     }
 
+    if (mediaSegmentCount == 0) {
+      throw FormatException('Invalid HLS media playlist: no media resources');
+    }
     debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
     return (
       resources: segments.map((resource) => resource.url).toList(),
@@ -238,12 +279,20 @@ class M3U8Parser {
     return result;
   }
 
-  /// 检测是否使用 AES-128 加密
+  /// 检测是否启用了 HLS 加密。
   static bool isEncrypted(String content) {
-    return RegExp(
-      r'#EXT-X-KEY:.*?METHOD\s*=\s*AES-128',
-      caseSensitive: false,
-    ).hasMatch(content);
+    for (final line in _normalizeLines(content)) {
+      final trimmed = line.trim();
+      final tag = trimmed.startsWith('#EXT-X-KEY:')
+          ? '#EXT-X-KEY:'
+          : trimmed.startsWith('#EXT-X-SESSION-KEY:')
+              ? '#EXT-X-SESSION-KEY:'
+              : null;
+      if (tag == null) continue;
+      final attributes = _parseTagParams(trimmed.substring(tag.length));
+      if (attributes['METHOD']?.toUpperCase() != 'NONE') return true;
+    }
+    return false;
   }
 
   /// 提取 AES-128 密钥 URL
@@ -262,7 +311,9 @@ class M3U8Parser {
 
   /// 标准化行：统一换行、过滤空白
   static List<String> _normalizeLines(String content) {
-    return content
+    final normalized =
+        content.startsWith('\uFEFF') ? content.substring(1) : content;
+    return normalized
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
         .split('\n')
@@ -334,6 +385,13 @@ class M3U8Parser {
     final uri = Uri.tryParse(baseUrl);
     if (uri == null) return url;
     return uri.resolve(url).toString();
+  }
+
+  static String _playlistUrlKey(String url) {
+    final uri = Uri.tryParse(url);
+    return uri == null
+        ? url
+        : uri.replace(fragment: '').normalizePath().toString();
   }
 
   /// 通过 HTTP 获取 URL 内容（用于递归解析子播放列表）
