@@ -104,6 +104,116 @@ Widget _assistantDefaultsTabForLengthTest({
     );
 
 void main() {
+  testWidgets('measures the tool-output default hint in the production tab', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('pt', 'BR'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData(
+            useMaterial3: true,
+            inputDecorationTheme: InputDecorationTheme(
+              hintStyle: WidgetStateTextStyle.resolveWith((states) {
+                return TextStyle(
+                  color: states.contains(WidgetState.error)
+                      ? Colors.orange
+                      : states.contains(WidgetState.focused)
+                          ? Colors.red
+                          : Colors.blue,
+                );
+              }),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: AssistantDefaultsTab(
+              defaultModelName: null,
+              defaultModelId: null,
+              defaultProviderName: null,
+              defaultToolNames: null,
+              maxToolOutputChars: 5000,
+              enableMaxToolOutputChars: true,
+              onDefaultModelChanged: (_) {},
+              onDefaultToolsChanged: (_) {},
+              onEnableMaxToolOutputCharsChanged: (_) {},
+              onMaxToolOutputCharsChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(AssistantDefaultsTab)),
+    )!;
+    final hint = l10n.assistantDefaultCharacterCount('5000');
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == hint,
+    );
+    expect(hintFinder, findsOneWidget);
+    final hintWidget = tester.widget<ConstrainedText>(hintFinder);
+    final hintContext = tester.element(hintFinder);
+    final naturalHint = TextPainter(
+      text: TextSpan(text: hint, style: hintWidget.style),
+      textDirection: Directionality.of(hintContext),
+      textScaler: MediaQuery.textScalerOf(hintContext),
+    )..layout();
+    final slot = tester.getSize(find.byType(ConstrainedInputHint));
+    expect(naturalHint.width, greaterThan(slot.width));
+    debugPrint('tool-output hint=$hint slot=$slot width=${naturalHint.width}');
+
+    final field = find.byType(TextField).first;
+    final semantics = tester.ensureSemantics();
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    expect(hintWidget.style!.color, Colors.blue);
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pump();
+    expect(
+      tester.widget<ConstrainedText>(hintFinder).style!.color,
+      Colors.red,
+    );
+    await tester.enterText(field, '1');
+    await tester.pump();
+    final erroredHint = tester.getSemantics(editable).getSemanticsData().hint;
+    expect(erroredHint, contains(hint));
+    expect(hint.allMatches(erroredHint).length, 1);
+    expect(
+      tester.widget<ConstrainedText>(hintFinder).style!.color,
+      Colors.orange,
+    );
+    expect(
+      tester
+          .widget<EditableText>(find.descendant(
+            of: field,
+            matching: find.byType(EditableText),
+          ))
+          .controller
+          .text,
+      '1',
+    );
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('short out-of-range truncation input remains visibly unapplied', (
     tester,
   ) async {

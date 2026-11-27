@@ -478,6 +478,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   void _renameTopic(String id, String currentTitle) {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: currentTitle);
+    final hintStatesController = MaterialStatesController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -486,27 +487,38 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: l10n.conversationRenameHint,
-            border: OutlineInputBorder(),
+        content: Semantics(
+          hint: l10n.conversationRenameHint,
+          child: TextField(
+            controller: controller,
+            statesController: hintStatesController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hint: ExcludeSemantics(
+                child: ConstrainedInputHint(
+                  l10n.conversationRenameHint,
+                  statesController: hintStatesController,
+                ),
+              ),
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                ref
+                    .read(conversationsProvider.notifier)
+                    .renameConversation(id, value.trim());
+              }
+              controller.dispose();
+              hintStatesController.dispose();
+              Navigator.of(ctx).pop();
+            },
           ),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              ref
-                  .read(conversationsProvider.notifier)
-                  .renameConversation(id, value.trim());
-            }
-            controller.dispose();
-            Navigator.of(ctx).pop();
-          },
         ),
         actions: [
           TextButton(
             onPressed: () {
               controller.dispose();
+              hintStatesController.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
@@ -524,6 +536,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                     .renameConversation(id, value);
               }
               controller.dispose();
+              hintStatesController.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
