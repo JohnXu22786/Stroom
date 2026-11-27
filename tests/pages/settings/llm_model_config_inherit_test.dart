@@ -1269,9 +1269,12 @@ void main() {
           final card = find
               .ancestor(of: find.text('mode'), matching: find.byType(Card))
               .first;
-          await tester.tap(
-            find.descendant(of: card, matching: find.byIcon(Icons.refresh)),
+          final resetButton = find.descendant(
+            of: card,
+            matching: find.byIcon(Icons.refresh),
           );
+          await tester.ensureVisible(resetButton);
+          await tester.tap(resetButton);
           await tester.pumpAndSettle();
           await _selectAdditionalParamType(tester, 'mode', '字符串');
           expect(find.text('{"mode":"original"}'), findsOneWidget);
