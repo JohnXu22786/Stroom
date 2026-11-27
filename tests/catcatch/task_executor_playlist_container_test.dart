@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -41,6 +42,8 @@ class _PlaylistAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+class _RealHttpOverrides extends HttpOverrides {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -179,6 +182,228 @@ encrypted-segment.ts
             .failed,
         isTrue,
       );
+    },
+  );
+
+  test(
+    'does not block selection while encrypted HLS remains unselected',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      final task = CatCatchTask(
+        id: 'encrypted-hls-selection-pending',
+        url: 'https://example.com/page',
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          const MediaResource(
+            url: 'https://example.com/encrypted-segment.ts',
+            name: 'encrypted-segment',
+            ext: 'ts',
+            initiator: playlistUrl,
+            isPlayable: false,
+          ),
+          const MediaResource(
+            url: 'https://example.com/direct.mp4',
+            name: 'direct',
+            ext: 'mp4',
+          ),
+        ],
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.userSelecting)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.userSelecting,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({
+            playlistUrl: '''
+#EXTM3U
+#EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+#EXTINF:4.0,
+encrypted-segment.ts
+#EXT-X-ENDLIST
+''',
+          }),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.running);
+      expect(finalTask!.selectedMedia, isNull);
+      expect(finalTask!.error, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.userSelecting)
+            .failed,
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'rejects a login page when verifying a saved HLS playlist',
+    () async {
+      const playlistUrl = 'https://example.com/encrypted.m3u8';
+      const segmentUrl = 'https://example.com/segment.ts';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'encrypted-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'encrypted-hls-retry-login-page',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'encrypted',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.downloading,
+        playlistDioFactory: () => Dio()
+          ..httpClientAdapter = _PlaylistAdapter({
+            playlistUrl: '<html>Sign in to continue</html>',
+          }),
+        onUpdate: (updated) => finalTask = updated,
+      );
+
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('invalid response'));
+      expect(finalTask!.downloadedFilePath, isNull);
+      expect(
+        finalTask!.steps
+            .firstWhere((step) => step.type == StepType.downloading)
+            .failed,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'uses the original initiator as variant referer during HLS retry check',
+    () async {
+      const originalReferer = 'https://source.example/video';
+      const variant = '''
+#EXTM3U
+#EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+#EXTINF:4.0,
+encrypted-segment.ts
+#EXT-X-ENDLIST
+''';
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final playlistUrl =
+          'http://${server.address.address}:${server.port}/master.m3u8';
+      final variantUrl =
+          'http://${server.address.address}:${server.port}/variant.m3u8';
+      final segmentUrl =
+          'http://${server.address.address}:${server.port}/segment.ts';
+      String? observedVariantReferer;
+      final serverDone = server.listen((request) async {
+        observedVariantReferer = request.headers.value(
+          HttpHeaders.refererHeader,
+        );
+        request.response
+          ..statusCode = observedVariantReferer == originalReferer
+              ? HttpStatus.ok
+              : HttpStatus.forbidden
+          ..headers.contentType = ContentType.text
+          ..write(observedVariantReferer == originalReferer
+              ? variant
+              : 'Forbidden');
+        await request.response.close();
+      });
+      final master = '''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+$variantUrl
+''';
+      final segment = MediaResource(
+        url: segmentUrl,
+        name: 'encrypted-segment',
+        ext: 'ts',
+        initiator: playlistUrl,
+        isPlayable: false,
+      );
+      final task = CatCatchTask(
+        id: 'encrypted-hls-retry-variant-referer',
+        url: originalReferer,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          MediaResource(
+            url: playlistUrl,
+            name: 'master',
+            ext: 'm3u8',
+            initiator: originalReferer,
+            isPlaylist: true,
+          ),
+          segment,
+        ],
+        selectedMedia: segment,
+        metadata: const {'resumeSupported': 'false'},
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.downloading)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? finalTask;
+
+      try {
+        await HttpOverrides.runWithHttpOverrides(
+          () => TaskExecutor.retryFromStep(
+            task: task,
+            fromStep: StepType.downloading,
+            playlistDioFactory: () => Dio()
+              ..httpClientAdapter = _PlaylistAdapter({playlistUrl: master}),
+            onUpdate: (updated) => finalTask = updated,
+          ),
+          _RealHttpOverrides(),
+        );
+      } finally {
+        await serverDone.cancel();
+        await server.close(force: true);
+      }
+
+      expect(observedVariantReferer, originalReferer);
+      expect(finalTask, isNotNull);
+      expect(finalTask!.status, TaskStatus.failed);
+      expect(finalTask!.error!.toLowerCase(), contains('encrypted'));
+      expect(finalTask!.downloadedFilePath, isNull);
     },
   );
 

@@ -164,6 +164,8 @@ class TaskExecutor {
     String? downloadedFilePath = task.downloadedFilePath;
     List<MediaResource> detectedMedia = List.from(task.detectedMedia);
     MediaResource? selectedMedia = task.selectedMedia;
+    var retryPlaylistValidated =
+        startFromIndex <= StepType.values.indexOf(StepType.parsingPlaylist);
     String? taskError;
     try {
       for (int i = startFromIndex; i < steps.length; i++) {
@@ -171,15 +173,22 @@ class TaskExecutor {
         final stepType = steps[i].type;
         if (steps[i].completed || steps[i].skipped) continue;
         markExecutorStep(steps, i, running: true);
-        if (i == startFromIndex &&
-            startFromIndex >
-                StepType.values.indexOf(StepType.parsingPlaylist)) {
-          await _rejectEncryptedPlaylistOnRetry(
-            task: task,
-            selectedMedia: selectedMedia,
-            detectedMedia: detectedMedia,
-            playlistDioFactory: playlistDioFactory,
-          );
+        if (!retryPlaylistValidated) {
+          final validationMedia = selectedMedia ??
+              (stepType == StepType.downloading ||
+                      stepType == StepType.converting ||
+                      stepType == StepType.saving
+                  ? (detectedMedia.isNotEmpty ? detectedMedia.first : null)
+                  : null);
+          if (validationMedia != null) {
+            await _rejectEncryptedPlaylistOnRetry(
+              task: task,
+              selectedMedia: validationMedia,
+              detectedMedia: detectedMedia,
+              playlistDioFactory: playlistDioFactory,
+            );
+            retryPlaylistValidated = true;
+          }
         }
         switch (stepType) {
           case StepType.fetching:
@@ -932,25 +941,34 @@ class TaskExecutor {
 
   static Future<void> _rejectEncryptedPlaylistOnRetry({
     required CatCatchTask task,
-    required MediaResource? selectedMedia,
+    required MediaResource selectedMedia,
     required List<MediaResource> detectedMedia,
     Dio Function()? playlistDioFactory,
   }) async {
     final playlists = detectedMedia.where((resource) {
       if (!resource.isPlaylist || !resource.isM3U8) return false;
-      return selectedMedia == null ||
-          resource.url == selectedMedia.url ||
+      return resource.url == selectedMedia.url ||
           resource.url == selectedMedia.initiator;
-    });
+    }).toList();
+    if (selectedMedia.isPlaylist &&
+        selectedMedia.isM3U8 &&
+        !playlists.any((playlist) => playlist.url == selectedMedia.url)) {
+      playlists.add(selectedMedia);
+    }
     for (final playlist in playlists) {
       Map<String, String> headersForUrl(String url) {
+        final headers = <String, String>{
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        };
+        if (playlist.initiator != null) {
+          headers['Referer'] = playlist.initiator!;
+        }
         final cookieHeader = task.browserCookieHeaderForUrl(url);
-        return DefaultRules.buildBrowserHeaders(
-          referer: url == playlist.url
-              ? (playlist.initiator ?? task.url)
-              : playlist.url,
-          extraHeaders: cookieHeader == null ? null : {'Cookie': cookieHeader},
-        );
+        if (cookieHeader != null && cookieHeader.isNotEmpty) {
+          headers['Cookie'] = cookieHeader;
+        }
+        return headers;
       }
 
       final dio = playlistDioFactory?.call() ?? Dio();
@@ -967,6 +985,13 @@ class TaskExecutor {
           );
         }
         content = response.data as String;
+        final playlistContent =
+            content.startsWith('\uFEFF') ? content.substring(1) : content;
+        if (!playlistContent.trimLeft().startsWith('#EXTM3U')) {
+          throw FormatException(
+            'Unable to verify HLS playlist encryption from an invalid response',
+          );
+        }
       } finally {
         dio.close();
       }
