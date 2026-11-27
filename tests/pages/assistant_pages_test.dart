@@ -22,6 +22,9 @@ Widget createTestApp({
   List<Assistant>? assistants,
   Locale locale = const Locale('zh', 'CN'),
   Size? mediaQuerySize,
+  double textScaleFactor = 1,
+  bool darkMode = false,
+  bool disableAnimations = false,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -45,12 +48,17 @@ Widget createTestApp({
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: mediaQuerySize == null
-          ? null
-          : (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
-                child: child!,
-              ),
+      theme: darkMode
+          ? ThemeData.dark(useMaterial3: true)
+          : ThemeData.light(useMaterial3: true),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          size: mediaQuerySize,
+          textScaler: TextScaler.linear(textScaleFactor),
+          disableAnimations: disableAnimations,
+        ),
+        child: child!,
+      ),
       home: AssistantSelectionPage(),
     ),
   );
@@ -774,6 +782,104 @@ void main() {
         lessThan(1),
         reason: 'assistant avatar should remain horizontally centered in card',
       );
+    });
+
+    testWidgets('assistant card grows for 2x French text on a narrow screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const description =
+          'Un assistant qui aide à organiser les idées, comparer les options '
+          'et préparer des réponses claires pour chaque situation.';
+      await tester.pumpWidget(
+        createTestApp(
+          locale: const Locale('fr'),
+          textScaleFactor: 2,
+          assistants: [
+            Assistant(
+              name: 'Assistant de démonstration',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: description,
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(assistant_shared.AssistantCard), findsOneWidget);
+      expect(find.byTooltip('Plus d’actions'), findsOneWidget);
+      final card = tester.getRect(find.byType(assistant_shared.AssistantCard));
+      expect(card.height, greaterThan(190));
+    });
+
+    testWidgets('assistant card keeps its standard-scale grid geometry', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        createTestApp(
+          textScaleFactor: 1,
+          assistants: [
+            Assistant(
+              name: 'Assistant',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: 'Helper.',
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final card = tester.getRect(find.byType(assistant_shared.AssistantCard));
+      expect(card.height, closeTo(card.width / 0.85, 1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'scaled assistant description stays readable in dark reduced motion', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const description =
+          'Un assistant qui aide à organiser les idées, comparer les options '
+          'et préparer des réponses claires pour chaque situation.';
+      await tester.pumpWidget(
+        createTestApp(
+          locale: const Locale('fr'),
+          textScaleFactor: 2,
+          darkMode: true,
+          disableAnimations: true,
+          assistants: [
+            Assistant(
+              name: 'Assistant de démonstration',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: description,
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(assistant_shared.AssistantCard), findsOneWidget);
+      expect(find.byTooltip('Plus d’actions'), findsOneWidget);
     });
 
     testWidgets('wide screen shows more columns than narrow screen', (
