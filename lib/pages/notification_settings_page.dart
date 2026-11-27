@@ -122,6 +122,8 @@ class _NotificationSettingsPageState
   }
 
   Future<void> _checkPermission() async {
+    if (!mounted) return;
+
     if (kIsWeb) {
       setState(() {
         _permissionStatus = PermissionStatus.denied;
@@ -158,6 +160,7 @@ class _NotificationSettingsPageState
     final granted = await service.requestPermission(
       usageReason: _strings.notificationSettingsUsageReason,
     );
+    if (!mounted) return;
     await _checkPermission();
     if (!mounted) return;
 
