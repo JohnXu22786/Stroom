@@ -67,6 +67,30 @@ def remaining_timeout_ms(deadline, failure_message):
     return max(1, round(remaining * 1_000))
 
 
+def _wait_for_flutter_canvas(
+    page, expected_size, deadline, failure_message, poll_interval
+):
+    while True:
+        rendered = Image.open(
+            BytesIO(
+                page.locator("flt-glass-pane canvas").first.screenshot(
+                    timeout=remaining_timeout_ms(deadline, failure_message)
+                )
+            )
+        ).convert("RGB")
+        if (
+            rendered.size == expected_size
+            and max(ImageStat.Stat(rendered).stddev) >= 1
+        ):
+            return
+        page.wait_for_timeout(
+            min(
+                round(poll_interval * 1_000),
+                remaining_timeout_ms(deadline, failure_message),
+            )
+        )
+
+
 def navigate_and_wait_for_flutter_render(
     page, url, expected_size, expected_text, timeout=120, poll_interval=0.5
 ):
@@ -106,12 +130,22 @@ def wait_for_flutter_render(
     )
 
     try:
-        semantics_placeholder = page.locator("flt-semantics-placeholder")
-        semantics_placeholder.focus(
-            timeout=remaining_timeout_ms(deadline, failure_message)
+        _wait_for_flutter_canvas(
+            page, expected_size, deadline, failure_message, poll_interval
         )
-        semantics_placeholder.press(
-            "Enter", timeout=remaining_timeout_ms(deadline, failure_message)
+        semantics_placeholder = page.locator("flt-semantics-placeholder")
+        semantics_placeholder.evaluate(
+            """element => {
+                element.focus();
+                for (const type of ["keydown", "keyup"]) {
+                    element.dispatchEvent(new KeyboardEvent(type, {
+                        key: "Enter",
+                        code: "Enter",
+                        bubbles: true,
+                    }));
+                }
+            }""",
+            timeout=remaining_timeout_ms(deadline, failure_message),
         )
         page.locator("body").evaluate(
             "body => document.activeElement.blur()",
@@ -122,24 +156,8 @@ def wait_for_flutter_render(
             arg=expected_text,
             timeout=remaining_timeout_ms(deadline, failure_message),
         )
-        while True:
-            rendered = Image.open(
-                BytesIO(
-                    page.locator("flt-glass-pane canvas").first.screenshot(
-                        timeout=remaining_timeout_ms(deadline, failure_message)
-                    )
-                )
-            ).convert("RGB")
-            if (
-                rendered.size == expected_size
-                and max(ImageStat.Stat(rendered).stddev) >= 1
-            ):
-                return
-            page.wait_for_timeout(
-                min(
-                    round(poll_interval * 1_000),
-                    remaining_timeout_ms(deadline, failure_message),
-                )
-            )
+        _wait_for_flutter_canvas(
+            page, expected_size, deadline, failure_message, poll_interval
+        )
     except PlaywrightTimeoutError as error:
         raise RuntimeError(failure_message) from error
