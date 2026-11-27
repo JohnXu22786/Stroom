@@ -201,13 +201,13 @@ void main() {
       await tester.pump();
 
       final hint = find.byWidgetPredicate(
-        (widget) => widget is ConstrainedText &&
+        (widget) =>
+            widget is ConstrainedText &&
             widget.data == 'Dieses Gespräch durchsuchen …',
       );
       expect(tester.widget<ConstrainedText>(hint).data,
           'Dieses Gespräch durchsuchen …');
-      expect(tester.getSemantics(hint).label,
-          'Dieses Gespräch durchsuchen …');
+      expect(tester.getSemantics(hint).label, 'Dieses Gespräch durchsuchen …');
     });
 
     testWidgets('global-search mode also constrains its localized hint',
@@ -223,10 +223,12 @@ void main() {
       await tester.pump();
 
       final chatPage = find.byType(ChatPage, skipOffstage: false).first;
-      final fieldFinder = find.descendant(
-        of: chatPage,
-        matching: find.byType(TextField),
-      ).first;
+      final fieldFinder = find
+          .descendant(
+            of: chatPage,
+            matching: find.byType(TextField),
+          )
+          .first;
       final hint = tester.widget<TextField>(fieldFinder).decoration!.hint;
       expect(hint, isA<ConstrainedText>());
       expect((hint! as ConstrainedText).data,
