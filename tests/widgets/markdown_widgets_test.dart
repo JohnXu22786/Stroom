@@ -806,6 +806,18 @@ $$
       );
       expect(parsedNodeCount, 0);
 
+      final unmatchedLinkMarkers = '](' * 1024;
+      final unmatchedLinkPreview = previewGenerator.buildPlainTextPreview([
+        unmatchedLinkMarkers,
+      ]);
+      expect(
+        ((unmatchedLinkPreview.single as Padding).child as Text)
+            .textSpan
+            ?.toPlainText(),
+        unmatchedLinkMarkers,
+      );
+      expect(parsedNodeCount, 0);
+
       const escapedBracket = r'\](__bold__)';
       final escapedBracketPreview =
           markdownGenerator.buildPlainTextPreview([escapedBracket]);

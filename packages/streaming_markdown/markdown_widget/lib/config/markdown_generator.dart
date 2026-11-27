@@ -288,55 +288,55 @@ String _withoutMarkdownCode(String source) {
 
 String _withoutMarkdownLinkDestinations(String source) {
   final codeUnits = source.codeUnits.toList();
-  for (final marker in RegExp(r'\]\(').allMatches(source)) {
-    final closingBracket = marker.start;
-    if (_isEscapedMarkdownCharacter(source, closingBracket) ||
-        !_hasUnescapedOpeningBracket(source, closingBracket)) {
+  final openingBrackets = <int>[];
+  var i = 0;
+  while (i < source.length) {
+    final codeUnit = source.codeUnitAt(i);
+    if (codeUnit == 92) {
+      i += 2;
       continue;
     }
-    var depth = 1;
-    var inAngleDestination = false;
-    var end = marker.end;
-    while (end < source.length) {
-      final codeUnit = source.codeUnitAt(end);
-      if (codeUnit == 92) {
-        end++;
-      } else if (inAngleDestination) {
-        if (codeUnit == 62) inAngleDestination = false;
-      } else if (codeUnit == 60 && depth == 1) {
-        inAngleDestination = true;
-      } else if (codeUnit == 40) {
-        depth++;
-      } else if (codeUnit == 41) {
-        depth--;
-        if (depth == 0) break;
-      }
-      end++;
-    }
-    if (depth == 0) {
-      for (var i = marker.end; i <= end; i++) {
-        if (codeUnits[i] != 10 && codeUnits[i] != 13) codeUnits[i] = 32;
+    if (codeUnit == 91) {
+      openingBrackets.add(i);
+    } else if (codeUnit == 93 && openingBrackets.isNotEmpty) {
+      openingBrackets.removeLast();
+      if (i + 1 < source.length && source.codeUnitAt(i + 1) == 40) {
+        final destinationEnd = _inlineLinkDestinationEnd(source, i + 2);
+        if (destinationEnd != -1) {
+          for (var j = i + 1; j <= destinationEnd; j++) {
+            if (codeUnits[j] != 10 && codeUnits[j] != 13) codeUnits[j] = 32;
+          }
+          i = destinationEnd + 1;
+          continue;
+        }
       }
     }
+    i++;
   }
   return String.fromCharCodes(codeUnits);
 }
 
-bool _hasUnescapedOpeningBracket(String source, int closingBracket) {
-  var nestedBrackets = 0;
-  for (var i = closingBracket - 1; i >= 0; i--) {
-    final character = source.codeUnitAt(i);
-    if (character != 91 && character != 93) continue;
-    if (_isEscapedMarkdownCharacter(source, i)) continue;
-    if (character == 93) {
-      nestedBrackets++;
-    } else if (nestedBrackets == 0) {
-      return true;
-    } else {
-      nestedBrackets--;
+int _inlineLinkDestinationEnd(String source, int start) {
+  var depth = 1;
+  var inAngleDestination = false;
+  var i = start;
+  while (i < source.length) {
+    final codeUnit = source.codeUnitAt(i);
+    if (codeUnit == 92) {
+      i++;
+    } else if (inAngleDestination) {
+      if (codeUnit == 62) inAngleDestination = false;
+    } else if (codeUnit == 60 && depth == 1) {
+      inAngleDestination = true;
+    } else if (codeUnit == 40) {
+      depth++;
+    } else if (codeUnit == 41) {
+      depth--;
+      if (depth == 0) return i;
     }
+    i++;
   }
-  return false;
+  return -1;
 }
 
 bool _isEscapedMarkdownCharacter(String source, int offset) {
