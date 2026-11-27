@@ -82,26 +82,23 @@ class _SearchPanelState extends State<SearchPanel> {
     };
     final searchHintBaseStyle = theme.useMaterial3
         ? theme.textTheme.bodyLarge ??
-              theme.textTheme.bodyMedium ??
-              const TextStyle()
+            theme.textTheme.bodyMedium ??
+            const TextStyle()
         : theme.textTheme.titleMedium ??
-              theme.textTheme.bodyMedium ??
-              const TextStyle();
-    final searchHintStyle =
-        searchHintBaseStyle
-            .merge(
-              TextStyle(
-                color: theme.useMaterial3
-                    ? cs.onSurfaceVariant
-                    : theme.hintColor,
-              ),
-            )
-            .merge(
-              WidgetStateProperty.resolveAs(
-                InputDecorationTheme.of(context).hintStyle,
-                searchHintStates,
-              ),
-            );
+            theme.textTheme.bodyMedium ??
+            const TextStyle();
+    final searchHintStyle = searchHintBaseStyle
+        .merge(
+          TextStyle(
+            color: theme.useMaterial3 ? cs.onSurfaceVariant : theme.hintColor,
+          ),
+        )
+        .merge(
+          WidgetStateProperty.resolveAs(
+            InputDecorationTheme.of(context).hintStyle,
+            searchHintStates,
+          ),
+        );
     final query = _query.trim().toLowerCase();
     final filtered = _filteredConversations(query);
 

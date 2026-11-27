@@ -187,9 +187,8 @@ void main() {
                 AppLocalizations.of(tester.element(find.byType(SearchPanel)))!
                     .searchPanelHint,
       );
-      final effectiveHintStyle = tester
-          .widget<ConstrainedText>(themedHint)
-          .style!;
+      final effectiveHintStyle =
+          tester.widget<ConstrainedText>(themedHint).style!;
       expect(effectiveHintStyle.color, focusedHintColor);
       expect(effectiveHintStyle.fontSize, 20);
 
