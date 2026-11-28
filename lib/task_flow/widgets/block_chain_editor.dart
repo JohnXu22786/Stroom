@@ -190,6 +190,72 @@ class BlockChainEditor extends StatelessWidget {
   Widget _buildInitialInputCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
+    const inputTypeDropdownIconSize = 18.0;
+    const inputTypeDropdownHorizontalPadding = 8.0;
+    final inputTypeStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+      color: cs.primary,
+    );
+    final inputIcon = Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: cs.tertiary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.input, size: 18, color: Colors.blueGrey),
+    );
+    final inputLabel = Text(
+      strings.taskFlowUiInitialInput,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: cs.onSurface,
+      ),
+    );
+    final inputTypeDropdown = Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: inputTypeDropdownHorizontalPadding,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<IOType>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
+          // Stored url/any display as text; file remains selectable.
+          // The value must exist in items.
+          value: inputType.userFacing,
+          isDense: true,
+          iconSize: inputTypeDropdownIconSize,
+          icon: Icon(
+            Icons.arrow_drop_down,
+            size: inputTypeDropdownIconSize,
+            color: cs.primary,
+          ),
+          style: inputTypeStyle,
+          onChanged: (type) {
+            if (type != null) onInputTypeChanged(type);
+          },
+          items: _inputTypeOptions.map((type) {
+            return DropdownMenuItem(
+              value: type,
+              child: ConstrainedText(
+                localizedIoTypeLabel(type, strings),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -208,79 +274,56 @@ class BlockChainEditor extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: cs.tertiary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.input,
-                        size: 18,
-                        color: Colors.blueGrey,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        AppLocalizations.of(context)!.taskFlowUiInitialInput,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: cs.outlineVariant),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<IOType>(
-                          dropdownColor: StroomMenuStyle.surface(context),
-                          borderRadius: StroomMenuStyle.borderRadius,
-                          // Stored url/any display as text; file remains
-                          // selectable. The value must exist in items.
-                          value: inputType.userFacing,
-                          isDense: true,
-                          icon: Icon(
-                            Icons.arrow_drop_down,
-                            size: 18,
-                            color: cs.primary,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final labelWidth = _measureTextWidth(
+                      context,
+                      strings.taskFlowUiInitialInput,
+                      inputLabel.style!,
+                    );
+                    final widestTypeLabelWidth = _inputTypeOptions
+                        .map(
+                          (type) => _measureTextWidth(
+                            context,
+                            localizedIoTypeLabel(type, strings),
+                            inputTypeStyle,
                           ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: cs.primary,
+                        )
+                        .reduce((width, next) => width > next ? width : next);
+                    final dropdownWidth = widestTypeLabelWidth +
+                        inputTypeDropdownIconSize +
+                        inputTypeDropdownHorizontalPadding * 2;
+                    final rowWidth = 32 + 10 + labelWidth + dropdownWidth;
+                    final textScale =
+                        MediaQuery.textScalerOf(context).scale(14) / 14;
+                    if (textScale > 1 && constraints.maxWidth < rowWidth) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              inputIcon,
+                              const SizedBox(width: 10),
+                              Expanded(child: inputLabel),
+                            ],
                           ),
-                          onChanged: (type) {
-                            if (type != null) {
-                              onInputTypeChanged(type);
-                            }
-                          },
-                          items: _inputTypeOptions.map((type) {
-                            return DropdownMenuItem(
-                              value: type,
-                              child: ConstrainedText(
-                                localizedIoTypeLabel(type, strings),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ],
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: inputTypeDropdown,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        inputIcon,
+                        const SizedBox(width: 10),
+                        Expanded(child: inputLabel),
+                        inputTypeDropdown,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -357,21 +400,20 @@ class BlockChainEditor extends StatelessWidget {
             final stackControls = showTemporaryOutputControl &&
                 constraints.maxWidth <
                     temporaryControlWidth + 4 + addButtonWidth;
-            final addButton = SizedBox(
-              height: 44,
-              child: OutlinedButton.icon(
-                onPressed: () => _showAddBlockSheet(context),
-                icon: const Icon(Icons.add, size: 18),
-                label: ConstrainedText(
-                  strings.taskFlowUiAddBlock,
-                  style: const TextStyle(fontSize: 14),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            final addButton = OutlinedButton.icon(
+              onPressed: () => _showAddBlockSheet(context),
+              icon: const Icon(Icons.add, size: 18),
+              label: ConstrainedText(
+                strings.taskFlowUiAddBlock,
+                style: const TextStyle(fontSize: 14),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 44),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             );
@@ -407,11 +449,7 @@ class BlockChainEditor extends StatelessWidget {
     );
   }
 
-  double _measureTextWidth(
-    BuildContext context,
-    String text,
-    TextStyle style,
-  ) {
+  double _measureTextWidth(BuildContext context, String text, TextStyle style) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: Directionality.of(context),

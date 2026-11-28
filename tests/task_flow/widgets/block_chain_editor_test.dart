@@ -171,7 +171,10 @@ void main() {
     ));
 
     expect(tester.takeException(), isNull);
-    final checkbox = tester.getRect(find.byType(Checkbox));
+    final bottomBar = find.byType(SafeArea);
+    final checkbox = tester.getRect(
+      find.descendant(of: bottomBar, matching: find.byType(Checkbox)),
+    );
     final addButton = tester.getRect(find.byType(OutlinedButton));
     expect(addButton.top, greaterThan(checkbox.bottom));
   });
