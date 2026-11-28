@@ -81,18 +81,21 @@ class TaskFlowBuilderPage extends ConsumerStatefulWidget {
 /// fields — mirrors the CatCatch page's task card.
 class _CatCatchInputEntry {
   final TextEditingController urlController;
+  final MaterialStatesController urlHintStates;
   final TextEditingController hourController;
   final TextEditingController minuteController;
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
       : urlController = TextEditingController(),
+        urlHintStates = MaterialStatesController(),
         hourController = TextEditingController(),
         minuteController = TextEditingController(),
         secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
+    urlHintStates.dispose();
     hourController.dispose();
     minuteController.dispose();
     secondController.dispose();
@@ -110,6 +113,7 @@ String flowMediaRecordFileName(String name, String format) {
 
 class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   late final TextEditingController _nameController;
+  final _nameHintStates = MaterialStatesController();
   late final TextEditingController _descController;
   late final TextEditingController _inputController;
 
@@ -223,6 +227,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _discardAllUnsubmittedInputs();
     }
     _nameController.dispose();
+    _nameHintStates.dispose();
     _descController.dispose();
     _inputController.dispose();
     for (final entry in _catcatchInputs) {
@@ -514,25 +519,34 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ),
       child: Column(
         children: [
-          TextField(
-            controller: _nameController,
-            enabled: !_isSaving,
-            decoration: InputDecoration(
-              hintText: AppLocalizations.of(context)!.taskFlowUiNameHint,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          Semantics(
+            hint: AppLocalizations.of(context)!.taskFlowUiNameHint,
+            child: TextField(
+              controller: _nameController,
+              statesController: _nameHintStates,
+              enabled: !_isSaving,
+              decoration: InputDecoration(
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.taskFlowUiNameHint,
+                    statesController: _nameHintStates,
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: cs.surfaceContainerLow,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
-              filled: true,
-              fillColor: cs.surfaceContainerLow,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
               ),
-            ),
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -1011,24 +1025,33 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: entry.urlController,
-                    decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!.taskFlowUiUrlHint,
-                      prefixIcon: const Icon(Icons.link, size: 20),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  child: Semantics(
+                    hint: AppLocalizations.of(context)!.taskFlowUiUrlHint,
+                    child: TextField(
+                      controller: entry.urlController,
+                      statesController: entry.urlHintStates,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.taskFlowUiUrlHint,
+                            statesController: entry.urlHintStates,
+                          ),
+                        ),
+                        prefixIcon: const Icon(Icons.link, size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        filled: true,
+                        fillColor: cs.surface,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
-                      filled: true,
-                      fillColor: cs.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) => setState(() {}),
                     ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 const SizedBox(width: 4),
