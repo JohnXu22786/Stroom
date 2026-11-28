@@ -191,7 +191,7 @@ void main() {
     await deleteAudioPlayerTempFile(file);
   });
 
-  test('does not delete the temp file when player disposal fails', () async {
+  test('deletes the temp file when player disposal fails', () async {
     final directory = await Directory.systemTemp.createTemp('audio_player_');
     addTearDown(() => directory.delete(recursive: true));
     final file = File('${directory.path}/playing.wav');
@@ -205,6 +205,21 @@ void main() {
       ),
       throwsA(same(disposalError)),
     );
-    expect(await file.exists(), isTrue);
+    expect(await file.exists(), isFalse);
+  });
+
+  test('preserves the player disposal error when temp-file cleanup fails',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final disposalError = StateError('player disposal failed');
+
+    await expectLater(
+      disposeAudioPlayerTempFile(
+        tempFilePath: directory.path,
+        disposePlayer: () async => throw disposalError,
+      ),
+      throwsA(same(disposalError)),
+    );
   });
 }
