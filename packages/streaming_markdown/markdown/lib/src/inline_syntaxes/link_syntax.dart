@@ -405,6 +405,9 @@ class LinkSyntax extends DelimiterSyntax {
           break;
 
         case $lparen:
+          // CommonMark limits nesting in a link destination to 32 levels.
+          // [parenCount] includes the parenthesis that opened the destination.
+          if (parenCount > 32) return null;
           parenCount++;
           buffer.writeCharCode(char);
           break;
