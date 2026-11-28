@@ -161,6 +161,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
   TextDirection? _measuredDirection;
   TextScaler? _measuredScaler;
   TextStyle? _measuredStyle;
+  StrutStyle? _measuredStrutStyle;
   Locale? _measuredLocale;
   TextAlign? _measuredAlign;
 
@@ -195,6 +196,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.data != widget.data ||
         oldWidget.style != widget.style ||
+        oldWidget.strutStyle != widget.strutStyle ||
         oldWidget.maxLines != widget.maxLines ||
         oldWidget.textAlign != widget.textAlign ||
         oldWidget.speed != widget.speed ||
@@ -219,6 +221,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
     _measuredDirection = null;
     _measuredScaler = null;
     _measuredStyle = null;
+    _measuredStrutStyle = null;
     _measuredLocale = null;
     _measuredAlign = null;
   }
@@ -236,6 +239,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         direction != _measuredDirection ||
         scaler != _measuredScaler ||
         style != _measuredStyle ||
+        widget.strutStyle != _measuredStrutStyle ||
         locale != _measuredLocale ||
         textAlign != _measuredAlign;
     if (measurementChanged) {
@@ -243,6 +247,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       _measuredDirection = direction;
       _measuredScaler = scaler;
       _measuredStyle = style;
+      _measuredStrutStyle = widget.strutStyle;
       _measuredLocale = locale;
       _measuredAlign = textAlign;
       final previousOverflow = _overflow;
