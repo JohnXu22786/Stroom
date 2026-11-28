@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -73,5 +75,50 @@ void main() {
       if (!releaseSecond.isCompleted) releaseSecond.complete();
     }
     expect(deletionEntered.isCompleted, isTrue);
+  });
+
+  test('idle folder locks are reclaimed after unique folder operations',
+      () async {
+    final locks = ContentHashSaveLock();
+
+    for (var index = 0; index < 1000; index++) {
+      await locks.withFolderReadLocks(['folder:$index'], () async {});
+      await locks.withFolderWriteLock('folder:$index', () async {});
+    }
+
+    expect(locks.debugFolderLockCount, 0);
+  });
+
+  test('folder lock stays registered while readers and a writer are queued',
+      () async {
+    final locks = ContentHashSaveLock();
+    final readerEntered = Completer<void>();
+    final releaseReader = Completer<void>();
+    final writerEntered = Completer<void>();
+
+    final reader = locks.withFolderReadLocks(
+      ['folder:Trips'],
+      () async {
+        readerEntered.complete();
+        await releaseReader.future;
+      },
+    );
+    await readerEntered.future;
+
+    final writer = locks.withFolderWriteLock('folder:Trips', () async {
+      writerEntered.complete();
+    });
+    final laterReader = locks.withFolderReadLocks(
+      ['folder:Trips'],
+      () async {},
+    );
+
+    expect(locks.debugFolderLockCount, 1);
+    expect(writerEntered.isCompleted, isFalse);
+    releaseReader.complete();
+    await Future.wait([reader, writer, laterReader]);
+
+    expect(writerEntered.isCompleted, isTrue);
+    expect(locks.debugFolderLockCount, 0);
   });
 }

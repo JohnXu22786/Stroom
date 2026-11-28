@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 /// Serializes publication and deletion of files that share a content hash.
 ///
 /// A save lock must cover the complete publication sequence, including any
@@ -10,6 +12,9 @@ class ContentHashSaveLock {
   final Object _zoneKey = Object();
   final Object _folderReadZoneKey = Object();
   final Object _folderWriteZoneKey = Object();
+
+  @visibleForTesting
+  int get debugFolderLockCount => _folderLocks.length;
 
   Future<T> withLock<T>(String hash, Future<T> Function() action) async {
     final held = Zone.current[_zoneKey] as Set<String>? ?? const {};
@@ -72,7 +77,9 @@ class ContentHashSaveLock {
       );
     } finally {
       for (final folder in acquired.reversed) {
-        _folderLocks[folder]!.releaseRead();
+        final lock = _folderLocks[folder]!;
+        lock.releaseRead();
+        _reclaimFolderLock(folder, lock);
       }
     }
   }
@@ -103,6 +110,13 @@ class ContentHashSaveLock {
       );
     } finally {
       lock.releaseWrite();
+      _reclaimFolderLock(folder, lock);
+    }
+  }
+
+  void _reclaimFolderLock(String folder, _FolderReadWriteLock lock) {
+    if (lock.isIdle && identical(_folderLocks[folder], lock)) {
+      _folderLocks.remove(folder);
     }
   }
 }
@@ -111,6 +125,8 @@ class _FolderReadWriteLock {
   int _readers = 0;
   bool _writer = false;
   final List<_FolderLockWaiter> _waiters = [];
+
+  bool get isIdle => _readers == 0 && !_writer && _waiters.isEmpty;
 
   Future<void> acquireRead() {
     if (!_writer && _waiters.isEmpty) {
