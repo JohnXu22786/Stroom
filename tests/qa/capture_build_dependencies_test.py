@@ -244,6 +244,52 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
 
         self.assertTrue(needs_rebuild(root, entrypoint, bundle))
 
+    def test_chat_file_chip_capture_tracks_constrained_text_source(self):
+        repository_root = Path(__file__).resolve().parents[2]
+        script = ast.parse(
+            (repository_root / "tools/qa/capture_chat_file_chip.py").read_text()
+        )
+        self.assertTrue(
+            any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "needs_rebuild"
+                for node in ast.walk(script)
+            )
+        )
+
+        root = self.root / "chat-file-chip-capture"
+        entrypoint = root / "tools/qa/chat_file_chip_capture.dart"
+        entrypoint.parent.mkdir(parents=True)
+        entrypoint.write_text(
+            "import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';\n"
+            "import 'package:stroom/pages/chat/composer/file_picker_shared.dart';\n",
+            encoding="utf-8",
+        )
+        dialog = root / "lib/pages/chat/composer/chat_file_picker_dialog.dart"
+        dialog.parent.mkdir(parents=True)
+        dialog.write_text(
+            "import '../../../widgets/constrained_text.dart';\n", encoding="utf-8"
+        )
+        (dialog.parent / "file_picker_shared.dart").write_text(
+            "class FilePickerShared {}\n", encoding="utf-8"
+        )
+        constrained_text = root / "lib/widgets/constrained_text.dart"
+        constrained_text.parent.mkdir(parents=True)
+        constrained_text.write_text("class ConstrainedText {}\n", encoding="utf-8")
+        (root / "pubspec.yaml").write_text("name: stroom\n", encoding="utf-8")
+        bundle = root / "build/index.html"
+        bundle.parent.mkdir()
+        bundle.write_text("built bundle\n", encoding="utf-8")
+
+        baseline_mtime = 1_700_000_000_000_000_000
+        for source in capture_build_inputs(root, entrypoint):
+            os.utime(source, ns=(baseline_mtime, baseline_mtime))
+        os.utime(bundle, ns=(baseline_mtime + 1_000_000_000,) * 2)
+        os.utime(constrained_text, ns=(baseline_mtime + 2_000_000_000,) * 2)
+
+        self.assertTrue(needs_rebuild(root, entrypoint, bundle))
+
 
 if __name__ == "__main__":
     unittest.main()

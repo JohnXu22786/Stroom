@@ -14,23 +14,20 @@ from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tool" / "qa"))
+from capture_build_dependencies import needs_rebuild
+
+
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/chat-file-chip"
 FRAMES = OUTPUT / "frames"
 WEB_BUILD = ROOT / "build/qa-chat-file-chip-web-r10-01"
 ENTRYPOINT = ROOT / "tools/qa/chat_file_chip_capture.dart"
-PRODUCTION_FILE = ROOT / "lib/pages/chat/composer/file_picker_shared.dart"
-PRODUCTION_DIALOG = ROOT / "lib/pages/chat/composer/chat_file_picker_dialog.dart"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 FRAMES.mkdir(parents=True, exist_ok=True)
 for frame in FRAMES.glob("frame-*.png"):
     frame.unlink()
 
-if (
-    not (WEB_BUILD / "index.html").exists()
-    or ENTRYPOINT.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-    or PRODUCTION_FILE.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-    or PRODUCTION_DIALOG.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
-):
+if needs_rebuild(ROOT, ENTRYPOINT, WEB_BUILD / "index.html"):
     subprocess.run(
         [
             "flutter",
