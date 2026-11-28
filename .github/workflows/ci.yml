@@ -260,8 +260,8 @@ jobs:
             exit 1
           fi
 
-  # Keep the standalone JVM helpers and focused boot wake-lock lifecycle test
-  # out of the full Flutter Android app build and its unrelated plugin graph.
+  # Test the standalone JVM helpers and one focused Flutter plugin test without
+  # assembling the full Android app.
   app-runtime-jvm:
     name: "Application Runtime (Kotlin/JVM)"
     runs-on: ubuntu-latest
@@ -274,12 +274,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.8
+          cache: true
+          pub-cache: true
+      - name: Resolve Flutter plugins for Android tests
+        run: flutter pub get
       - name: Test standalone scheduling module
         run: gradle -p android/keep_alive_schedule test
       - name: Test SAF log append module
         run: gradle -p android/saf_log_content test
       - name: Test Android boot wake-lock lifecycle
-        run: gradle -p packages/flutter_background_service_android/android testDebugUnitTest --tests '*BootReceiverWakeLockTest'
+        run: gradle -p android :flutter_background_service_android:testDebugUnitTest --tests '*BootReceiverWakeLockTest'
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
