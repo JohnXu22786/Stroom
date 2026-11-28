@@ -152,6 +152,55 @@ void main() {
     );
   });
 
+  test('bare reference destinations reject invalid unescaped characters', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target<part>'),
+      '<p>[text][foo]</p>\n<p>[foo]: target<part></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target>part'),
+      '<p>[text][foo]</p>\n<p>[foo]: target&gt;part</p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target\tpart'),
+      '<p>[text][foo]</p>\n<p>[foo]: target\tpart</p>\n',
+    );
+  });
+
+  test('bare reference destinations reject unescaped ASCII controls', () {
+    for (final control in ['\u0000', '\u000b']) {
+      expect(
+        markdown.markdownToHtml(
+          '[text][foo]\n\n[foo]: target${control}part',
+        ),
+        contains('<p>[text][foo]</p>'),
+      );
+    }
+  });
+
+  test(
+    'bare reference destinations accept escapes and balanced parentheses',
+    () {
+      expect(
+        markdown.markdownToHtml(
+          '[text][escaped]\n\n[escaped]: target\\<part\\>',
+        ),
+        '<p><a href="target%3Cpart%3E">text</a></p>\n',
+      );
+      expect(
+        markdown.markdownToHtml('[text][balanced]\n\n[balanced]: target(part)'),
+        '<p><a href="target(part)">text</a></p>\n',
+      );
+    },
+  );
+
+  test('bracketed reference destinations remain valid', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: <target>'),
+      '<p><a href="target">text</a></p>\n',
+    );
+  });
+
   test('a reference title ending in an escape stays literal', () {
     expect(
       markdown.markdownToHtml(r'[foo]: bar "baz\'),
