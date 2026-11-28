@@ -84,6 +84,86 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('French compact AppBar actions grow to fit at 4x', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final discardLabel = find.text('Abandonner');
+    expect(discardLabel, findsOneWidget);
+    final labelContext = tester.element(discardLabel);
+    final painter = TextPainter(
+      text: TextSpan(
+        text: 'Abandonner',
+        style: DefaultTextStyle.of(labelContext).style,
+      ),
+      textDirection: Directionality.of(labelContext),
+      textScaler: MediaQuery.textScalerOf(labelContext),
+      locale: Localizations.localeOf(labelContext),
+    )..layout(maxWidth: tester.getSize(discardLabel).width);
+    expect(painter.computeLineMetrics().length, greaterThan(1));
+
+    final actionButton = find
+        .ancestor(of: discardLabel, matching: find.byType(TextButton))
+        .first;
+    final actionSlot = find
+        .ancestor(
+          of: actionButton,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is SizedBox &&
+                widget.height != null &&
+                widget.height! > 72,
+          ),
+        )
+        .first;
+    final labelRect = tester.getRect(discardLabel);
+    final slotRect = tester.getRect(actionSlot);
+    final appBarRect = tester.getRect(find.byType(AppBar).last);
+    expect(slotRect.height, greaterThan(72));
+    expect(slotRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+    expect(slotRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    expect(appBarRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+    expect(appBarRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    expect(find.text('Enregistrer'), findsOneWidget);
+    expect(find.byIcon(Icons.save), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.save));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('English compact AppBar action retains 48 dp at 1x', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(tester, stdio: false);
+
+    final saveLabel = find.text('Save');
+    expect(saveLabel, findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(appBar.bottom!.preferredSize.height, 96);
+    expect(find.text('Discard'), findsOneWidget);
+    expect(find.byIcon(Icons.save), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'arguments helper stays reachable at 2x scale with focused native input',
     (tester) async {

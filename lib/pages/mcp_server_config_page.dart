@@ -659,8 +659,7 @@ class _McpServerConfigDialogState
               bottom: compactAppBar
                   ? PreferredSize(
                       preferredSize: Size.fromHeight(
-                        _compactActionHeight *
-                            _buildCompactAppBarActions().length,
+                        _compactAppBarActionsHeight,
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -1035,8 +1034,55 @@ class _McpServerConfigDialogState
     );
   }
 
-  double get _compactActionHeight =>
-      MediaQuery.textScalerOf(context).scale(1) >= 1.5 ? 72 : 48;
+  double get _compactAppBarActionsHeight {
+    if (_isEditMode) {
+      final saveLabel = _isSaving
+          ? AppLocalizations.of(context)!.mcpSaving
+          : AppLocalizations.of(context)!.mermaidSaveButton;
+      return _compactActionHeight(saveLabel, iconHeight: _isSaving ? 16 : 20) +
+          _compactActionHeight(
+            AppLocalizations.of(context)!.taskFlowUiDiscard,
+            iconHeight: 20,
+          );
+    }
+    if (_isExistingConfig) {
+      return _compactActionHeight(
+        AppLocalizations.of(context)!.imagePreviewEdit,
+        iconHeight: 20,
+      );
+    }
+    return 0;
+  }
+
+  double _compactActionHeight(String label, {required double iconHeight}) {
+    final button = TextButton(
+      onPressed: null,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: Size.zero,
+      ),
+      child: const SizedBox.shrink(),
+    );
+    final labelStyle = button.style?.textStyle?.resolve(const {}) ??
+        button.themeStyleOf(context)?.textStyle?.resolve(const {}) ??
+        button.defaultStyleOf(context).textStyle?.resolve(const {}) ??
+        Theme.of(context).textTheme.labelLarge;
+    final actionWidth =
+        (MediaQuery.sizeOf(context).width - 48).clamp(0.0, 560.0).toDouble();
+    final labelWidth = (actionWidth - 16 - iconHeight - 8)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: labelStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+    )..layout(maxWidth: labelWidth);
+    final contentHeight = painter.height > iconHeight
+        ? painter.height
+        : iconHeight;
+    return contentHeight > 48 ? contentHeight : 48;
+  }
 
   double get _appBarActionSpace {
     final dialogWidth =
@@ -1128,11 +1174,13 @@ class _McpServerConfigDialogState
                 )
               : const Icon(Icons.save, size: 20),
           label: saveLabel,
+          iconHeight: _isSaving ? 16 : 20,
         ),
         _buildCompactAppBarAction(
           onPressed: _isSaving ? null : _discardChanges,
           icon: const Icon(Icons.close, size: 20),
           label: AppLocalizations.of(context)!.taskFlowUiDiscard,
+          iconHeight: 20,
         ),
       ];
     }
@@ -1142,6 +1190,7 @@ class _McpServerConfigDialogState
           onPressed: _enterEditMode,
           icon: const Icon(Icons.edit, size: 20),
           label: AppLocalizations.of(context)!.imagePreviewEdit,
+          iconHeight: 20,
         ),
       ];
     }
@@ -1212,9 +1261,10 @@ class _McpServerConfigDialogState
     required VoidCallback? onPressed,
     required Widget icon,
     required String label,
+    required double iconHeight,
   }) {
     return SizedBox(
-      height: _compactActionHeight,
+      height: _compactActionHeight(label, iconHeight: iconHeight),
       width: double.infinity,
       child: TextButton(
         onPressed: onPressed,
