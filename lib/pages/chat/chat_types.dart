@@ -206,7 +206,8 @@ List<MessageSegment> buildAgentChainSegments({
   // When round boundaries are known (from live streaming), use the
   // round-based algorithm that correctly groups consecutive tool calls.
   // When not known (historical data), fall back to the legacy 1:1 pairing.
-  if (toolCallRoundStarts != null && toolCallRoundStarts.isNotEmpty) {
+  if (toolCallRoundStarts != null &&
+      _hasValidToolCallRoundStarts(toolCalls, toolCallRoundStarts)) {
     return _buildWithRounds(
       reasoningSections,
       textChunks,
@@ -221,6 +222,18 @@ List<MessageSegment> buildAgentChainSegments({
     toolCalls,
     isLastReasoningStreaming,
   );
+}
+
+bool _hasValidToolCallRoundStarts(
+    List<ToolCallData> toolCalls, List<int> roundStarts) {
+  if (roundStarts.isEmpty) return false;
+  if (toolCalls.isEmpty || roundStarts.first != 0) return false;
+  for (var i = 0; i < roundStarts.length; i++) {
+    final start = roundStarts[i];
+    if (start < 0 || start >= toolCalls.length) return false;
+    if (i > 0 && start <= roundStarts[i - 1]) return false;
+  }
+  return true;
 }
 
 /// Round-based interleaving for live streaming data.
@@ -399,7 +412,9 @@ List<MessageBlock> legacyToBlocks({
   required List<int> toolCallRoundStarts,
 }) {
   final blocks = <MessageBlock>[];
-  final numRounds = toolCallRoundStarts.isNotEmpty
+  final hasValidRoundStarts =
+      _hasValidToolCallRoundStarts(toolCalls, toolCallRoundStarts);
+  final numRounds = hasValidRoundStarts
       ? toolCallRoundStarts.length
       : (toolCalls.isNotEmpty ? 1 : 0);
 
@@ -416,9 +431,9 @@ List<MessageBlock> legacyToBlocks({
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
       blocks.add(TextBlock(text: textChunks[i]));
     }
-    final start = toolCallRoundStarts.isNotEmpty ? toolCallRoundStarts[i] : i;
+    final start = hasValidRoundStarts ? toolCallRoundStarts[i] : i;
     final end =
-        i + 1 < toolCallRoundStarts.length && toolCallRoundStarts.isNotEmpty
+        hasValidRoundStarts && i + 1 < toolCallRoundStarts.length
             ? toolCallRoundStarts[i + 1]
             : toolCalls.length;
     for (var j = start; j < end && j < toolCalls.length; j++) {

@@ -828,8 +828,14 @@ function normalizeDateTime(value) {
 
 function legacyToBlocks(reasoningSections, textChunks, toolCalls, roundStarts) {
   const blocks = [];
-  const numRounds = roundStarts.length > 0
-    ? roundStarts.length
+  const validRoundStarts = hasValidToolCallRoundStarts(
+    roundStarts,
+    toolCalls.length,
+  )
+    ? roundStarts
+    : [];
+  const numRounds = validRoundStarts.length > 0
+    ? validRoundStarts.length
     : (toolCalls.length > 0 ? 1 : 0);
 
   for (let i = 0; i < numRounds; i++) {
@@ -843,9 +849,9 @@ function legacyToBlocks(reasoningSections, textChunks, toolCalls, roundStarts) {
     if (i < textChunks.length && textChunks[i].length > 0) {
       blocks.push({ type: 'text', text: textChunks[i] });
     }
-    const start = roundStarts.length > 0 ? roundStarts[i] : i;
-    const end = roundStarts.length > 0 && i + 1 < roundStarts.length
-      ? roundStarts[i + 1]
+    const start = validRoundStarts.length > 0 ? validRoundStarts[i] : i;
+    const end = validRoundStarts.length > 0 && i + 1 < validRoundStarts.length
+      ? validRoundStarts[i + 1]
       : toolCalls.length;
     for (let j = start; j < end && j < toolCalls.length; j++) {
       if (j < 0) throw new RangeError('Negative tool call index');
@@ -877,6 +883,17 @@ function legacyToBlocks(reasoningSections, textChunks, toolCalls, roundStarts) {
     }
   }
   return blocks;
+}
+
+function hasValidToolCallRoundStarts(roundStarts, toolCallCount) {
+  if (roundStarts.length === 0) return false;
+  if (toolCallCount === 0 || roundStarts[0] !== 0) return false;
+  for (let i = 0; i < roundStarts.length; i++) {
+    const start = roundStarts[i];
+    if (start < 0 || start >= toolCallCount) return false;
+    if (i > 0 && start <= roundStarts[i - 1]) return false;
+  }
+  return true;
 }
 
 function validateDataFormats(providerEntriesJson, conversationsJson) {
