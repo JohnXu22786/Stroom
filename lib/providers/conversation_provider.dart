@@ -671,6 +671,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// [temporaryCountdownTickProvider]（倒计时 UI）并检查到期自动删除。
   Timer? _temporaryTimer;
 
+  @visibleForTesting
+  bool get hasTemporaryTimerForTesting => _temporaryTimer != null;
+
   @override
   void dispose() {
     _temporaryTimer?.cancel();
@@ -727,6 +730,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
+      if (!mounted) return;
       state = _restoreDeletedConversationOrder(original, expired);
       _syncTemporaryTimer();
       debugPrint('Failed to record expired conversation deletion: $error');
