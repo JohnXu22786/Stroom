@@ -14,6 +14,33 @@ import 'package:stroom/startup/startup_check_service.dart';
 
 Future<String> Function()? loadStartupValidationWorkerSourceForTesting;
 
+Future<List<StartupIssue>> _validateMalformedConfigParamOnWeb(
+  String fieldName,
+  Object? malformedValue,
+) async {
+  SharedPreferences.setMockInitialValues({
+    'data_format_version': DataMigrationService.currentFormatVersion,
+    'provider_entries': jsonEncode([
+      {
+        'id': 'broken_provider',
+        'type': 'llm',
+        'name': 'Broken Provider',
+        'configs': [
+          {
+            fieldName: [malformedValue],
+            'models': [],
+          },
+        ],
+      },
+    ]),
+  });
+  AppStorage.resetCache();
+
+  return StartupCheckService.validateDataFormats(
+    validateConversations: false,
+  );
+}
+
 void _mockStartupValidationWorkerAsset() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -46,6 +73,48 @@ void main() {
     // 迁移前备份需要可用的存储（JSON 测试模式）：
     // checkAndMigrate 在备份失败时会取消迁移（生产安全策略）。
     ManifestDatabase.enableTestMode();
+  });
+
+  group('Web startup validation of config parameter lists', () {
+    test(
+      'detects malformed config-level customParams entries',
+      () async {
+        final issues = await _validateMalformedConfigParamOnWeb(
+          'customParams',
+          null,
+        );
+
+        expect(
+          issues.where((issue) => issue.message.contains('customParams')),
+          hasLength(1),
+        );
+        expect(
+          issues.single.message,
+          contains('provider_entries[0].configs[0].customParams[0]'),
+        );
+      },
+      skip: !kIsWeb,
+    );
+
+    test(
+      'detects malformed config-level reasoningParams entries',
+      () async {
+        final issues = await _validateMalformedConfigParamOnWeb(
+          'reasoningParams',
+          'invalid',
+        );
+
+        expect(
+          issues.where((issue) => issue.message.contains('reasoningParams')),
+          hasLength(1),
+        );
+        expect(
+          issues.single.message,
+          contains('provider_entries[0].configs[0].reasoningParams[0]'),
+        );
+      },
+      skip: !kIsWeb,
+    );
   });
 
   group('StartupCheckService - format version check', () {
