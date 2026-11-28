@@ -11,9 +11,13 @@ import 'web_file_store_blob_stub.dart'
     if (dart.library.js_interop) 'web_file_store_blob_web.dart' as blob_store;
 
 class WebFileStoreReadLimitExceededException implements Exception {
-  const WebFileStoreReadLimitExceededException(this.maxBytes);
+  const WebFileStoreReadLimitExceededException(
+    this.maxBytes, {
+    this.headerBytes,
+  });
 
   final int maxBytes;
+  final Uint8List? headerBytes;
 }
 
 /// Web 端使用 IndexedDB 存储二进制文件
@@ -224,7 +228,57 @@ class WebFileStore {
     return null;
   }
 
-  static void _checkReadLimit(dynamic value, int? maxBytes) {
+  static int _prefixLength(int length, int maxBytes) =>
+      length < maxBytes ? length : maxBytes;
+
+  static Uint8List? _prefixBytes(dynamic value, int maxBytes) =>
+      switch (value) {
+        Uint8List bytes => Uint8List.fromList(Uint8List.sublistView(
+            bytes,
+            0,
+            _prefixLength(bytes.length, maxBytes),
+          )),
+        ByteBuffer buffer => Uint8List.fromList(Uint8List.view(
+            buffer,
+            0,
+            _prefixLength(buffer.lengthInBytes, maxBytes),
+          )),
+        TypedData data => Uint8List.fromList(Uint8List.view(
+            data.buffer,
+            data.offsetInBytes,
+            _prefixLength(data.lengthInBytes, maxBytes),
+          )),
+        List<int> bytes => Uint8List.fromList(bytes.take(maxBytes).toList()),
+        _ => null,
+      };
+
+  /// Reads only the first [maxBytes] of a stored value, allowing callers to
+  /// classify a Blob before selecting its full-read limit.
+  static Future<Uint8List?> readPrefix(
+    String key, {
+    required int maxBytes,
+  }) async {
+    if (maxBytes < 0) throw ArgumentError.value(maxBytes, 'maxBytes');
+    if (maxBytes == 0) return Uint8List(0);
+    if (_testMode) return _prefixBytes(_inMemoryStore[key], maxBytes);
+
+    final db = await _database;
+    final Object? value;
+    if (_isAttachmentKey(key)) {
+      final txn = db.transaction('files', idbModeReadOnly);
+      value = await txn.objectStore('files').getObject(key);
+      await txn.completed;
+    } else {
+      final txn = db.transaction('files', idbModeReadOnly);
+      value = await txn.objectStore('files').getObject(key);
+      await txn.completed;
+    }
+    if (value == null) return null;
+    return await blob_store.readBlobPrefix(value, maxBytes) ??
+        _prefixBytes(value, maxBytes);
+  }
+
+  static Future<void> _checkReadLimit(dynamic value, int? maxBytes) async {
     if (maxBytes == null) return;
     final byteLength = switch (value) {
       _ when blob_store.isBlob(value) => blob_store.blobByteLength(value),
@@ -234,7 +288,12 @@ class WebFileStore {
       _ => null,
     };
     if (byteLength != null && byteLength > maxBytes) {
-      throw WebFileStoreReadLimitExceededException(maxBytes);
+      final headerBytes =
+          await blob_store.readBlobPrefix(value, 32) ?? _prefixBytes(value, 32);
+      throw WebFileStoreReadLimitExceededException(
+        maxBytes,
+        headerBytes: headerBytes,
+      );
     }
   }
 
@@ -257,18 +316,28 @@ class WebFileStore {
   static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
       final val = _inMemoryStore[key];
-      _checkReadLimit(val, maxBytes);
+      await _checkReadLimit(val, maxBytes);
       return val != null ? Uint8List.fromList(val) : null;
     }
     final db = await _database;
     if (_isAttachmentKey(key)) {
+      if (maxBytes != null) {
+        final txn = db.transaction('files', idbModeReadOnly);
+        final value = await txn.objectStore('files').getObject(key);
+        await txn.completed;
+        if (value == null) return null;
+        await _checkReadLimit(value, maxBytes);
+        final blobBytes = await _readBlob(value);
+        if (blobBytes != null) return blobBytes;
+        return _toUint8List(value, key);
+      }
       final txn = db.transaction('files', idbModeReadWrite);
       final result = await blob_store.migrateStoredValueToBlob(
         txn.objectStore('files'),
         key,
       );
       await txn.completed;
-      _checkReadLimit(result.value, maxBytes);
+      await _checkReadLimit(result.value, maxBytes);
       return await _readBlob(result.value);
     }
     final txn = db.transaction('files', idbModeReadOnly);
@@ -280,7 +349,7 @@ class WebFileStore {
       return null;
     }
 
-    _checkReadLimit(result, maxBytes);
+    await _checkReadLimit(result, maxBytes);
     if (_isAttachmentKey(key) && !blob_store.isBlob(result)) {
       throw StateError(
         'Attachment storage format migration has not completed for $key',
@@ -289,7 +358,7 @@ class WebFileStore {
     final blobBytes = await blob_store.readBlob(result);
     if (blobBytes != null) return blobBytes;
     final converted = _toUint8List(result, key);
-    _checkReadLimit(converted, maxBytes);
+    await _checkReadLimit(converted, maxBytes);
     if (converted == null) {
       debugPrint(
         'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)',

@@ -32,6 +32,7 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/chat_executor.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -327,6 +328,47 @@ void main() {
             'conversation'),
         throwsA(isA<FormatException>()
             .having((e) => e.message, 'image size', contains('20 MB'))));
+  });
+
+  test(
+      'web chat attachment read bounds oversized payloads and preserves errors',
+      () async {
+    final bytes = Uint8List(maxFlowImageInputBytes + 1)
+      ..setRange(0, 8, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    Future<void> expectImageLimit(
+      String reference, {
+      String? mimeType,
+    }) async {
+      await WebFileStore.write(reference, bytes);
+      await expectLater(
+          readFlowChatWebAttachment(reference, mimeType: mimeType),
+          throwsA(isA<FormatException>().having(
+              (error) => error.message, 'image size', contains('20 MB'))));
+      await WebFileStore.delete(reference);
+    }
+
+    await expectImageLimit('attachments/oversized-flow-image.bin',
+        mimeType: 'image/png');
+    await expectImageLimit('attachments/oversized-flow-image.png');
+    await expectImageLimit('attachments/opaque-image');
+
+    final opaqueDocument = Uint8List(maxAttachmentBytes + 1);
+    const documentReference = 'attachments/opaque-document';
+    await WebFileStore.write(documentReference, opaqueDocument);
+    await expectLater(
+        readFlowChatWebAttachment(documentReference, mimeType: 'image/png'),
+        throwsA(isA<FormatException>().having(
+            (error) => error.message, 'document size', contains('10 MB'))));
+
+    final audioBytes = Uint8List(maxAttachmentBytes + 1)
+      ..setRange(0, 8, [0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00]);
+    const audioReference = 'attachments/oversized-flow-audio.wav';
+    await WebFileStore.write(audioReference, audioBytes);
+    await expectLater(
+        readFlowChatWebAttachment(audioReference),
+        throwsA(isA<FormatException>().having(
+            (error) => error.message, 'audio size', contains('10 MB'))));
+    await WebFileStore.delete(audioReference);
   });
 
   for (final fail in [false, true]) {

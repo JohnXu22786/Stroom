@@ -202,6 +202,33 @@ String? flowChatTextFileError(String name, List<int> bytes) {
   }
 }
 
+@visibleForTesting
+Future<Uint8List?> readFlowChatWebAttachment(
+  String reference, {
+  String? mimeType,
+}) async {
+  bool isImage(List<int>? headerBytes) =>
+      flowMimeType(
+        flowFileMimeType(reference,
+            headerBytes: headerBytes, mimeType: mimeType),
+      ) ==
+      IOType.image;
+
+  final headerBytes = await WebFileStore.readPrefix(reference, maxBytes: 32);
+  try {
+    return await WebFileStore.read(
+      reference,
+      maxBytes:
+          isImage(headerBytes) ? maxFlowImageInputBytes : maxAttachmentBytes,
+    );
+  } on WebFileStoreReadLimitExceededException catch (error) {
+    if (isImage(error.headerBytes ?? headerBytes)) {
+      throw const FormatException('助手对话图片超过 20 MB，请选择较小图片');
+    }
+    throw const FormatException('助手对话附件超过 10 MB，请选择较小文件');
+  }
+}
+
 /// Persist media with the same AttachmentStorage and Attachment metadata as
 /// the chat composer. The shared protocol handles compression and API encoding.
 /// Path-shaped textual content stays text; no filesystem guessing is involved.
@@ -224,7 +251,11 @@ Future<ChatMessage> prepareFlowChatMessage(
   }
   final Uint8List bytes;
   if (kIsWeb) {
-    bytes = await WebFileStore.read(reference) ?? Uint8List(0);
+    bytes = await readFlowChatWebAttachment(
+          reference,
+          mimeType: payload.mimeType,
+        ) ??
+        Uint8List(0);
   } else {
     final file = File(reference);
     // A generic file can actually be an image, which the chat pipeline

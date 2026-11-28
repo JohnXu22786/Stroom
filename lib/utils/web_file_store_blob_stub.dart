@@ -8,6 +8,8 @@ Object createBlob(Uint8List bytes) => bytes;
 
 Future<Uint8List?> readBlob(Object? value) async => null;
 
+Future<Uint8List?> readBlobPrefix(Object? value, int maxBytes) async => null;
+
 Future<Uint8List?> readBlobCancellable(
   Object? value,
   Future<void> cancellation,
