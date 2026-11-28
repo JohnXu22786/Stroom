@@ -12,11 +12,31 @@ import '../../widget_visitor.dart';
 class HeadingNode extends ElementNode {
   final HeadingConfig headingConfig;
   final WidgetVisitor visitor;
+  final HeadingNode? _sourceHeading;
 
-  HeadingNode(this.headingConfig, this.visitor);
+  HeadingNode(this.headingConfig, this.visitor) : _sourceHeading = null;
+
+  HeadingNode._copy(this.headingConfig, this.visitor, this._sourceHeading);
 
   @override
   InlineSpan build() {
+    final sourceHeading = _sourceHeading;
+    if (sourceHeading == null) return _build();
+
+    final originalParents = [for (final child in children) child.parent];
+    for (final child in children) {
+      child.parent = this;
+    }
+    try {
+      return _build();
+    } finally {
+      for (var index = 0; index < children.length; index++) {
+        children[index].parent = originalParents[index];
+      }
+    }
+  }
+
+  InlineSpan _build() {
     final divider = headingConfig.divider;
     if (divider == null) return childrenSpan;
     return WidgetSpan(
@@ -38,10 +58,11 @@ class HeadingNode extends ElementNode {
   }
 
   HeadingNode copy({HeadingConfig? headingConfig}) {
-    final node = HeadingNode(headingConfig ?? this.headingConfig, visitor);
-    for (var e in children) {
-      node.accept(e);
-    }
+    final node = HeadingNode._copy(
+      headingConfig ?? this.headingConfig,
+      visitor,
+      this,
+    )..children.addAll(children);
     return node;
   }
 
