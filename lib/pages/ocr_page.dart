@@ -694,17 +694,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
       body: Column(
         children: [
-          // Model selector (nicely styled)
-          _buildModelSelector(cs),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Model selector (nicely styled)
+                  _buildModelSelector(cs),
 
-          // Instruction selector (below the model selector)
-          _buildInstructionSelector(cs),
+                  // Instruction selector (below the model selector)
+                  _buildInstructionSelector(cs),
 
-          // Batch mode
-          _buildBatchOptions(cs),
+                  // Batch mode
+                  _buildBatchOptions(cs),
 
-          // Photo source buttons
-          _buildPhotoSourceBar(cs),
+                  // Photo source buttons
+                  _buildPhotoSourceBar(cs),
+                ],
+              ),
+            ),
+          ),
 
           // Image preview area
           Expanded(
@@ -883,21 +892,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  AppLocalizations.of(context)!.ocrModelLabel,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      AppLocalizations.of(context)!.ocrModelLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(width: 4),
               TextButton(
                 onPressed: () {
                   final entryId = _getFirstOcrEntryId(ref);
@@ -1483,8 +1500,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 48,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
                   child: ElevatedButton.icon(
                     onPressed:
                         _isImageSelectionLocked ? null : _showCameraChoicePanel,
@@ -1508,8 +1525,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: SizedBox(
-                  height: 48,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
                   child: ElevatedButton.icon(
                     onPressed:
                         _isImageSelectionLocked ? null : _showAlbumChoicePanel,
@@ -2056,50 +2073,52 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ),
             SizedBox(
               width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty ||
-                        _ocrStarting ||
-                        _isProcessing ||
-                        _isImageImportPending ||
-                        _isRetryImagesLoading ||
-                        _retryImagesUnavailable ||
-                        _retryImageCountMismatch ||
-                        _legacyModelConfirmationPending
-                    ? null
-                    : _startOcr,
-                icon: _ocrStarting || _isProcessing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.text_snippet, size: 20),
-                label: ConstrainedText(
-                  _ocrStarting
-                      ? AppLocalizations.of(context)!.ocrPreparingImages
-                      : _isProcessing
-                          ? _isPreparingRetryData
-                              ? AppLocalizations.of(context)!
-                                  .ocrSavingRetryImages
-                              : AppLocalizations.of(context)!.ocrRecognizing
-                          : _isRetryImagesLoading
-                              ? AppLocalizations.of(context)!
-                                  .ocrReadingRetryImages
-                              : _isImageImportPending
-                                  ? AppLocalizations.of(context)!
-                                      .ocrImportingImages
-                                  : AppLocalizations.of(context)!
-                                      .ocrStartRecognition,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: FilledButton.icon(
+                  onPressed: _selectedImages.isEmpty ||
+                          _ocrStarting ||
+                          _isProcessing ||
+                          _isImageImportPending ||
+                          _isRetryImagesLoading ||
+                          _retryImagesUnavailable ||
+                          _retryImageCountMismatch ||
+                          _legacyModelConfirmationPending
+                      ? null
+                      : _startOcr,
+                  icon: _ocrStarting || _isProcessing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.text_snippet, size: 20),
+                  label: ConstrainedText(
+                    _ocrStarting
+                        ? AppLocalizations.of(context)!.ocrPreparingImages
+                        : _isProcessing
+                            ? _isPreparingRetryData
+                                ? AppLocalizations.of(context)!
+                                    .ocrSavingRetryImages
+                                : AppLocalizations.of(context)!.ocrRecognizing
+                            : _isRetryImagesLoading
+                                ? AppLocalizations.of(context)!
+                                    .ocrReadingRetryImages
+                                : _isImageImportPending
+                                    ? AppLocalizations.of(context)!
+                                        .ocrImportingImages
+                                    : AppLocalizations.of(context)!
+                                        .ocrStartRecognition,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

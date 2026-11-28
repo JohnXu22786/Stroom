@@ -5,6 +5,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_setting_panels.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import '../../../qa/round14_qa_font_loader.dart';
+
+const _round14McpTitleCaptureKey = ValueKey('round14-mcp-title-scaled-capture');
 
 /// Helper to open the model panel in a test environment.
 Future<void> openPanel(WidgetTester tester) async {
@@ -13,6 +17,7 @@ Future<void> openPanel(WidgetTester tester) async {
 }
 
 void main() {
+  setUpAll(loadRound14QaFonts);
   group('ModelPanel tests', () {
     testWidgets('model panel shows available models', (tester) async {
       await tester.pumpWidget(
@@ -186,6 +191,73 @@ void main() {
   });
 
   group('ToolsPanel tests', () {
+    testWidgets('long MCP names use a measured single-line title slot', (
+      tester,
+    ) async {
+      const toolName =
+          'provider_with_a_very_long_mcp_tool_name_that_must_remain_identifiable';
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _round14McpTitleCaptureKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.8),
+                disableAnimations: true,
+              ),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showToolsPanel(
+                    context: context,
+                    tools: const [
+                      ToolDefinition(
+                        name: toolName,
+                        description: '',
+                        parameters: {},
+                      ),
+                    ],
+                    enabledTools: const {},
+                    onToolToggle: (_, __) {},
+                  ),
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await openPanel(tester);
+
+      final title = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == toolName,
+      );
+      expect(title, findsOneWidget);
+      expect(tester.getSemantics(title).label, toolName);
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byKey(_round14McpTitleCaptureKey),
+        matchesGoldenFile(
+          '../../../../docs/ui-constrained-text-qa/round14-scaled-controls/mcp-tool-de-320x640-scale1_8-light.png',
+        ),
+      );
+    });
+
     testWidgets('tools panel shows available MCP tools with switches',
         (tester) async {
       final tools = [

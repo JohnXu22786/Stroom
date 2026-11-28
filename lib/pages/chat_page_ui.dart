@@ -795,6 +795,7 @@ extension _ChatPageUiExt on _ChatPageState {
 
   void _showRenameConversationDialog(Conversation conversation) {
     final controller = TextEditingController(text: conversation.title);
+    final hintStatesController = MaterialStatesController();
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -806,8 +807,12 @@ extension _ChatPageUiExt on _ChatPageState {
         content: TextField(
           controller: controller,
           autofocus: true,
+          statesController: hintStatesController,
           decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.conversationRenameHint,
+            hint: ConstrainedInputHint(
+              AppLocalizations.of(context)!.conversationRenameHint,
+              statesController: hintStatesController,
+            ),
             border: OutlineInputBorder(),
           ),
           onSubmitted: (_) =>
@@ -833,7 +838,10 @@ extension _ChatPageUiExt on _ChatPageState {
           ),
         ],
       ),
-    ).whenComplete(controller.dispose);
+    ).whenComplete(() {
+      controller.dispose();
+      hintStatesController.dispose();
+    });
   }
 
   void _saveConversationTitle(

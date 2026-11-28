@@ -264,8 +264,8 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           ),
           content: SizedBox(
             width: 260,
-            height: 100,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '${temp.toInt()}',
@@ -274,22 +274,20 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Expanded(
-                  child: Slider(
-                    value: temp,
-                    min: _minFontSize,
-                    max: _maxFontSize,
-                    divisions: (_maxFontSize - _minFontSize).toInt(),
-                    label: '${temp.toInt()}',
-                    onChanged: (v) {
-                      temp = v.roundToDouble();
-                      _fontSizeAdjustedByUser = true;
-                      setDialogState(() {});
-                      setState(() => _fontSize = temp);
-                    },
-                    // 拖动结束时才持久化一次，避免拖动过程中频繁写盘
-                    onChangeEnd: (_) => _persistFontSize(),
-                  ),
+                Slider(
+                  value: temp,
+                  min: _minFontSize,
+                  max: _maxFontSize,
+                  divisions: (_maxFontSize - _minFontSize).toInt(),
+                  label: '${temp.toInt()}',
+                  onChanged: (v) {
+                    temp = v.roundToDouble();
+                    _fontSizeAdjustedByUser = true;
+                    setDialogState(() {});
+                    setState(() => _fontSize = temp);
+                  },
+                  // 拖动结束时才持久化一次，避免拖动过程中频繁写盘
+                  onChangeEnd: (_) => _persistFontSize(),
                 ),
               ],
             ),

@@ -351,8 +351,10 @@ void showToolsPanel({
                                   onToolToggle(tool.name, enabled);
                                 },
                                 activeThumbColor: cs.primary,
-                                title: Text(
+                                title: ConstrainedText(
                                   tool.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,

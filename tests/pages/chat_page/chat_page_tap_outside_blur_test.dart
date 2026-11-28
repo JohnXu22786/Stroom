@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../../qa/round14_qa_font_loader.dart';
 
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
@@ -33,6 +34,7 @@ import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/tap_outside_unfocus.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 List<ChatMessage> _testMessages(int count) {
   return List.generate(count, (i) {
@@ -65,7 +67,12 @@ Future<void> withPlatform(
 /// Pumps a ChatPage exactly like production: the app-level
 /// [TapOutsideUnfocus] override is present (MaterialApp.builder), so a tap
 /// outside the composer's tap region blurs the composer.
-Future<void> pumpChat(WidgetTester tester) async {
+Future<void> pumpChat(
+  WidgetTester tester, {
+  Locale locale = const Locale('zh', 'CN'),
+  double textScale = 1,
+  Key? captureKey,
+}) async {
   final messages = _testMessages(6);
   SharedPreferences.setMockInitialValues({
     'conversations': jsonEncode([
@@ -82,25 +89,34 @@ Future<void> pumpChat(WidgetTester tester) async {
   });
 
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
-        providerEntriesProvider.overrideWith((ref) {
-          return ProviderEntriesNotifier();
-        }),
-      ],
-      child: MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+    RepaintBoundary(
+      key: captureKey,
+      child: ProviderScope(
+        overrides: [
+          activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider.overrideWith((ref) {
+            return ProviderEntriesNotifier();
+          }),
         ],
-        builder: (context, child) =>
-            TapOutsideUnfocus(child: child ?? const SizedBox.shrink()),
-        home: Scaffold(body: const ChatPage()),
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
+            child: TapOutsideUnfocus(
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
+          home: Scaffold(body: const ChatPage()),
+        ),
       ),
     ),
   );
@@ -132,7 +148,52 @@ bool composerFocused(WidgetTester tester) {
 }
 
 void main() {
+  setUpAll(loadRound14QaFonts);
   group('ChatPage tap-outside blur', () {
+    testWidgets('rename hint remains native with large localized text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      await withPlatform(tester, TargetPlatform.android, () async {
+        await pumpChat(
+          tester,
+          locale: const Locale('de', 'DE'),
+          textScale: 4,
+          captureKey: const ValueKey('round14-rename-hint-capture'),
+        );
+        final titleTooltip = AppLocalizations.of(
+          tester.element(find.byType(ChatPage)),
+        )!
+            .chatEditConversationTitle;
+        await tester.tap(find.byTooltip(titleTooltip));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final renameField = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        );
+        expect(renameField, findsOneWidget);
+        final field = tester.widget<TextField>(renameField);
+        final hint = field.decoration?.hint;
+        expect(hint, isA<ConstrainedInputHint>());
+        expect(
+          (hint! as ConstrainedInputHint).data,
+          AppLocalizations.of(tester.element(renameField))!
+              .conversationRenameHint,
+        );
+        expect(field.controller?.text, 'Test Conversation');
+        expect(tester.takeException(), isNull);
+        await expectLater(
+          find.byKey(const ValueKey('round14-rename-hint-capture')),
+          matchesGoldenFile(
+            '../../../docs/ui-constrained-text-qa/round14-scaled-controls/rename-hint-de-320x640-scale4-light.png',
+          ),
+        );
+      });
+    });
+
     testWidgets(
         'tapping the message list while composing keeps the composer '
         'focused (the list is grouped with the composer)', (tester) async {

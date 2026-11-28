@@ -32,6 +32,7 @@ import 'package:stroom/services/ocr_retry_storage.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import '../../qa/round14_qa_font_loader.dart';
 import 'package:stroom/utils/web_file_store.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
@@ -72,6 +73,8 @@ Future<void> _pumpUntil(
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
+
+const _round14OcrCaptureKey = ValueKey('round14-ocr-scaled-controls-capture');
 
 // ============================================================================
 // Helper: Build test app with optional provider overrides
@@ -145,6 +148,7 @@ Widget _buildTestApp({
       }),
     ],
     child: MaterialApp(
+      debugShowCheckedModeBanner: false,
       locale: locale,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: textScaler),
@@ -516,6 +520,7 @@ class _CompletablePickerFile extends XFile {
 }
 
 void main() {
+  setUpAll(loadRound14QaFonts);
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
@@ -523,6 +528,55 @@ void main() {
     ManifestDatabase.enableTestMode();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
+  });
+
+  testWidgets('OCR source buttons grow for large text scaling', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _round14OcrCaptureKey,
+        child: _buildTestApp(
+          locale: const Locale('de', 'DE'),
+          textScaler: const TextScaler.linear(3),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(OcrPage)),
+    )!;
+    final button = find.ancestor(
+      of: find.text(strings.ocrTakePhoto),
+      matching: find.byType(ElevatedButton),
+    );
+    expect(button, findsOneWidget);
+    expect(tester.getSize(button).height, greaterThan(48));
+    final albumButton = find.ancestor(
+      of: find.text(strings.ocrChooseFromAlbum),
+      matching: find.byType(ElevatedButton),
+    );
+    expect(albumButton, findsOneWidget);
+    expect(tester.getSize(albumButton).height, greaterThan(48));
+    final startButton = find.ancestor(
+      of: find.text(strings.ocrStartRecognition),
+      matching: find.byType(FilledButton),
+    );
+    expect(startButton, findsOneWidget);
+    expect(tester.getSize(startButton).height, greaterThan(48));
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(_round14OcrCaptureKey),
+      matchesGoldenFile(
+        '../../../docs/ui-constrained-text-qa/round14-scaled-controls/ocr-de-320x640-scale3-light.png',
+      ),
+    );
   });
 
   for (final gallery in [false, true]) {
