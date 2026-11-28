@@ -801,13 +801,21 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   Future<void> restoreFromPersistence() async {
     final tasks = await _loadPersistedTasks();
     if (tasks.isEmpty) return;
+    final recoveredInterruptedTask = tasks.any(
+      (task) => task.status == TaskStatus.running,
+    );
     state = [
       for (final task in tasks)
         if (task.status == TaskStatus.running)
-          task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
+          task.copyWith(
+            status: TaskStatus.failed,
+            error: '应用重启，已中断',
+            completedAt: DateTime.now(),
+          )
         else
           task,
     ];
+    if (recoveredInterruptedTask) await _persistTasks();
     debugPrint(
         '[TaskListNotifier] Restored ${tasks.length} tasks from persistence');
   }
