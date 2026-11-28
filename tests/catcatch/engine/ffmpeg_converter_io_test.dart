@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/catcatch/engine/fvp_conversion_waiter.dart';
+import 'package:stroom/catcatch/engine/ffmpeg_converter_io.dart';
 
 void main() {
   test('cancellation resolves the conversion waiter promptly', () async {

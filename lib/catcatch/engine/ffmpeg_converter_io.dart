@@ -2,14 +2,44 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:fvp/mdk.dart' as mdk;
 import 'dart_ts_remuxer.dart';
 import 'dart_flv_remuxer.dart';
 import 'ev1_decoder.dart';
-import 'fvp_conversion_waiter.dart';
+
+/// Resolves an FVP conversion when it completes, fails, or is cancelled.
+@visibleForTesting
+class FvpConversionWaiter {
+  FvpConversionWaiter({
+    required CancelToken? cancelToken,
+    required void Function() stopPlayer,
+  }) {
+    cancelToken?.whenCancel.then((_) {
+      if (_completer.isCompleted) return;
+      try {
+        stopPlayer();
+      } catch (_) {}
+      completeError(Exception('Task was cancelled'));
+    });
+  }
+
+  final Completer<void> _completer = Completer<void>();
+
+  Future<void> get future => _completer.future;
+
+  bool get isCompleted => _completer.isCompleted;
+
+  void complete() {
+    if (!_completer.isCompleted) _completer.complete();
+  }
+
+  void completeError(Object error) {
+    if (!_completer.isCompleted) _completer.completeError(error);
+  }
+}
 
 /// 格式转换器
 ///
