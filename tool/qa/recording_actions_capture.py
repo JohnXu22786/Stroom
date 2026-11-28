@@ -90,7 +90,7 @@ with sync_playwright() as playwright:
                 "locale": locale,
                 "theme": "light",
                 "text_scale": scale,
-                "focus": "none",
+                "focus": focus,
                 "keyboard": "closed",
                 "page_errors": page_errors,
             }
