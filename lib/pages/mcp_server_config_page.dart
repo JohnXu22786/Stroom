@@ -589,6 +589,12 @@ class _McpServerConfigDialogState
             ? _nameController.text
             : AppLocalizations.of(context)!.mcpEditServerTitle)
         : AppLocalizations.of(context)!.mcpCreateServerTitle;
+    final dialogHeight = MediaQuery.sizeOf(context).height * 0.85;
+    final scrollWholeDialog = compactAppBar &&
+        kToolbarHeight + _compactAppBarActionsHeight + 120 > dialogHeight;
+    final dialogContentHeight = scrollWholeDialog
+        ? kToolbarHeight + _compactAppBarActionsHeight + dialogHeight
+        : dialogHeight;
 
     return PopScope(
       canPop: !_isEditMode || !_hasUnsavedChanges,
@@ -636,10 +642,15 @@ class _McpServerConfigDialogState
         }
       },
       child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: SizedBox(
+        insetPadding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 24,
+        ),
+        child: _McpDialogContentScroller(
           width: 560,
-          height: MediaQuery.sizeOf(context).height * 0.85,
+          viewportHeight: dialogHeight,
+          contentHeight: dialogContentHeight,
+          scroll: scrollWholeDialog,
           child: Scaffold(
             appBar: AppBar(
               title: ConstrainedText(
@@ -1280,6 +1291,32 @@ class _McpServerConfigDialogState
           ],
         ),
       ),
+    );
+  }
+}
+
+class _McpDialogContentScroller extends StatelessWidget {
+  const _McpDialogContentScroller({
+    required this.width,
+    required this.viewportHeight,
+    required this.contentHeight,
+    required this.scroll,
+    required this.child,
+  });
+
+  final double width;
+  final double viewportHeight;
+  final double contentHeight;
+  final bool scroll;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = SizedBox(height: contentHeight, child: child);
+    return SizedBox(
+      width: width,
+      height: viewportHeight,
+      child: scroll ? SingleChildScrollView(child: content) : child,
     );
   }
 }

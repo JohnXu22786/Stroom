@@ -63,6 +63,18 @@ try:
 
     cases = [
         {
+            "name": "mcp-actions-fr-320x320-scale4-light-discard.png",
+            "width": 320,
+            "height": 320,
+            "locale": "fr-FR",
+            "scale": 4,
+            "theme": "light",
+            "save_label": "Enregistrer",
+            "discard_label": "Abandonner",
+            "scroll_for_discard": 160,
+            "top_screenshot": "mcp-actions-fr-320x320-scale4-light-save.png",
+        },
+        {
             "name": "mcp-actions-fr-320x640-scale4-light.png",
             "width": 320,
             "height": 640,
@@ -124,6 +136,10 @@ try:
                 ("save", case["save_label"]),
                 ("discard", case["discard_label"]),
             ]:
+                if action == "discard" and case.get("scroll_for_discard"):
+                    page.mouse.move(case["width"] / 2, case["height"] / 2)
+                    page.mouse.wheel(0, case["scroll_for_discard"])
+                    page.wait_for_timeout(500)
                 button = page.get_by_role("button", name=label)
                 button.wait_for(state="visible", timeout=10_000)
                 bounds = button.bounding_box()
@@ -137,6 +153,25 @@ try:
                 ):
                     raise RuntimeError(f"MCP {action} action is outside the viewport: {bounds}")
                 action_bounds[action] = bounds
+                if action == "save" and case.get("top_screenshot"):
+                    top_path = OUTPUT / case["top_screenshot"]
+                    top_path.write_bytes(page.screenshot())
+                    print(
+                        {
+                            "screenshot": str(top_path.relative_to(ROOT)),
+                            "viewport_logical_px": {
+                                "width": case["width"],
+                                "height": case["height"],
+                            },
+                            "device_pixel_ratio": page.evaluate("devicePixelRatio"),
+                            "locale": case["locale"],
+                            "text_scale": case["scale"],
+                            "theme": f"{case['theme']} Material 3",
+                            "state": "new MCP server configuration dialog with Save row visible",
+                            "action_bounds_logical_px": {"save": bounds},
+                            "page_errors": errors,
+                        }
+                    )
             screenshot = page.screenshot()
             output_path = OUTPUT / case["name"]
             output_path.write_bytes(screenshot)

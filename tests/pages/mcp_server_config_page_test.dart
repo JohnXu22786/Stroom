@@ -144,6 +144,67 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('French compact AppBar actions scroll within a short dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final viewport = const Rect.fromLTWH(0, 0, 320, 320);
+    final dialogTitle = find.text('Nouveau serveur MCP');
+    expect(dialogTitle, findsOneWidget);
+    final titleRect = tester.getRect(dialogTitle);
+    expect(titleRect.top, greaterThanOrEqualTo(0));
+    expect(titleRect.bottom, lessThanOrEqualTo(320));
+    for (final (label, buttonLabel) in [
+      (find.text('Enregistrer'), 'Enregistrer'),
+      (find.text('Abandonner'), 'Abandonner'),
+    ]) {
+      final button =
+          find.ancestor(of: label, matching: find.byType(TextButton)).first;
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      final buttonRect = tester.getRect(button);
+      final labelRect = tester.getRect(label);
+      expect(viewport.contains(buttonRect.topLeft), isTrue);
+      expect(viewport.contains(buttonRect.bottomRight), isTrue);
+      expect(buttonRect.contains(labelRect.topLeft), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+      expect(find.text(buttonLabel), findsOneWidget);
+    }
+
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -560),
+    );
+    await tester.pumpAndSettle();
+    for (var attempt = 0;
+        attempt < 20 && find.byType(TextField).evaluate().isEmpty;
+        attempt++) {
+      await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+      await tester.pumpAndSettle();
+    }
+    final nameField = find.byType(TextField).first;
+    await tester.ensureVisible(nameField);
+    await tester.pumpAndSettle();
+    expect(viewport.contains(tester.getRect(nameField).topLeft), isTrue);
+    await tester.ensureVisible(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('English compact AppBar action retains 48 dp at 1x', (
     tester,
   ) async {
