@@ -117,6 +117,7 @@ class SM2Scheduler {
         dayOrdinal: dayOrdinal,
         rating: rating,
         hardMult: hardMultiplier,
+        lapseMult: lapseIntervalMultiplier,
         relearnSteps: learningSteps.length,
         relearnMin: learningSteps.isNotEmpty ? learningSteps[0] : 1);
   }

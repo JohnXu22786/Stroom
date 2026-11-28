@@ -86,6 +86,7 @@ class AnkiScheduler {
             dayOrdinal: today,
             rating: rating,
             hardMult: _sm2.hardMultiplier,
+            lapseMult: _sm2.lapseIntervalMultiplier,
             relearnSteps: _sm2.learningSteps.length,
             relearnMin:
                 _sm2.learningSteps.isNotEmpty ? _sm2.learningSteps[0] : 1);

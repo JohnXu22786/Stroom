@@ -297,6 +297,7 @@ class Card {
   }) {
     if (queue != CardQueue.learn) return;
     reps++;
+    final isRelearning = ctype == CardType.relearn;
     final nowSec = nowMs ~/ 1000;
     final stepIdx = remaining_steps >> 8; // high byte
 
@@ -316,7 +317,9 @@ class Card {
       // Easy — graduate immediately with bonus (Anki easyBonus=1.3)
       queue = CardQueue.review;
       ctype = CardType.review;
-      interval = (graduatingIvl * 1.3).round();
+      if (!isRelearning) {
+        interval = (graduatingIvl * 1.3).round();
+      }
       due = dayOrdinal + interval;
       remaining_steps = 0;
       return;
@@ -327,7 +330,7 @@ class Card {
       // Graduate to review
       queue = CardQueue.review;
       ctype = CardType.review;
-      interval = graduatingIvl;
+      if (!isRelearning) interval = graduatingIvl;
       due = dayOrdinal + interval;
       remaining_steps = 0;
     } else {
@@ -342,6 +345,7 @@ class Card {
     required int dayOrdinal,
     int rating = 3,
     double hardMult = 1.2,
+    double lapseMult = 0.0,
     int relearnSteps = 2,
     int relearnMin = 1,
   }) {
@@ -350,6 +354,8 @@ class Card {
     if (rating == 1) {
       // Lapse
       lapses++;
+      // Retain the adjusted interval through the relearning steps.
+      interval = (interval * lapseMult).round().clamp(1, 36500);
       queue = CardQueue.learn;
       ctype = CardType.relearn;
       remaining_steps = relearnSteps;
