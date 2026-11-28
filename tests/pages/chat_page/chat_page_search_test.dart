@@ -3,9 +3,12 @@
 // between matches — including jumping to matches in older messages that
 // lazy pagination has not loaded yet.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +43,7 @@ Widget _buildApp({
       }),
     ],
     child: MaterialApp(
+      debugShowCheckedModeBanner: false,
       locale: locale,
       theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -134,6 +138,23 @@ List<ChatMessage> _messages() {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  });
+
   setUp(() {
     // Markdown rendering wraps blocks in VisibilityDetector; its default
     // 500ms debounce timer would remain pending at test teardown.
@@ -166,7 +187,7 @@ void main() {
       final hint = field.decoration!.hint as ConstrainedText;
       expect(hint.data, 'Rechercher dans cette conversation…');
       expect(field.controller, isNotNull);
-      expect(tester.getSize(fieldFinder).height, 32);
+      expect(tester.getSize(fieldFinder).height, greaterThan(32));
       expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
       expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
@@ -176,6 +197,66 @@ void main() {
       await tester.enterText(fieldFinder, 'requête');
       await tester.pump();
       expect(field.controller!.text, 'requête');
+    });
+
+    testWidgets('search field preserves 32 dp at 1x and grows at 2x',
+        (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(800, 640);
+      tester.view.devicePixelRatio = 1;
+
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('en', 'US'),
+        theme: ThemeData.light(useMaterial3: true),
+      );
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+
+      final searchField = find.byType(TextField).first;
+      expect(tester.getSize(searchField).height, 32);
+      await expectLater(
+        find.byType(Scaffold).first,
+        matchesGoldenFile(
+          '../../../docs/ui-constrained-text-qa/round13-chat-search-height/chat-search-en-800x640-scale1-light.png',
+        ),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+        textScale: 2,
+        theme: ThemeData.light(useMaterial3: true),
+      );
+      await tester.tap(find.byIcon(Icons.search).first);
+      await tester.pump();
+
+      final scaledField = find.byType(TextField).first;
+      expect(tester.getSize(scaledField).height, greaterThan(32));
+      expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(
+        tester.getRect(find.byIcon(Icons.close)).right,
+        lessThanOrEqualTo(320),
+      );
+      await expectLater(
+        find.byType(Scaffold).first,
+        matchesGoldenFile(
+          '../../../docs/ui-constrained-text-qa/round13-chat-search-height/chat-search-fr-320x640-scale2-light.png',
+        ),
+      );
+
+      await tester.enterText(scaledField, 'requête');
+      await tester.pump();
+      expect(tester.widget<TextField>(scaledField).controller!.text, 'requête');
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('current-search hint resolves focused theme text style',
