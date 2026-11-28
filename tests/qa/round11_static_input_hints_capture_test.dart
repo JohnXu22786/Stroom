@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
+import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/text_storage_shared.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -116,6 +118,73 @@ void main() {
     verifyHintMeasurement(tester, clipped: true);
     expect(find.byType(ConstrainedInputHint), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('captures fitting and clipped simple model ID hints', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await capture(
+      tester,
+      size: const Size(1200, 800),
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: const SimpleModelConfigPage(),
+      ),
+      path:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/model-id-fitting-en-1200x800-scale1-light.png',
+    );
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(TextField).first),
+    )!;
+    final hint = strings.modelIdExample('gpt-4o');
+    verifyHintMeasurement(tester, clipped: false, expectedHint: hint);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: SimpleModelConfigPage(
+            model: ModelConfig(
+              name: 'Example',
+              modelId: 'gpt-4o',
+              customParams: [CustomParam(paramName: 'response', type: 'json')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final localizedStrings = AppLocalizations.of(
+      tester.element(find.byType(TextField).first),
+    )!;
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-light.png',
+      ),
+    );
+    final localizedHint =
+        '${localizedStrings.paramTypeJsonHint}{"key": "value"}';
+    verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
+    expect(find.byType(TextFormField), findsWidgets);
+    expect(find.byType(TextField), findsWidgets);
   });
 
   testWidgets('captures text creation field and compact provider option row', (
@@ -395,10 +464,8 @@ void main() {
     await tester.tap(find.text('Open settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    DefaultTabController.of(tester.element(find.byType(TabBar))).animateTo(
-      1,
-      duration: Duration.zero,
-    );
+    DefaultTabController.of(tester.element(find.byType(TabBar)))
+        .animateTo(1, duration: Duration.zero);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -425,20 +492,15 @@ void main() {
       matching: find.byType(TextFormField),
     );
     tester
-        .widget<EditableText>(find.descendant(
-          of: nameField,
-          matching: find.byType(EditableText),
-        ))
+        .widget<EditableText>(
+          find.descendant(of: nameField, matching: find.byType(EditableText)),
+        )
         .focusNode
         .requestFocus();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(milliseconds: 400));
-    verifyHintMeasurement(
-      tester,
-      clipped: true,
-      expectedHint: nameHints.first,
-    );
+    verifyHintMeasurement(tester, clipped: true, expectedHint: nameHints.first);
     await expectLater(
       find.byKey(_captureKey),
       matchesGoldenFile(
@@ -465,10 +527,9 @@ void main() {
       matching: find.byType(TextFormField),
     );
     tester
-        .widget<EditableText>(find.descendant(
-          of: jsonField,
-          matching: find.byType(EditableText),
-        ))
+        .widget<EditableText>(
+          find.descendant(of: jsonField, matching: find.byType(EditableText)),
+        )
         .focusNode
         .requestFocus();
     await tester.pump(const Duration(milliseconds: 100));

@@ -24,11 +24,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
+  final _searchHintStates = WidgetStatesController();
   String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchHintStates.dispose();
     super.dispose();
   }
 
@@ -333,6 +335,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
   void _renameConversation(String id, String currentTitle) {
     final controller = TextEditingController(text: currentTitle);
+    final hintStates = WidgetStatesController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -343,9 +346,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         ),
         content: TextField(
           controller: controller,
+          statesController: hintStates,
           autofocus: true,
           decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.conversationRenameHint,
+            hint: ConstrainedInputHint(
+              AppLocalizations.of(context)!.conversationRenameHint,
+              statesController: hintStates,
+            ),
             border: OutlineInputBorder(),
           ),
           onSubmitted: (value) {
@@ -355,6 +362,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   .renameConversation(id, value.trim());
             }
             controller.dispose();
+            hintStates.dispose();
             Navigator.of(ctx).pop();
           },
         ),
@@ -362,6 +370,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           TextButton(
             onPressed: () {
               controller.dispose();
+              hintStates.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
@@ -379,6 +388,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     .renameConversation(id, value);
               }
               controller.dispose();
+              hintStates.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
@@ -434,12 +444,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ),
               title: TextField(
                 controller: _searchController,
+                statesController: _searchHintStates,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText:
-                      AppLocalizations.of(context)!.conversationSearchHint,
+                  hint: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.conversationSearchHint,
+                    statesController: _searchHintStates,
+                    hintStyle: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                   border: InputBorder.none,
-                  hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
                 onChanged: (value) => setState(() {}),
               ),
