@@ -316,13 +316,14 @@ class AudioSeparationEngine {
 
     final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
     final channels = track.channels > 0 ? track.channels : 2;
-    final wavBytes = Uint8List(44 + pcmBytes.length);
+    final paddingSize = pcmBytes.length & 1;
+    final wavBytes = Uint8List(44 + pcmBytes.length + paddingSize);
     wavBytes.setRange(0, 4, [0x52, 0x49, 0x46, 0x46]); // RIFF
     wavBytes.setRange(8, 12, [0x57, 0x41, 0x56, 0x45]); // WAVE
     wavBytes.setRange(12, 16, [0x66, 0x6d, 0x74, 0x20]); // fmt chunk
     wavBytes.setRange(36, 40, [0x64, 0x61, 0x74, 0x61]); // data
     final header = ByteData.sublistView(wavBytes);
-    header.setUint32(4, 36 + pcmBytes.length, Endian.little);
+    header.setUint32(4, 36 + pcmBytes.length + paddingSize, Endian.little);
     header.setUint32(16, 16, Endian.little);
     header.setUint16(20, 1, Endian.little);
     header.setUint16(22, channels, Endian.little);

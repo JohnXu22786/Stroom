@@ -2118,6 +2118,44 @@ void main() {
               'data is corrupted or silent!');
     });
 
+    test('extractAudio pads odd PCM payloads and preserves even WAV output',
+        () async {
+      final oddPcm = Uint8List.fromList([0x11, 0x22, 0x33]);
+      final oddMp4 = buildMinimalMp4WithPcmAudio(
+        pcmFrames: oddPcm.length,
+        bitsPerSample: 8,
+        dataPattern: oddPcm,
+      );
+      final oddWav = await engine.extractAudio(
+        videoBytes: oddMp4,
+        videoFormat: 'mp4',
+      );
+      final oddHeader = ByteData.sublistView(oddWav);
+
+      expect(oddHeader.getUint32(4, Endian.little), oddWav.length - 8);
+      expect(oddHeader.getUint32(40, Endian.little), oddPcm.length);
+      expect(oddWav.length, 44 + oddPcm.length + 1);
+      expect(oddWav.sublist(44, 47), oddPcm);
+      expect(oddWav[47], 0);
+
+      final evenPcm = Uint8List.fromList([0x44, 0x55]);
+      final evenMp4 = buildMinimalMp4WithPcmAudio(
+        pcmFrames: evenPcm.length,
+        bitsPerSample: 8,
+        dataPattern: evenPcm,
+      );
+      final evenWav = await engine.extractAudio(
+        videoBytes: evenMp4,
+        videoFormat: 'mp4',
+      );
+      final evenHeader = ByteData.sublistView(evenWav);
+
+      expect(evenHeader.getUint32(4, Endian.little), evenWav.length - 8);
+      expect(evenHeader.getUint32(40, Endian.little), evenPcm.length);
+      expect(evenWav.length, 44 + evenPcm.length);
+      expect(evenWav.sublist(44), evenPcm);
+    });
+
     test('extractAudioSync selects the first supported audio track', () {
       final mp4Bytes = buildMinimalMp4WithTwoPcmAudioTracks();
 
