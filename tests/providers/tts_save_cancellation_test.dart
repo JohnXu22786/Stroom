@@ -188,6 +188,38 @@ void main() {
     expect(providerFailure.originalResponse, 'raw provider response');
   });
 
+  test('retry clears the previous completion timestamp while running',
+      () async {
+    final synthesisStarted = Completer<void>();
+    final finishSynthesis = Completer<Uint8List>();
+    notifier.debugSynthesize = (_, _, _) async {
+      throw StateError('Initial synthesis failure');
+    };
+    final id = notifier.addTask(
+      title: 'Failed speech',
+      text: 'Retry this speech',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final failedTask = await waitForStatus(id, TaskStatus.failed);
+    expect(failedTask.completedAt, isNotNull);
+
+    notifier.debugSynthesize = (_, _, _) {
+      synthesisStarted.complete();
+      return finishSynthesis.future;
+    };
+
+    notifier.retryTask(id);
+    await synthesisStarted.future.timeout(const Duration(seconds: 5));
+
+    final retriedTask = container.read(taskListProvider).single;
+    expect(retriedTask.status, TaskStatus.running);
+    expect(retriedTask.completedAt, isNull);
+
+    finishSynthesis.complete(audio);
+    await waitForStatus(id, TaskStatus.completed);
+  });
+
   test('TTS provider localizes cancellation failure framing', () async {
     final provider = CustomTTSProvider(
       baseUrl: 'https://example.invalid/speech',

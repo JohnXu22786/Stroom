@@ -44,7 +44,7 @@ List<Conversation> _createSearchConversations() {
 }
 
 /// Helper: create conversations page with seeded search conversations.
-Widget createSearchTestApp() {
+Widget createSearchTestApp({Locale locale = const Locale('zh', 'CN')}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -58,7 +58,7 @@ Widget createSearchTestApp() {
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       home: ConversationsPage(),
     ),
   );
@@ -69,6 +69,29 @@ void main() {
   // 2. conversations_search_test.dart
   // ===========================================================================
   group('ConversationsPage global message search', () {
+    testWidgets('closing a focused rename field keeps its hint state alive', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createSearchTestApp(locale: const Locale('de', 'DE')),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ConversationsPage)),
+      )!;
+
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.actionRename));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Neuer Titel');
+      await tester.tap(find.text(l10n.actionConfirm).last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('searching by message content shows matching conversations',
         (tester) async {
       await tester.pumpWidget(createSearchTestApp());
