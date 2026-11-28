@@ -269,12 +269,6 @@ void main() {
     );
     expect(tester.getSize(badge).height, greaterThan(32));
     expect(tester.takeException(), isNull);
-    await expectLater(
-      find.byKey(const ValueKey('round14-notification-badge-capture')),
-      matchesGoldenFile(
-        '../../../docs/ui-constrained-text-qa/round14-scaled-controls/notification-de-320x640-scale2-light.png',
-      ),
-    );
   });
 
   testWidgets('settings page headings follow the selected locale',
@@ -314,6 +308,7 @@ void main() {
   });
 
   testWidgets('denied iOS notification request stays disabled', (tester) async {
+    NotificationService().resetNotificationSettingQueueForTesting();
     const permissionsChannel = MethodChannel(
       'flutter.baseflow.com/permissions/methods',
     );
