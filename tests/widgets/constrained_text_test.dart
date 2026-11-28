@@ -4,6 +4,47 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
+  testWidgets('remeasures clipped text when its strut style changes', (
+    tester,
+  ) async {
+    var strutStyle = const StrutStyle(fontSize: 10, forceStrutHeight: true);
+    late StateSetter updateStrutStyle;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              updateStrutStyle = setState;
+              return SizedBox(
+                width: 200,
+                child: ConstrainedText(
+                  'Line one\nLine two\nLine three',
+                  strutStyle: strutStyle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  useNaturalWidthLayout: true,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    final constrainedText = find.byType(ConstrainedText);
+    final initialHeight = tester.getSize(constrainedText).height;
+    updateStrutStyle(() {
+      strutStyle = const StrutStyle(fontSize: 30, forceStrutHeight: true);
+    });
+    await tester.pump();
+
+    expect(
+      tester.getSize(constrainedText).height,
+      greaterThan(initialHeight * 2),
+    );
+  });
+
   testWidgets('keeps fitting text in its normal Text widget', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
