@@ -176,6 +176,25 @@ void main() {
     },
   );
 
+  testWidgets('captures the short German panel in dark theme', (tester) async {
+    await _setViewport(tester, const Size(320, 320));
+    await _openPanel(
+      tester,
+      <String>[],
+      locale: const Locale('de'),
+      textScaler: const TextScaler.linear(2.5),
+      theme: ThemeData.dark(useMaterial3: true),
+    );
+
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/r13_chat_attachment_panel/chat-attachment-panel-de-DE-320x320-scale2_5-dark-top.png',
+      ),
+    );
+  });
+
   testWidgets('attachment title stays within the sheet at large text scale', (
     tester,
   ) async {
@@ -212,11 +231,13 @@ Future<void> _openPanel(
   List<String> picked, {
   Locale? locale,
   TextScaler? textScaler,
+  ThemeData? theme,
 }) async {
   await tester.pumpWidget(
     RepaintBoundary(
       key: _captureKey,
       child: MaterialApp(
+        theme: theme,
         locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
