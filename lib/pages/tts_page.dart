@@ -768,8 +768,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           children: [
             // 录音 button (shortened from 开始录音)
             Expanded(
-              child: SizedBox(
-                height: 48,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
@@ -797,8 +797,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             const SizedBox(width: 8),
             // 导入 button (shortened from 导入音频)
             Expanded(
-              child: SizedBox(
-                height: 48,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
                 child: ElevatedButton.icon(
                   onPressed: _importAudio,
                   style: ElevatedButton.styleFrom(

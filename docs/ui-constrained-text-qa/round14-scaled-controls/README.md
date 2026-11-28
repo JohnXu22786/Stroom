@@ -1,0 +1,13 @@
+# Round 14 scaled control captures
+
+These captures render the production Stroom pages and dialogs at narrow viewports with large localized text. They use the Flutter test harness with the SDK Roboto and Material Icons fonts, a light Material theme, and device pixel ratio 1. The rename dialog keeps its production autofocus field; the widget-test harness does not render an operating-system keyboard. The captures use test-specific settled frames. Constrained labels keep their existing one second initial pause and 24 logical pixels per second movement when they clip; fitting text stays still. No scroll timing was changed in this round. The rename dialog shows the existing conversation title in the native editable field. Its regression assertion also verifies that the localized empty-field hint is configured as `ConstrainedInputHint`.
+
+- [Notification guide badge](notification-de-320x640-scale2-light.png): de-DE, 320 × 640, 2×. The numbered badge retains its circular appearance while growing beyond the 32 dp minimum.
+- [OCR controls](ocr-de-320x640-scale3-light.png): de-DE, 320 × 640, 3×. The source buttons expand vertically; top controls can scroll in the constrained viewport, and the empty-model prompt reflows.
+- [Font size dialog](font-dialog-de-320x640-scale4-light.png): de-DE, 320 × 640, 4×. The dialog content follows its text and slider height instead of a fixed 100 dp box. The screenshot is an early frame before the delayed label reveal begins.
+- [MCP tool setting](mcp-tool-de-320x640-scale1_8-light.png): de-DE, 320 × 640, 1.8×. The long remote tool name remains in a one-line finite title slot with its full accessible text.
+- [Home status counts](home-count-en-320x900-scale3-light.png): en-US, 320 × 900, 3×. The fixture uses counts 123, 456, and 789. The wider vertical viewport keeps the complete status card, including the original orange, green, and red dots, in view; the test also checks that the first count remains centered in its column and fully accessible. Symmetric 4 dp gutters separate the count windows when they scroll.
+- [Rename dialog](rename-hint-de-320x640-scale4-light.png): de-DE, 320 × 640, 4×. The editable field keeps its native controller value and caret behavior. The regression assertion verifies that the localized static hint is configured through `ConstrainedInputHint`.
+- [TTS actions](tts-de-320x640-scale3-light.png): de-DE, 320 × 640, 3×. The recording and import actions retain a 48 dp minimum height and grow with their labels.
+
+The behavioral regression tests live in the feature test files referenced by the captures. Existing shared-label motion cadence was not modified in this round.

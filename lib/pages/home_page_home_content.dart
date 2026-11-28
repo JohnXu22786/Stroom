@@ -481,13 +481,19 @@ extension _HomePageHomeContentExt on _HomePageState {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                    height: 1.1,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ConstrainedText(
+                    '$count',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                      height: 1.1,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),

@@ -27,6 +27,7 @@ import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/services/notification_service.dart';
 import 'package:stroom/widgets/constrained_text.dart';
+import '../../qa/round14_qa_font_loader.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
@@ -186,6 +187,96 @@ String _llmEntryWithModels() {
 }
 
 void main() {
+  setUpAll(loadRound14QaFonts);
+  testWidgets('notification guide step badges grow with text scaling', (
+    tester,
+  ) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 0;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: const ValueKey('round14-notification-badge-capture'),
+        child: ProviderScope(
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(2),
+                disableAnimations: true,
+              ),
+              child: child!,
+            ),
+            home: const NotificationSettingsPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    debugDefaultTargetPlatformOverride = null;
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(NotificationSettingsPage)),
+    )!;
+    final pageScroll =
+        tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+    pageScroll.jumpTo(pageScroll.maxScrollExtent);
+    await tester.pump();
+    final firstGuideTitle =
+        find.text(strings.notificationSettingsAndroidEnableTitle);
+    while (firstGuideTitle.evaluate().isEmpty &&
+        pageScroll.pixels < pageScroll.maxScrollExtent) {
+      pageScroll.jumpTo(
+        (pageScroll.pixels + 400).clamp(0, pageScroll.maxScrollExtent),
+      );
+      await tester.pump();
+    }
+    await tester.ensureVisible(firstGuideTitle);
+    expect(firstGuideTitle, findsOneWidget);
+
+    final guideRow =
+        find.ancestor(of: firstGuideTitle, matching: find.byType(Row)).first;
+    final badge = find.descendant(
+      of: guideRow,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+      ),
+    );
+    expect(tester.getSize(badge).height, greaterThan(32));
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byKey(const ValueKey('round14-notification-badge-capture')),
+      matchesGoldenFile(
+        '../../../docs/ui-constrained-text-qa/round14-scaled-controls/notification-de-320x640-scale2-light.png',
+      ),
+    );
+  });
+
   testWidgets('settings page headings follow the selected locale',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 4000);

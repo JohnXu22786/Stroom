@@ -6,8 +6,10 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/home_shared.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/widgets/constrained_text.dart';
+import '../qa/round14_qa_font_loader.dart';
 
 void main() {
+  setUpAll(loadRound14QaFonts);
   test('short media durations use the selected locale unit labels', () async {
     final english = await AppLocalizations.delegate.load(const Locale('en'));
     final chinese =
@@ -30,6 +32,89 @@ void main() {
     expect(formatDurationShort('00:00:03.xyz', chinese), '00:00:03.xyz');
     expect(formatDurationShort('00:-1:03', chinese), '00:-1:03');
     expect(formatDurationShort('00:00:-3', chinese), '00:00:-3');
+  });
+
+  testWidgets('large home counts stay centered in narrow status cells', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: const ValueKey('round14-home-count-capture'),
+        child: ProviderScope(
+          overrides: [
+            homeStatusCountsProvider.overrideWithValue((
+              inProgress: 123,
+              completed: 456,
+              failed: 789,
+            )),
+          ],
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('en', 'US'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(3),
+              ),
+              child: child!,
+            ),
+            home: const HomePage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    final count = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == '123',
+    );
+    expect(count, findsOneWidget);
+    expect(tester.getSemantics(count).label, contains('123'));
+    final countColumn = find
+        .ancestor(
+          of: count,
+          matching: find.byType(Column),
+        )
+        .first;
+    expect(
+      tester.getRect(count).center.dx,
+      closeTo(tester.getRect(countColumn).center.dx, 1),
+    );
+    final statusLabels = find.byType(HomeStatusLabel);
+    expect(statusLabels, findsNWidgets(3));
+    for (var index = 0; index < statusLabels.evaluate().length; index++) {
+      final statusLabel = statusLabels.at(index);
+      final dot = find.descendant(
+        of: statusLabel,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+        ),
+      );
+      expect(dot, findsOneWidget);
+      expect(tester.getSize(dot), const Size(8, 8));
+      expect(
+        tester.getRect(dot).center.dy,
+        closeTo(tester.getRect(statusLabel).center.dy, 1),
+      );
+    }
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+    await expectLater(
+      find.byKey(const ValueKey('round14-home-count-capture')),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round14-scaled-controls/home-count-en-320x900-scale3-light.png',
+      ),
+    );
   });
 
   testWidgets(

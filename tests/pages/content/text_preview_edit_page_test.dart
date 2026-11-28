@@ -14,13 +14,30 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import '../../qa/round14_qa_font_loader.dart';
+
+const _round14FontDialogCaptureKey =
+    ValueKey('round14-font-dialog-scaled-capture');
 
 /// 构建测试应用，将 TextPreviewEditPage 放置在一个可以弹出返回的路径中
 Widget _buildTestApp(TextRecord file, String content,
-    {bool registerRecordOnSave = false}) {
+    {bool registerRecordOnSave = false,
+    TextScaler? textScaler,
+    Locale locale = const Locale('zh', 'CN')}) {
   return ProviderScope(
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        fontFamily: 'Roboto',
+      ),
+      builder: (context, child) => textScaler == null
+          ? child!
+          : MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       initialRoute: '/',
@@ -81,6 +98,7 @@ Future<void> _withPlatform(
 }
 
 void main() {
+  setUpAll(loadRound14QaFonts);
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
@@ -837,6 +855,46 @@ void main() {
 
       // Default value 14 should be visible in the popup
       expect(find.text('14'), findsOneWidget);
+    });
+
+    testWidgets('font-size dialog grows for large text scaling', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _round14FontDialogCaptureKey,
+          child: _buildTestApp(
+            testFile,
+            testContent,
+            textScaler: const TextScaler.linear(4),
+            locale: const Locale('de', 'DE'),
+          ),
+        ),
+      );
+      await navigateToEditor(tester);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final content = find
+          .ancestor(
+            of: find.byType(Slider),
+            matching: find.byType(Column),
+          )
+          .first;
+      expect(tester.getSize(content).height, greaterThan(100));
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byKey(_round14FontDialogCaptureKey),
+        matchesGoldenFile(
+          '../../../docs/ui-constrained-text-qa/round14-scaled-controls/font-dialog-de-320x640-scale4-light.png',
+        ),
+      );
     });
 
     testWidgets('font size reset button restores font size to 14 after change',
