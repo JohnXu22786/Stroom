@@ -432,10 +432,9 @@ List<MessageBlock> legacyToBlocks({
       blocks.add(TextBlock(text: textChunks[i]));
     }
     final start = hasValidRoundStarts ? toolCallRoundStarts[i] : i;
-    final end =
-        hasValidRoundStarts && i + 1 < toolCallRoundStarts.length
-            ? toolCallRoundStarts[i + 1]
-            : toolCalls.length;
+    final end = hasValidRoundStarts && i + 1 < toolCallRoundStarts.length
+        ? toolCallRoundStarts[i + 1]
+        : toolCalls.length;
     for (var j = start; j < end && j < toolCalls.length; j++) {
       final tc = toolCalls[j];
       blocks.add(ToolCallBlock(

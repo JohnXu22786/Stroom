@@ -225,8 +225,9 @@ void chatTypesGroup2() {
           toolCallRoundStarts: roundStarts,
         );
         expect(
-          segments.whereType<ToolCallSegment>().map((segment) =>
-              segment.data.name),
+          segments
+              .whereType<ToolCallSegment>()
+              .map((segment) => segment.data.name),
           ['A', 'B', 'C'],
           reason: 'Invalid round starts must not omit tool calls: $roundStarts',
         );
@@ -242,7 +243,8 @@ void chatTypesGroup2() {
               .whereType<ToolCallSegment>()
               .map((segment) => segment.data.name),
           ['A', 'B', 'C'],
-          reason: 'Invalid round starts must not omit migrated calls: $roundStarts',
+          reason:
+              'Invalid round starts must not omit migrated calls: $roundStarts',
         );
       }
     });
