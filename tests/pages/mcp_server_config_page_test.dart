@@ -237,14 +237,25 @@ void main() {
       stdio: false,
     );
 
+    final form = find.byType(ListView).last;
+    final nameField = find.byType(TextField).first;
+    expect(nameField, findsOneWidget);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(nameField);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     await tester.pump(const Duration(milliseconds: 300));
 
-    final appBar = tester.widget<AppBar>(find.byType(AppBar).last);
-    expect(appBar.bottom!.preferredSize.height, lessThan(320));
-    expect(appBar.bottom!.preferredSize.height, greaterThan(240));
     expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(tester.getSize(form).height, greaterThan(140));
     final visibleArea = const Rect.fromLTWH(0, 0, 320, 380);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(visibleArea.contains(tester.getRect(nameField).topLeft), isTrue);
+    expect(visibleArea.contains(tester.getRect(nameField).bottomRight), isTrue);
     for (final label in [find.text('Enregistrer'), find.text('Abandonner')]) {
       final button =
           find.ancestor(of: label, matching: find.byType(TextButton)).first;
