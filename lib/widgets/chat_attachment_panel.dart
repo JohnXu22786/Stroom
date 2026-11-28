@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -29,149 +32,234 @@ void showChatAttachmentPanel({
       final cs = Theme.of(ctx).colorScheme;
 
       return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Drag handle ──
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[350],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // ── Title ──
-              Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.min(640.0, MediaQuery.sizeOf(ctx).height * 0.8),
+          ),
+          child: _DismissibleAttachmentScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.attach_file_outlined,
-                      size: 18,
-                      color: cs.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ConstrainedText(
-                      AppLocalizations.of(context)!.chatAttachmentFile,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
+                  // ── Drag handle ──
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[350],
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
+                  // ── Title ──
+                  Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.attach_file_outlined,
+                          size: 18,
+                          color: cs.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatAttachmentFile,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ══════════════════════════════════════════════════
+                  // File action buttons
+                  // ══════════════════════════════════════════════════
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final actions = [
+                        _FileActionButton(
+                          icon: Icons.camera_alt_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentCamera,
+                          color: Colors.orange,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromCamera();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.photo_library_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentDeviceGallery,
+                          color: Colors.blue,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromGallery();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.insert_drive_file_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentDeviceFiles,
+                          color: Colors.green,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromFilePicker();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.folder_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentAppFiles,
+                          color: Colors.purple,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromAppFiles();
+                          },
+                        ),
+                      ];
+
+                      if (constraints.maxWidth < 320) {
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                for (final action in actions.take(2))
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: action.withWidth(double.infinity),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                for (final action in actions.skip(2))
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: action.withWidth(double.infinity),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: actions,
+                      );
+                    },
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-
-              // ══════════════════════════════════════════════════
-              // File action buttons
-              // ══════════════════════════════════════════════════
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final actions = [
-                    _FileActionButton(
-                      icon: Icons.camera_alt_outlined,
-                      label: AppLocalizations.of(context)!.chatAttachmentCamera,
-                      color: Colors.orange,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromCamera();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.photo_library_outlined,
-                      label: AppLocalizations.of(context)!
-                          .chatAttachmentDeviceGallery,
-                      color: Colors.blue,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromGallery();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.insert_drive_file_outlined,
-                      label: AppLocalizations.of(context)!
-                          .chatAttachmentDeviceFiles,
-                      color: Colors.green,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromFilePicker();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.folder_outlined,
-                      label:
-                          AppLocalizations.of(context)!.chatAttachmentAppFiles,
-                      color: Colors.purple,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromAppFiles();
-                      },
-                    ),
-                  ];
-
-                  if (constraints.maxWidth < 320) {
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            for (final action in actions.take(2))
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  child: action.withWidth(double.infinity),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            for (final action in actions.skip(2))
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  child: action.withWidth(double.infinity),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: actions,
-                  );
-                },
-              ),
-            ],
+            ),
           ),
         ),
       );
     },
   );
+}
+
+class _DismissibleAttachmentScrollView extends StatefulWidget {
+  const _DismissibleAttachmentScrollView({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_DismissibleAttachmentScrollView> createState() =>
+      _DismissibleAttachmentScrollViewState();
+}
+
+class _DismissibleAttachmentScrollViewState
+    extends State<_DismissibleAttachmentScrollView> {
+  final ScrollController _scrollController = ScrollController();
+  Offset? _dragStart;
+  VelocityTracker? _velocityTracker;
+  bool _dismissRequested = false;
+
+  bool get _isAtScrollStart =>
+      _scrollController.hasClients &&
+      _scrollController.position.pixels <=
+          _scrollController.position.minScrollExtent + 1;
+
+  void _trackPointer(PointerEvent event) {
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
+    final start = _dragStart;
+    if (start == null || _dismissRequested || !_isAtScrollStart) return;
+
+    final renderObject = context.findRenderObject();
+    final viewportHeight = renderObject is RenderBox && renderObject.hasSize
+        ? renderObject.size.height
+        : 0.0;
+    final dragDistance = event.position.dy - start.dy;
+    final velocity = _velocityTracker?.getVelocity().pixelsPerSecond.dy ?? 0;
+    if (dragDistance >= viewportHeight / 2 || velocity >= 700) {
+      _dismissRequested = true;
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (event) {
+        if (_isAtScrollStart) {
+          _dragStart = event.position;
+          _velocityTracker = VelocityTracker.withKind(event.kind)
+            ..addPosition(event.timeStamp, event.position);
+        } else {
+          _dragStart = null;
+          _velocityTracker = null;
+        }
+        _dismissRequested = false;
+      },
+      onPointerMove: _trackPointer,
+      onPointerUp: (event) {
+        _trackPointer(event);
+        _dragStart = null;
+        _velocityTracker = null;
+      },
+      onPointerCancel: (_) {
+        _dragStart = null;
+        _velocityTracker = null;
+      },
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// A large icon button for file actions (camera, gallery, file, app files).
