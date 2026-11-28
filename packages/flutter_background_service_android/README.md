@@ -15,10 +15,12 @@ normally. This package will be automatically included in your app when you do.
 This package is based on the published `flutter_background_service_android`
 6.3.1 source from
 <https://pub.dev/packages/flutter_background_service_android/versions/6.3.1>.
-Stroom pins this copy through a path dependency override. The only source change
-is in `BackgroundService.runService()`: it no longer acquires a permanent
-`PARTIAL_WAKE_LOCK` while running the foreground service. Stroom's background
-callback is idle unless it receives an actual task, so this lock unnecessarily
-keeps the CPU awake. The separate boot receiver behavior is unchanged. Keep
-this package aligned with the upstream version declared in `pubspec.yaml` and
+Stroom pins this copy through a path dependency override. The Stroom-specific
+source changes include two wake-lock lifecycle changes:
+`BackgroundService.runService()` does not acquire a permanent
+`PARTIAL_WAKE_LOCK` while running the foreground service, and the temporary
+lock acquired by the boot receiver is released after the service startup
+command completes. Stroom's background callback is idle unless it receives an
+actual task, so keeping the CPU awake after startup is unnecessary. Keep this
+package aligned with the upstream version declared in `pubspec.yaml` and
 re-apply/review this patch when upgrading.

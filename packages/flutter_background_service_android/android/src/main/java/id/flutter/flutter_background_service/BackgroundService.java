@@ -67,6 +67,15 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
         return lockStatic;
     }
 
+    static synchronized void releaseLock() {
+        if (lockStatic != null) {
+            if (lockStatic.isHeld()) {
+                lockStatic.release();
+            }
+            lockStatic = null;
+        }
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -108,12 +117,7 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
             WatchdogReceiver.enqueue(this);
         } else {
             config.setManuallyStopped(true);
-            if (lockStatic != null) {
-                if (lockStatic.isHeld()) {
-                    lockStatic.release();
-                }
-                lockStatic = null;
-            }
+            releaseLock();
         }
         stopForeground(true);
         isRunning.set(false);
@@ -187,13 +191,18 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
     public int onStartCommand(Intent intent, int flags, int startId) {
         config.setManuallyStopped(false);
         WatchdogReceiver.enqueue(this);
-        runService();
+        try {
+            runService();
+        } finally {
+            // BootReceiver holds this lock until startup work has been handed off.
+            releaseLock();
+        }
 
         return START_NOT_STICKY;
     }
 
     @SuppressLint("WakelockTimeout")
-    private void runService() {
+    protected void runService() {
         try {
             if (isRunning.get() || (backgroundEngine != null && !backgroundEngine.getDartExecutor().isExecutingDart())) {
                 Log.v(TAG, "Service already running, using existing service");

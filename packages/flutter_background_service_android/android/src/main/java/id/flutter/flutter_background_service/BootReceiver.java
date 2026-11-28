@@ -2,6 +2,7 @@ package id.flutter.flutter_background_service;
 
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 
@@ -20,10 +21,19 @@ public class BootReceiver extends BroadcastReceiver {
                     BackgroundService.getLock(context).acquire();
                 }
 
-                if (config.isForeground()) {
-                    ContextCompat.startForegroundService(context, new Intent(context, BackgroundService.class));
-                } else {
-                    context.startService(new Intent(context, BackgroundService.class));
+                try {
+                    final ComponentName startedService;
+                    if (config.isForeground()) {
+                        startedService = ContextCompat.startForegroundService(context, new Intent(context, BackgroundService.class));
+                    } else {
+                        startedService = context.startService(new Intent(context, BackgroundService.class));
+                    }
+                    if (startedService == null) {
+                        BackgroundService.releaseLock();
+                    }
+                } catch (RuntimeException exception) {
+                    BackgroundService.releaseLock();
+                    throw exception;
                 }
             }
         }
