@@ -39,6 +39,7 @@ void main() {
     final theme = ThemeData(
       brightness: brightness,
       fontFamily: 'Roboto',
+      fontFamilyFallback: const ['Noto Sans Symbols'],
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.blue,
@@ -379,6 +380,11 @@ Future<void> _loadRobotoTestFont() async {
       'MaterialIcons',
       '$materialFontDirectory/MaterialIcons-Regular.otf',
       '$flutterRoot/bin/cache/dart-sdk/bin/resources/devtools/assets/fonts/MaterialIcons-Regular.otf',
+    ),
+    (
+      'Noto Sans Symbols',
+      '/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf',
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
     ),
   ]) {
     final path = File(font.$2).existsSync() ? font.$2 : font.$3;
