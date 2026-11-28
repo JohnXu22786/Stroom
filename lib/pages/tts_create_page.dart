@@ -45,6 +45,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
 class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   final _textController = TextEditingController();
   final _titleController = TextEditingController();
+  final _titleHintStates = MaterialStatesController();
   final _focusNode = FocusNode();
 
   // 当前选中的模型配置
@@ -64,6 +65,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   // 自定义参数值覆盖
   final Map<String, TextEditingController> _customParamControllers = {};
+  final Map<String, MaterialStatesController> _customParamHintStates = {};
 
   // 当前选中音色、语速、音量
   String _selectedVoice = '';
@@ -276,6 +278,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         );
         for (final k in removed) {
           _customParamControllers.remove(k)?.dispose();
+          _customParamHintStates.remove(k)?.dispose();
         }
         // 仅在选中模型确实发生变化时清空 instruction（重试恢复的除外）
         if (_modelConfig?.modelId != prevSelectedModelId) {
@@ -314,10 +317,14 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     _titleController.removeListener(_onTextChanged);
     _textController.dispose();
     _titleController.dispose();
+    _titleHintStates.dispose();
     _focusNode.dispose();
     _instructionController.dispose();
     for (final c in _customParamControllers.values) {
       c.dispose();
+    }
+    for (final states in _customParamHintStates.values) {
+      states.dispose();
     }
     super.dispose();
   }
@@ -713,6 +720,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     // 语速/音量限制随模型变化，越界值会导致 Slider 断言失败
     _clampSpeedVolume(model);
     _disposeCustomParamControllers();
+    for (final states in _customParamHintStates.values) {
+      states.dispose();
+    }
+    _customParamHintStates.clear();
     for (final p in model.customParams) {
       _customParamControllers[p.paramName] = TextEditingController(
         text: p.defaultValue,
@@ -826,10 +837,20 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _titleController,
-              decoration: _formFieldDecoration(
-                hintText: l10n.ttsAudioFileNameHint,
+            Semantics(
+              hint: l10n.ttsAudioFileNameHint,
+              child: TextField(
+                controller: _titleController,
+                statesController: _titleHintStates,
+                decoration: _formFieldDecoration(
+                  hintText: l10n.ttsAudioFileNameHint,
+                  hint: ExcludeSemantics(
+                    child: ConstrainedInputHint(
+                      l10n.ttsAudioFileNameHint,
+                      statesController: _titleHintStates,
+                    ),
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -962,6 +983,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   InputDecoration _formFieldDecoration({
     required String hintText,
+    Widget? hint,
     Widget? suffixIcon,
     BoxConstraints? suffixIconConstraints,
   }) {
@@ -971,7 +993,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.7)),
     );
     return InputDecoration(
-      hintText: hintText,
+      hintText: hint == null ? hintText : null,
+      hint: hint,
       filled: true,
       fillColor: cs.surfaceContainerLow.withValues(alpha: 0.55),
       isDense: true,
@@ -1399,10 +1422,24 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: TextField(
-                    controller: ctrl,
-                    decoration: _formFieldDecoration(
-                      hintText: l10n.ttsDefaultValue(param.defaultValue),
+                  child: Semantics(
+                    hint: l10n.ttsDefaultValue(param.defaultValue),
+                    child: TextField(
+                      controller: ctrl,
+                      statesController: _customParamHintStates.putIfAbsent(
+                        param.paramName,
+                        MaterialStatesController.new,
+                      ),
+                      decoration: _formFieldDecoration(
+                        hintText: l10n.ttsDefaultValue(param.defaultValue),
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            l10n.ttsDefaultValue(param.defaultValue),
+                            statesController:
+                                _customParamHintStates[param.paramName]!,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

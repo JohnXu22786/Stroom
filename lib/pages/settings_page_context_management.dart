@@ -350,6 +350,7 @@ class _TokenField extends StatefulWidget {
 }
 
 class _TokenFieldState extends State<_TokenField> {
+  final _hintStates = MaterialStatesController();
   late final TextEditingController _controller = TextEditingController(
     text: widget.value?.toString() ?? '',
   );
@@ -394,51 +395,61 @@ class _TokenFieldState extends State<_TokenField> {
   @override
   void dispose() {
     _controller.dispose();
+    _hintStates.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: _controller,
-      enabled: widget.enabled,
-      decoration: InputDecoration(
-        label: ConstrainedText(
-          AppLocalizations.of(context)!.contextThresholdField,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+    return Semantics(
+      hint: AppLocalizations.of(context)!.contextThresholdHint,
+      child: TextFormField(
+        controller: _controller,
+        statesController: _hintStates,
+        enabled: widget.enabled,
+        decoration: InputDecoration(
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.contextThresholdField,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          hint: ExcludeSemantics(
+            child: ConstrainedInputHint(
+              AppLocalizations.of(context)!.contextThresholdHint,
+              statesController: _hintStates,
+            ),
+          ),
+          border: OutlineInputBorder(),
+          isDense: true,
         ),
-        hintText: AppLocalizations.of(context)!.contextThresholdHint,
-        border: OutlineInputBorder(),
-        isDense: true,
+        keyboardType: TextInputType.number,
+        // 输入即保存：空 → 清除该模型独立设置（回退全局百分比）；
+        // 有效值（≥kMinCompactionThreshold）→ 保存。非法/过小值不推给
+        // provider（保持原值，避免逐位输入数字时被下限拦截导致输入框清空），
+        // 失焦/提交时回退显示。
+        onChanged: (v) {
+          final trimmed = v.trim();
+          if (trimmed.isEmpty) {
+            _lastValidText = '';
+            widget.onChanged(null);
+            return;
+          }
+          final parsed = int.tryParse(trimmed);
+          if (parsed != null && parsed >= kMinCompactionThreshold) {
+            _lastValidText = trimmed;
+            widget.onChanged(parsed);
+          }
+        },
+        // 失焦时：先回退非法输入，再真正失焦。自定义 onTapOutside 会完全
+        // 替换框架默认的 EditableTextTapOutsideIntent（应用的全局
+        // tap-outside 失焦覆盖因此不会生效），必须在这里显式失焦，否则
+        // 光标会一直留在框内。
+        onTapOutside: (_) {
+          _revertIfInvalid();
+          FocusScope.of(context).unfocus();
+        },
+        onFieldSubmitted: (_) => _revertIfInvalid(),
       ),
-      keyboardType: TextInputType.number,
-      // 输入即保存：空 → 清除该模型独立设置（回退全局百分比）；
-      // 有效值（≥kMinCompactionThreshold）→ 保存。非法/过小值不推给
-      // provider（保持原值，避免逐位输入数字时被下限拦截导致输入框清空），
-      // 失焦/提交时回退显示。
-      onChanged: (v) {
-        final trimmed = v.trim();
-        if (trimmed.isEmpty) {
-          _lastValidText = '';
-          widget.onChanged(null);
-          return;
-        }
-        final parsed = int.tryParse(trimmed);
-        if (parsed != null && parsed >= kMinCompactionThreshold) {
-          _lastValidText = trimmed;
-          widget.onChanged(parsed);
-        }
-      },
-      // 失焦时：先回退非法输入，再真正失焦。自定义 onTapOutside 会完全
-      // 替换框架默认的 EditableTextTapOutsideIntent（应用的全局
-      // tap-outside 失焦覆盖因此不会生效），必须在这里显式失焦，否则
-      // 光标会一直留在框内。
-      onTapOutside: (_) {
-        _revertIfInvalid();
-        FocusScope.of(context).unfocus();
-      },
-      onFieldSubmitted: (_) => _revertIfInvalid(),
     );
   }
 }
@@ -460,6 +471,7 @@ class _PercentField extends StatefulWidget {
 }
 
 class _PercentFieldState extends State<_PercentField> {
+  final _hintStates = MaterialStatesController();
   late final TextEditingController _controller = TextEditingController(
     text: widget.value.toString(),
   );
@@ -507,42 +519,50 @@ class _PercentFieldState extends State<_PercentField> {
   @override
   void dispose() {
     _controller.dispose();
+    _hintStates.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      key: const Key('global-percent-field'),
-      controller: _controller,
-      enabled: widget.enabled,
-      decoration: InputDecoration(
-        label: ConstrainedText(
-          AppLocalizations.of(context)!.contextPercentField,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+    final hint = AppLocalizations.of(context)!
+        .contextPercentHint(kDefaultCompactionPercent);
+    return Semantics(
+      hint: hint,
+      child: TextFormField(
+        key: const Key('global-percent-field'),
+        controller: _controller,
+        statesController: _hintStates,
+        enabled: widget.enabled,
+        decoration: InputDecoration(
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.contextPercentField,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          hint: ExcludeSemantics(
+            child: ConstrainedInputHint(hint, statesController: _hintStates),
+          ),
+          suffixText: '%',
+          border: OutlineInputBorder(),
+          isDense: true,
         ),
-        hintText: AppLocalizations.of(context)!
-            .contextPercentHint(kDefaultCompactionPercent),
-        suffixText: '%',
-        border: OutlineInputBorder(),
-        isDense: true,
+        keyboardType: TextInputType.number,
+        onChanged: (v) {
+          final trimmed = v.trim();
+          if (trimmed.isEmpty) return; // 失焦时回退显示，不推 null
+          final parsed = int.tryParse(trimmed);
+          if (parsed != null && parsed >= 1 && parsed <= 100) {
+            _lastValidText = trimmed;
+            widget.onChanged(parsed);
+          }
+        },
+        onTapOutside: (_) {
+          _revertIfInvalid();
+          FocusScope.of(context).unfocus();
+        },
+        onFieldSubmitted: (_) => _revertIfInvalid(),
       ),
-      keyboardType: TextInputType.number,
-      onChanged: (v) {
-        final trimmed = v.trim();
-        if (trimmed.isEmpty) return; // 失焦时回退显示，不推 null
-        final parsed = int.tryParse(trimmed);
-        if (parsed != null && parsed >= 1 && parsed <= 100) {
-          _lastValidText = trimmed;
-          widget.onChanged(parsed);
-        }
-      },
-      onTapOutside: (_) {
-        _revertIfInvalid();
-        FocusScope.of(context).unfocus();
-      },
-      onFieldSubmitted: (_) => _revertIfInvalid(),
     );
   }
 }

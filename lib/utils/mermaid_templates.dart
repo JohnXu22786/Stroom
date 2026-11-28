@@ -219,15 +219,19 @@ class MermaidTemplates {
       return snippet;
     }
 
-    final nodeIds = replacements.keys.toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
-    final nodeIdPattern = RegExp(
-      r'\b(?:' + nodeIds.map(RegExp.escape).join('|') + r')\b',
-    );
-    return snippet.replaceAllMapped(
-      nodeIdPattern,
-      (match) => replacements[match[0]]!,
-    );
+    final buffer = StringBuffer();
+    var cursor = 0;
+    for (final match in _flowchartNodeIdMatches(snippet)) {
+      final replacement = replacements[match.id];
+      if (replacement == null) continue;
+
+      buffer
+        ..write(snippet.substring(cursor, match.start))
+        ..write(replacement);
+      cursor = match.end;
+    }
+    buffer.write(snippet.substring(cursor));
+    return buffer.toString();
   }
 
   /// Assigns an unused ID to a subgraph declared in a flowchart snippet.
@@ -267,13 +271,27 @@ class MermaidTemplates {
 
   /// Finds existing IDs from flowchart statements and their link endpoints.
   static Set<String> _flowchartNodeIds(String code) {
+    return _flowchartNodeIdMatches(code).map((match) => match.id).toSet();
+  }
+
+  static List<({int start, int end, String id})> _flowchartNodeIdMatches(
+    String code,
+  ) {
     final nodeIdPattern = RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\b');
-    final usedIds = <String>{};
+    final matches = <({int start, int end, String id})>[];
+    var lineStart = 0;
 
     for (final line in code.split('\n')) {
       final flowchartSyntax = _stripFlowchartLabelsAndComments(line);
-      for (final statement in flowchartSyntax.split(';')) {
-        if (statement.trim() == 'end') continue;
+      var statementStart = 0;
+      while (statementStart <= flowchartSyntax.length) {
+        final statementEnd = flowchartSyntax.indexOf(';', statementStart);
+        final end = statementEnd < 0 ? flowchartSyntax.length : statementEnd;
+        final statement = flowchartSyntax.substring(statementStart, end);
+        if (statement.trim() == 'end') {
+          statementStart = end + 1;
+          continue;
+        }
 
         for (final match in nodeIdPattern.allMatches(statement)) {
           final before = statement.substring(0, match.start).trimRight();
@@ -286,32 +304,46 @@ class MermaidTemplates {
               after.startsWith(RegExp(r'^[\[({>@:]')) ||
               after.startsWith('&');
 
-          if (startsNode && endsNode) usedIds.add(match[1]!);
+          if (startsNode && endsNode) {
+            matches.add((
+              start: lineStart + statementStart + match.start,
+              end: lineStart + statementStart + match.end,
+              id: match[1]!,
+            ));
+          }
         }
+
+        if (statementEnd < 0) break;
+        statementStart = end + 1;
       }
+      lineStart += line.length + 1;
     }
 
-    return usedIds;
+    return matches;
   }
 
-  /// Removes label and comment text before checking node-ID syntax.
+  /// Masks label and comment text while preserving source offsets.
   static String _stripFlowchartLabelsAndComments(String line) {
     final buffer = StringBuffer();
     final edgeLabelStartPattern = RegExp(r'(---|--|===|==|-\.)([ \t]+)');
     var index = 0;
 
     while (index < line.length) {
-      if (line.startsWith('%%', index)) break;
+      if (line.startsWith('%%', index)) {
+        buffer.write(''.padRight(line.length - index));
+        break;
+      }
 
       final char = line[index];
       if (char == '"') {
-        index = _skipDelimitedText(line, index, '"', '"');
-        buffer.write(' ');
+        final end = _skipDelimitedText(line, index, '"', '"');
+        buffer.write(''.padRight(end - index));
+        index = end;
         continue;
       }
 
       if (char == '[' || char == '(' || char == '{') {
-        index = _skipDelimitedText(
+        final end = _skipDelimitedText(
             line,
             index,
             char,
@@ -320,7 +352,8 @@ class MermaidTemplates {
               '(' => ')',
               _ => '}',
             });
-        buffer.write(' ');
+        buffer.write(''.padRight(end - index));
+        index = end;
         continue;
       }
 
@@ -331,15 +364,16 @@ class MermaidTemplates {
           !'<>=-.~'.contains(previous)) {
         final labelEnd = _asymmetricFlowchartLabelEnd(line, index + 1);
         if (labelEnd != null) {
+          buffer.write(''.padRight(labelEnd - index));
           index = labelEnd;
-          buffer.write(' ');
           continue;
         }
       }
 
       if (char == '|') {
-        index = _skipDelimitedText(line, index, '|', '|');
-        buffer.write(' ');
+        final end = _skipDelimitedText(line, index, '|', '|');
+        buffer.write(''.padRight(end - index));
+        index = end;
         continue;
       }
 
@@ -356,11 +390,13 @@ class MermaidTemplates {
           index + edgeLabelStart.end,
         );
         if (edgeLabelEnd != null) {
+          final connectorStart = edgeLabelEnd.$1 - edgeLabelEnd.$2.length;
           buffer
             ..write(edgeLabelStart[1])
-            ..write(' ')
-            ..write(edgeLabelEnd.$2)
-            ..write(' ');
+            ..write(''.padRight(
+              connectorStart - index - edgeLabelStart[1]!.length,
+            ))
+            ..write(edgeLabelEnd.$2);
           index = edgeLabelEnd.$1;
           continue;
         }
