@@ -946,43 +946,39 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       child: Row(
         children: [
           Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _takePhoto,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            child: ElevatedButton.icon(
+              onPressed: _takePhoto,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: ConstrainedText(
-                  AppLocalizations.of(context)!.galleryTakePhoto,
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              ),
+              icon: const Icon(Icons.camera_alt_outlined, size: 20),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.galleryTakePhoto,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _importFromGallery,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            child: ElevatedButton.icon(
+              onPressed: _importFromGallery,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: ConstrainedText(
-                  AppLocalizations.of(context)!.galleryImport,
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              ),
+              icon: const Icon(Icons.photo_library_outlined, size: 20),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.galleryImport,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
