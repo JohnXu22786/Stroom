@@ -131,6 +131,7 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   final taskCompletions = <Completer<void>>[];
   CatCatchTask? lastExecutedTask;
   CatCatchTask? lastRetriedTask;
+  StepType? lastRetriedFromStep;
   void Function(CatCatchTask)? lastTaskUpdate;
   void Function(CatCatchTask)? lastRetryTaskUpdate;
   final uncancelledTaskCompletions = <String>[];
@@ -181,6 +182,7 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   }) async {
     executorStarts++;
     lastRetriedTask = task;
+    lastRetriedFromStep = fromStep;
     lastRetryTaskUpdate = onUpdate;
     onUpdate(task.copyWith(status: TaskStatus.running));
     if (!executorStarted.isCompleted) executorStarted.complete();
@@ -1983,6 +1985,42 @@ void main() {
         }
       });
     }
+
+    test('resume continues at saving after skipped conversion', () async {
+      const taskId = 'resume-skipped-conversion';
+      final paused = task(taskId).copyWith(
+        steps: StepType.values.map((type) {
+          if (type.index < StepType.converting.index) {
+            return StepStatus.done(type);
+          }
+          if (type == StepType.converting) return StepStatus.skipped(type);
+          return StepStatus.pending(type);
+        }).toList(),
+      );
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([paused]);
+
+      try {
+        notifier.resumeTask(taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(notifier.lastRetriedFromStep, StepType.saving);
+        expect(
+          notifier.lastRetriedTask!.steps[StepType.converting.index].skipped,
+          isTrue,
+        );
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(
+          notifier.retryCompletions.map((item) => item.future),
+        );
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
 
     test(
       'resuming duplicate IDs preserves the newest runtime snapshot',
