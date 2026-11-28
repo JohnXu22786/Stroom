@@ -100,6 +100,63 @@ void main() {
   });
 
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets('reasoning option values use measured native-field hints', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        textScale: 2,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: [''],
+            ),
+            ReasoningParam(paramName: 'thinking.style', options: ['']),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      final hint = strings.providerOptionExampleHint('low, medium, high');
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ConstrainedInputHint && widget.data == hint,
+        ),
+        findsNWidgets(2),
+      );
+      expectHintMeasurement(tester, hint: hint, clipped: true);
+      expectHintMeasurement(
+        tester,
+        hint: hint,
+        clipped: true,
+        occurrence: 1,
+      );
+
+      final firstField = find.ancestor(
+        of: find
+            .byWidgetPredicate(
+              (widget) => widget is ConstrainedInputHint && widget.data == hint,
+            )
+            .first,
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(firstField);
+      await tester.enterText(firstField, 'medium');
+      expect(
+          tester.widget<TextFormField>(firstField).controller!.text, 'medium');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('toggle value examples use measured native-field hints', (
       tester,
     ) async {

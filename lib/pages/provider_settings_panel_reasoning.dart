@@ -160,6 +160,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     required bool editable,
   }) {
     final actualIndex = _reasoningParams.indexOf(param);
+    final strings = AppLocalizations.of(context)!;
+    final hint = editable
+        ? strings.providerOptionExampleHint('low, medium, high')
+        : null;
     final staticHandle = const Padding(
       padding: EdgeInsets.symmetric(horizontal: 2),
       child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
@@ -175,13 +179,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             AppLocalizations.of(context)!
                 .providerOptionIndexLabel((rowIndex + 1).toString()),
           ),
-          hintText: editable
-              ? AppLocalizations.of(context)!
-                  .providerOptionExampleHint('low, medium, high')
-              : AppLocalizations.of(context)!.providerToggleRequiredHint,
+          hintText: hint ?? strings.providerToggleRequiredHint,
           border: const OutlineInputBorder(),
           isDense: true,
         ),
+        constrainedHint: editable,
+        hintText: hint,
         onChanged: (v) {
           param.options[rowIndex] = v;
           setState(() {});

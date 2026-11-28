@@ -59,6 +59,7 @@ void main() {
     WidgetTester tester, {
     required bool clipped,
     String? expectedHint,
+    int occurrence = 0,
   }) {
     final hintFinder = expectedHint == null
         ? find.byType(ConstrainedInputHint).first
@@ -66,9 +67,9 @@ void main() {
             (widget) =>
                 widget is ConstrainedInputHint && widget.data == expectedHint,
           );
-    final hint = tester.widget<ConstrainedInputHint>(hintFinder);
+    final hint = tester.widget<ConstrainedInputHint>(hintFinder.at(occurrence));
     final textFinder = find.descendant(
-      of: hintFinder,
+      of: hintFinder.at(occurrence),
       matching: find.byType(ConstrainedText),
     );
     final text = tester.widget<ConstrainedText>(textFinder);
@@ -223,6 +224,109 @@ void main() {
     );
     verifyHintMeasurement(tester, clipped: true, expectedHint: optionHint);
     expect(find.byType(ConstrainedInputHint), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('captures clipped provider reasoning option hint slots', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData.light(useMaterial3: true).copyWith(
+            dialogTheme: const DialogThemeData(
+              constraints: BoxConstraints(maxWidth: 340),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showProviderSettingsPanel(
+                  context: context,
+                  providerType: 'llm',
+                  config: ProviderConfigItem(
+                    providerName: 'Provider',
+                    host: 'https://example.test',
+                    reasoningParams: [
+                      ReasoningParam(
+                        paramName: 'reasoning_effort',
+                        isEffortParam: true,
+                        options: [''],
+                      ),
+                      ReasoningParam(
+                        paramName: 'thinking.style',
+                        options: [''],
+                      ),
+                    ],
+                  ),
+                ),
+                child: const Text('Open settings'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final tabs = tester.widget<TabBar>(find.byType(TabBar));
+    await tester.tap(find.byWidget(tabs.tabs[1]));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+    final hint = strings.providerOptionExampleHint('low, medium, high');
+    final hints = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == hint,
+    );
+    expect(hints, findsNWidgets(2));
+    await tester.ensureVisible(hints.first);
+    final field = find.ancestor(
+      of: hints.first,
+      matching: find.byType(TextFormField),
+    );
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    tester.widget<EditableText>(editable).focusNode.requestFocus();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    verifyHintMeasurement(
+      tester,
+      clipped: true,
+      expectedHint: hint,
+      occurrence: 0,
+    );
+    verifyHintMeasurement(
+      tester,
+      clipped: true,
+      expectedHint: hint,
+      occurrence: 1,
+    );
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round11-static-input-hints/provider-reasoning-option-de-320x640-scale2-light.png',
+      ),
+    );
     expect(tester.takeException(), isNull);
   });
 }

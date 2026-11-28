@@ -8,12 +8,13 @@ void expectHintMeasurement(
   WidgetTester tester, {
   required String hint,
   required bool clipped,
+  int occurrence = 0,
 }) {
   final hintFinder = find.byWidgetPredicate(
     (widget) => widget is ConstrainedInputHint && widget.data == hint,
   );
   expect(hintFinder, findsWidgets);
-  final measuredHintFinder = hintFinder.first;
+  final measuredHintFinder = hintFinder.at(occurrence);
   final hintWidget = tester.widget<ConstrainedInputHint>(measuredHintFinder);
   final textFinder = find.descendant(
     of: measuredHintFinder,
