@@ -608,6 +608,17 @@ void main() {
   });
 
   group('Inline link titles', () {
+    test('tab separates a title from an angle-bracketed destination', () {
+      expect(
+        m.markdownToHtml('[link](<https://example.com>\t"title")'),
+        '<p><a href="https://example.com" title="title">link</a></p>\n',
+      );
+      expect(
+        m.markdownToHtml('[link](<https://example.com> "title")'),
+        '<p><a href="https://example.com" title="title">link</a></p>\n',
+      );
+    });
+
     test('tabs and vertical tabs separate a title from a bare destination', () {
       for (final separator in ['\t', '\v']) {
         expect(
