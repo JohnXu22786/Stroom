@@ -64,6 +64,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final _speedMinController = TextEditingController();
   final _speedMaxController = TextEditingController();
   final _maxWordsController = TextEditingController();
+  final _nameHintStates = WidgetStatesController();
+  final _modelIdHintStates = WidgetStatesController();
+  final _maxWordsHintStates = WidgetStatesController();
+  final _customParamHintStates = <int, WidgetStatesController>{};
 
   List<VoiceEntry> _voices = [];
   List<CustomParam> _customParams = [];
@@ -320,6 +324,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     _speedMinController.dispose();
     _speedMaxController.dispose();
     _maxWordsController.dispose();
+    _nameHintStates.dispose();
+    _modelIdHintStates.dispose();
+    _maxWordsHintStates.dispose();
+    for (final states in _customParamHintStates.values) {
+      states.dispose();
+    }
     _audioPlayer?.dispose();
 
     super.dispose();
@@ -336,6 +346,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   void _showAddTrimPresetDialog() {
     final nameCtrl = TextEditingController();
     final durationCtrl = TextEditingController();
+    final nameHintStates = WidgetStatesController();
+    final durationHintStates = WidgetStatesController();
     String direction = 'head';
 
     showDialog(
@@ -352,11 +364,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             children: [
               TextField(
                 controller: nameCtrl,
+                statesController: nameHintStates,
                 decoration: InputDecoration(
                   label: _boundedFieldLabel(
                     AppLocalizations.of(context)!.trimNameLabel,
                   ),
-                  hintText: AppLocalizations.of(context)!.trimNameHint,
+                  hint: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.trimNameHint,
+                    statesController: nameHintStates,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -364,11 +380,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               const SizedBox(height: 12),
               TextField(
                 controller: durationCtrl,
+                statesController: durationHintStates,
                 decoration: InputDecoration(
                   label: _boundedFieldLabel(
                     AppLocalizations.of(context)!.trimDurationLabel,
                   ),
-                  hintText: AppLocalizations.of(context)!.trimDurationHint,
+                  hint: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.trimDurationHint,
+                    statesController: durationHintStates,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(
@@ -456,7 +476,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      durationCtrl.dispose();
+      nameHintStates.dispose();
+      durationHintStates.dispose();
+    });
   }
 
   void _showEditTrimPresetDialog(TrimPreset preset) {
@@ -1162,8 +1187,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
+              statesController: _nameHintStates,
               decoration: InputDecoration(
-                hintText: AppLocalizations.of(context)!.modelNameHint,
+                hint: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.modelNameHint,
+                  statesController: _nameHintStates,
+                ),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1197,8 +1226,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _modelIdController,
+              statesController: _modelIdHintStates,
               decoration: InputDecoration(
-                hintText: AppLocalizations.of(context)!.modelIdLabel,
+                hint: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.modelIdLabel,
+                  statesController: _modelIdHintStates,
+                ),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1291,11 +1324,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             TextField(
               controller: _maxWordsController,
+              statesController: _maxWordsHintStates,
               decoration: InputDecoration(
                 label: _boundedFieldLabel(
                   AppLocalizations.of(context)!.ttsMaxAudioLength,
                 ),
-                hintText: AppLocalizations.of(context)!.ttsAudioLengthHint,
+                hint: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.ttsAudioLengthHint,
+                  statesController: _maxWordsHintStates,
+                ),
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
@@ -1527,14 +1564,22 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         const SizedBox(height: 8),
                         TextFormField(
                           initialValue: param.defaultValue,
+                          statesController: _customParamHintStates.putIfAbsent(
+                            i,
+                            WidgetStatesController.new,
+                          ),
                           decoration: InputDecoration(
                             label: _boundedFieldLabel(
                               AppLocalizations.of(context)!
                                   .modelParamDefaultValue,
                             ),
-                            hintText: localizedParamTypeDefaultValueHint(
-                              AppLocalizations.of(context)!,
-                              param.paramType,
+                            hint: ConstrainedInputHint(
+                              localizedParamTypeDefaultValueHint(
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
+                              statesController: _customParamHintStates
+                                  .putIfAbsent(i, WidgetStatesController.new),
                             ),
                             border: const OutlineInputBorder(),
                             isDense: true,
