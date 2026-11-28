@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
@@ -31,6 +31,15 @@ class ModelConfigPage extends ConsumerStatefulWidget {
   final int modelIndex; // -1 for new model
   final ModelConfig?
       initialModel; // for editing pending models (configIndex == -1)
+  @visibleForTesting
+  final Future<Response<dynamic>> Function(
+    String host,
+    Map<String, dynamic> body,
+  )? testAudioRequest;
+  @visibleForTesting
+  final AudioPlayerAdapter Function()? testAudioPlayerFactory;
+  @visibleForTesting
+  final VoidCallback? testOnAudioResponseHandled;
 
   const ModelConfigPage({
     super.key,
@@ -38,6 +47,9 @@ class ModelConfigPage extends ConsumerStatefulWidget {
     required this.configIndex,
     required this.modelIndex,
     this.initialModel,
+    this.testAudioRequest,
+    this.testAudioPlayerFactory,
+    this.testOnAudioResponseHandled,
   });
 
   @override
@@ -648,11 +660,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         ),
       );
 
-      final response = await dio.post(
-        host,
-        data: body,
-        options: Options(responseType: ResponseType.bytes),
-      );
+      final response = widget.testAudioRequest == null
+          ? await dio.post(
+              host,
+              data: body,
+              options: Options(responseType: ResponseType.bytes),
+            )
+          : await widget.testAudioRequest!(host, body);
+      if (!mounted) return;
+      widget.testOnAudioResponseHandled?.call();
 
       // 检查响应 Content-Type，若不是音频则按错误处理
       // 同时检查响应体是否以 { 或 [ 开头（JSON 错误响应）
@@ -708,7 +724,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
       // 播放音频
       _audioPlayer?.dispose();
-      _audioPlayer = AudioPlayerAdapter();
+      _audioPlayer =
+          widget.testAudioPlayerFactory?.call() ?? AudioPlayerAdapter();
       final audioUrl = createAudioUrl(playbackData, mimeType);
       await _audioPlayer!.load(audioUrl);
       await _audioPlayer!.play();
