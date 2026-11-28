@@ -325,7 +325,11 @@ class LinkSyntax extends DelimiterSyntax {
     parser.advanceBy(1);
     if (parser.isDone) return null;
     final char = parser.charAt(parser.pos);
-    if (char == $space || char == $lf || char == $cr || char == $ff) {
+    if (char == $space ||
+        char == $tab ||
+        char == $lf ||
+        char == $cr ||
+        char == $ff) {
       final title = _parseTitle(parser);
       if (title == null &&
           (parser.isDone || parser.charAt(parser.pos) != $rparen)) {
