@@ -1744,6 +1744,9 @@ class _Mp4Demuxer {
                   } else if (scType == 'stts') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 8)) {
+                      return null;
+                    }
                     int total = 0;
                     for (var i = 0; i < entryCount; i++) {
                       final count = _readUint32();
@@ -1755,6 +1758,10 @@ class _Mp4Demuxer {
                   } else if (scType == 'stsc') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(
+                        scStart, scEnd, entryCount, 12)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       final firstChunk = _readUint32();
                       final spc = _readUint32();
@@ -1787,12 +1794,18 @@ class _Mp4Demuxer {
                   } else if (scType == 'stco') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 4)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       chunkOffsets.add(_readUint32());
                     }
                   } else if (scType == 'co64') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 8)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       final high = _readUint32();
                       final low = _readUint32();
@@ -2066,6 +2079,9 @@ class _Mp4Demuxer {
                   } else if (scType == 'stts') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 8)) {
+                      return null;
+                    }
                     int total = 0;
                     for (var i = 0; i < entryCount; i++) {
                       await _yieldIfNeeded();
@@ -2078,6 +2094,10 @@ class _Mp4Demuxer {
                   } else if (scType == 'stsc') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(
+                        scStart, scEnd, entryCount, 12)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       await _yieldIfNeeded();
                       final firstChunk = _readUint32();
@@ -2112,6 +2132,9 @@ class _Mp4Demuxer {
                   } else if (scType == 'stco') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 4)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       await _yieldIfNeeded();
                       chunkOffsets.add(_readUint32());
@@ -2119,6 +2142,9 @@ class _Mp4Demuxer {
                   } else if (scType == 'co64') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
+                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 8)) {
+                      return null;
+                    }
                     for (var i = 0; i < entryCount; i++) {
                       await _yieldIfNeeded();
                       final high = _readUint32();
@@ -2820,6 +2846,16 @@ class _Mp4Demuxer {
         _data[_offset + 3];
     _offset += 4;
     return value;
+  }
+
+  bool _hasValidTableEntries(
+    int boxStart,
+    int boxEnd,
+    int entryCount,
+    int entrySize,
+  ) {
+    if (_offset != boxStart + 16 || _offset > boxEnd) return false;
+    return entryCount <= (boxEnd - _offset) ~/ entrySize;
   }
 
   int _readUint64() {
