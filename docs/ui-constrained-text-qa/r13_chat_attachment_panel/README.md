@@ -2,16 +2,18 @@
 
 These screenshots capture the production `showChatAttachmentPanel` route in a
 320 dp wide Flutter widget-test viewport. The fitting state is English (US),
-320 × 640 logical pixels, 1× text scale, light theme. The constrained top and lower states are German, 320 × 320 logical pixels,
-2.5× text scale, light theme: the first shows the initial scroll position,
-and the second shows the lower actions after scrolling. A matching German
-top state also captures the dark theme at 320 × 320 and 2.5×. No control is focused and the software keyboard is
+320 × 640 logical pixels, 1× text scale, light theme. The constrained top and
+lower states are German, 320 × 320 logical pixels, 2.5× text scale, light
+theme: the first shows the initial scroll position, and the second shows the
+lower actions after a user drag. A matching German top state captures the dark
+theme at 320 × 320 and 2.5×. No control is focused and the software keyboard is
 closed. The route uses no camera, file, account, or network fixtures.
 
 The initial German render previously raised a `RenderFlex overflowed by 133
-pixels` error. After the change, the panel stays within its 80% viewport height
-bound, scrolls internally, and all four full action labels remain reachable.
-The fitting English capture preserves the existing panel geometry.
+pixels` error. The panel now stays within its 80% viewport height bound, scrolls
+internally, and keeps all four full action labels reachable. A downward drag on
+the sheet handle dismisses the panel, and back and outside-tap dismissal remain
+available. The fitting English capture preserves the existing panel geometry.
 
 - [Fitting English panel](chat-attachment-panel-en-US-320x640-scale1-light.png)
 - [German panel at initial scroll position](chat-attachment-panel-de-DE-320x320-scale2_5-light-top.png)

@@ -159,9 +159,14 @@ void main() {
         ),
       );
       final appFiles = find.text('App-Dateien');
-      await tester.ensureVisible(appFiles);
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -160),
+      );
       await tester.pumpAndSettle();
       expect(scrollable.position.pixels, greaterThan(0));
+      await tester.ensureVisible(appFiles);
+      await tester.pumpAndSettle();
       await expectLater(
         find.byKey(_captureKey),
         matchesGoldenFile(
@@ -175,6 +180,72 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('scrolling back to the top does not dismiss the panel', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(320, 320));
+    await _openPanel(
+      tester,
+      <String>[],
+      locale: const Locale('de'),
+      textScaler: const TextScaler.linear(2.5),
+    );
+
+    final scrollView = find.byType(SingleChildScrollView).first;
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: scrollView, matching: find.byType(Scrollable)),
+    );
+    await tester.drag(scrollView, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    expect(scrollable.position.pixels, greaterThan(0));
+
+    await tester.drag(scrollView, const Offset(0, 200));
+    await tester.pumpAndSettle();
+    expect(scrollable.position.pixels, closeTo(0, 1));
+    expect(find.text('Datei anhängen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('downward drag from the panel dismisses the modal', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(320, 320));
+    await _openPanel(
+      tester,
+      <String>[],
+      locale: const Locale('de'),
+      textScaler: const TextScaler.linear(2.5),
+    );
+
+    final gesture = await tester.startGesture(const Offset(160, 78));
+    await gesture.moveBy(const Offset(0, 200));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Datei anhängen'), findsNothing);
+    expect(find.text('Open attachments'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('back and outside tap dismiss the panel', (tester) async {
+    await _setViewport(tester, const Size(320, 320));
+    await _openPanel(tester, <String>[]);
+
+    // Trigger the platform back route used by a modal bottom sheet.
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Attach file'), findsNothing);
+    expect(find.text('Open attachments'), findsOneWidget);
+
+    await _openPanel(tester, <String>[]);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.text('Attach file'), findsNothing);
+    expect(find.text('Open attachments'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('captures the short German panel in dark theme', (tester) async {
     await _setViewport(tester, const Size(320, 320));

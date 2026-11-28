@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -35,7 +36,7 @@ void showChatAttachmentPanel({
           constraints: BoxConstraints(
             maxHeight: math.min(640.0, MediaQuery.sizeOf(ctx).height * 0.8),
           ),
-          child: SingleChildScrollView(
+          child: _DismissibleAttachmentScrollView(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               child: Column(
@@ -182,6 +183,83 @@ void showChatAttachmentPanel({
       );
     },
   );
+}
+
+class _DismissibleAttachmentScrollView extends StatefulWidget {
+  const _DismissibleAttachmentScrollView({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_DismissibleAttachmentScrollView> createState() =>
+      _DismissibleAttachmentScrollViewState();
+}
+
+class _DismissibleAttachmentScrollViewState
+    extends State<_DismissibleAttachmentScrollView> {
+  final ScrollController _scrollController = ScrollController();
+  Offset? _dragStart;
+  VelocityTracker? _velocityTracker;
+  bool _dismissRequested = false;
+
+  bool get _isAtScrollStart =>
+      _scrollController.hasClients &&
+      _scrollController.position.pixels <=
+          _scrollController.position.minScrollExtent + 1;
+
+  void _trackPointer(PointerEvent event) {
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
+    final start = _dragStart;
+    if (start == null || _dismissRequested || !_isAtScrollStart) return;
+
+    final renderObject = context.findRenderObject();
+    final viewportHeight = renderObject is RenderBox && renderObject.hasSize
+        ? renderObject.size.height
+        : 0.0;
+    final dragDistance = event.position.dy - start.dy;
+    final velocity = _velocityTracker?.getVelocity().pixelsPerSecond.dy ?? 0;
+    if (dragDistance >= viewportHeight / 2 || velocity >= 700) {
+      _dismissRequested = true;
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (event) {
+        if (_isAtScrollStart) {
+          _dragStart = event.position;
+          _velocityTracker = VelocityTracker.withKind(event.kind)
+            ..addPosition(event.timeStamp, event.position);
+        } else {
+          _dragStart = null;
+          _velocityTracker = null;
+        }
+        _dismissRequested = false;
+      },
+      onPointerMove: _trackPointer,
+      onPointerUp: (event) {
+        _trackPointer(event);
+        _dragStart = null;
+        _velocityTracker = null;
+      },
+      onPointerCancel: (_) {
+        _dragStart = null;
+        _velocityTracker = null;
+      },
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// A large icon button for file actions (camera, gallery, file, app files).
