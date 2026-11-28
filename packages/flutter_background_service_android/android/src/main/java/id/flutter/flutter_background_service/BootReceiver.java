@@ -17,8 +17,10 @@ public class BootReceiver extends BroadcastReceiver {
             final Config config = new Config(context);
             boolean autoStart = config.isAutoStartOnBoot();
             if (autoStart) {
+                boolean acquiredWakeLock = false;
                 if (BackgroundService.lockStatic == null) {
                     BackgroundService.getLock(context).acquire();
+                    acquiredWakeLock = true;
                 }
 
                 try {
@@ -28,11 +30,13 @@ public class BootReceiver extends BroadcastReceiver {
                     } else {
                         startedService = context.startService(new Intent(context, BackgroundService.class));
                     }
-                    if (startedService == null) {
+                    if (startedService == null && acquiredWakeLock) {
                         BackgroundService.releaseLock();
                     }
                 } catch (RuntimeException exception) {
-                    BackgroundService.releaseLock();
+                    if (acquiredWakeLock) {
+                        BackgroundService.releaseLock();
+                    }
                     throw exception;
                 }
             }
