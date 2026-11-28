@@ -183,6 +183,8 @@ class Document {
         final lastChildren = last.children;
         if (lastChildren == null) {
           children.addAll(refs);
+        } else if (last.tag == 'ul' || last.tag == 'ol') {
+          children.add(Element('p', refs));
         } else {
           lastChildren.addAll(refs);
         }
