@@ -154,6 +154,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                 }
               },
               onReceivedError: (controller, request, error) {
+                if (request.isForMainFrame == false) return;
                 if (mounted) {
                   setState(() {
                     _isLoading = false;
