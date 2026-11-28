@@ -15,7 +15,7 @@ import 'tts_stream_audio_source.dart';
 /// 内部使用 just_audio 的 AudioPlayer
 class AudioPlayerAdapter {
   AudioPlayerAdapter({AudioPlayer Function()? createPlayer})
-    : _createPlayer = createPlayer ?? AudioPlayer.new;
+      : _createPlayer = createPlayer ?? AudioPlayer.new;
 
   final AudioPlayer Function() _createPlayer;
   AudioPlayer? _player;
