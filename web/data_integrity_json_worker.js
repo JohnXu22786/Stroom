@@ -1043,6 +1043,20 @@ function validateProviderEntriesValue(list, parseFailed, issues) {
         }
         validateNestedList(
           config,
+          'customParams',
+          i,
+          issues,
+          `provider_entries[${i}].configs[${ci}].customParams`,
+        );
+        validateNestedList(
+          config,
+          'reasoningParams',
+          i,
+          issues,
+          `provider_entries[${i}].configs[${ci}].reasoningParams`,
+        );
+        validateNestedList(
+          config,
           'models',
           i,
           issues,
