@@ -95,6 +95,34 @@ public class BootReceiverWakeLockTest {
     }
 
     @Test
+    public void serviceStartupReleasesWakeLockWhenWatchdogQueueFails() {
+        Context context = RuntimeEnvironment.getApplication();
+        new Config(context).setAutoStartOnBoot(true);
+        BackgroundService.lockStatic = null;
+        new BootReceiver().onReceive(context, new Intent(Intent.ACTION_BOOT_COMPLETED));
+        PowerManager.WakeLock bootWakeLock = BackgroundService.getLock(context);
+        assertTrue("boot should hold its wake lock until service startup", bootWakeLock.isHeld());
+        TestBackgroundService.failOnWatchdogEnqueue = true;
+
+        try {
+            try {
+                Robolectric.buildService(TestBackgroundService.class).create();
+                fail("service startup should propagate a watchdog queue failure");
+            } catch (IllegalStateException exception) {
+                assertEquals("watchdog queue failed", exception.getMessage());
+            }
+
+            assertFalse("failed service startup should release the boot wake lock", bootWakeLock.isHeld());
+        } finally {
+            TestBackgroundService.failOnWatchdogEnqueue = false;
+            if (BackgroundService.lockStatic != null && BackgroundService.lockStatic.isHeld()) {
+                BackgroundService.lockStatic.release();
+            }
+            BackgroundService.lockStatic = null;
+        }
+    }
+
+    @Test
     public void failedSecondBootStartDoesNotReleaseFirstBroadcastWakeLock() {
         Context context = RuntimeEnvironment.getApplication();
         new Config(context).setAutoStartOnBoot(true);
@@ -141,6 +169,15 @@ public class BootReceiverWakeLockTest {
     }
 
     private static final class TestBackgroundService extends BackgroundService {
+        private static boolean failOnWatchdogEnqueue;
+
+        @Override
+        protected void enqueueWatchdog() {
+            if (failOnWatchdogEnqueue) {
+                throw new IllegalStateException("watchdog queue failed");
+            }
+        }
+
         @Override
         protected void runService() {
             // Keep this lifecycle test focused on service startup and wake-lock ownership.

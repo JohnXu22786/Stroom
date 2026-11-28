@@ -88,27 +88,31 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
 
     @Override
     public void onCreate() {
-        super.onCreate();
+        try {
+            super.onCreate();
 
-        FlutterBackgroundServicePlugin.servicePipe.addListener(listener);
+            FlutterBackgroundServicePlugin.servicePipe.addListener(listener);
 
-        config = new Config(this);
-        mainHandler = new Handler(Looper.getMainLooper());
+            config = new Config(this);
+            mainHandler = new Handler(Looper.getMainLooper());
 
-        String notificationChannelId = config.getNotificationChannelId();
-        if (notificationChannelId == null) {
-            this.notificationChannelId = "FOREGROUND_DEFAULT";
-            createNotificationChannel();
-        } else {
-            this.notificationChannelId = notificationChannelId;
+            String notificationChannelId = config.getNotificationChannelId();
+            if (notificationChannelId == null) {
+                this.notificationChannelId = "FOREGROUND_DEFAULT";
+                createNotificationChannel();
+            } else {
+                this.notificationChannelId = notificationChannelId;
+            }
+
+            notificationTitle = config.getInitialNotificationTitle();
+            notificationContent = config.getInitialNotificationContent();
+            notificationId = config.getForegroundNotificationId();
+            configForegroundTypes = config.getForegroundServiceTypes();
+            updateNotificationInfo();
+            onStartCommand(null, -1, -1);
+        } finally {
+            releaseLock();
         }
-
-        notificationTitle = config.getInitialNotificationTitle();
-        notificationContent = config.getInitialNotificationContent();
-        notificationId = config.getForegroundNotificationId();
-        configForegroundTypes = config.getForegroundServiceTypes();
-        updateNotificationInfo();
-        onStartCommand(null, -1, -1);
     }
 
     @Override
@@ -189,9 +193,9 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        config.setManuallyStopped(false);
-        WatchdogReceiver.enqueue(this);
         try {
+            config.setManuallyStopped(false);
+            enqueueWatchdog();
             runService();
         } finally {
             // BootReceiver holds this lock until startup work has been handed off.
@@ -199,6 +203,10 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
         }
 
         return START_NOT_STICKY;
+    }
+
+    protected void enqueueWatchdog() {
+        WatchdogReceiver.enqueue(this);
     }
 
     @SuppressLint("WakelockTimeout")
