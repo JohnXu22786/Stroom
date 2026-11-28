@@ -162,6 +162,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late bool _enableSeed;
   late final TextEditingController _maxTokensController;
   late final TextEditingController _seedController;
+  final _maxTokensHintStates = MaterialStatesController();
+  final _seedHintStates = MaterialStatesController();
+  final Map<ReasoningParam,
+          (MaterialStatesController, MaterialStatesController)>
+      _reasoningValueHintStates = {};
+  final Map<ReasoningParam, MaterialStatesController> _reasoningNameHintStates =
+      {};
+  final Map<ReasoningParam, MaterialStatesController> _reasoningJsonHintStates =
+      {};
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
 
@@ -311,7 +320,50 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _seedController.dispose();
     _maxFileSizeController.dispose();
     _ocrRequestSizeBudgetController.dispose();
+    _maxTokensHintStates.dispose();
+    _seedHintStates.dispose();
+    for (final states in _reasoningValueHintStates.values) {
+      states.$1.dispose();
+      states.$2.dispose();
+    }
+    for (final states in _reasoningNameHintStates.values) {
+      states.dispose();
+    }
+    for (final states in _reasoningJsonHintStates.values) {
+      states.dispose();
+    }
     super.dispose();
+  }
+
+  MaterialStatesController _reasoningHintStates(
+    ReasoningParam param, {
+    required bool onValue,
+  }) {
+    final states = _reasoningValueHintStates.putIfAbsent(
+      param,
+      () => (MaterialStatesController(), MaterialStatesController()),
+    );
+    return onValue ? states.$1 : states.$2;
+  }
+
+  MaterialStatesController _reasoningNameHintState(ReasoningParam param) =>
+      _reasoningNameHintStates.putIfAbsent(
+        param,
+        () => MaterialStatesController(),
+      );
+
+  MaterialStatesController _reasoningJsonHintState(ReasoningParam param) =>
+      _reasoningJsonHintStates.putIfAbsent(
+        param,
+        () => MaterialStatesController(),
+      );
+
+  void _disposeReasoningHintStates(ReasoningParam param) {
+    final valueStates = _reasoningValueHintStates.remove(param);
+    valueStates?.$1.dispose();
+    valueStates?.$2.dispose();
+    _reasoningNameHintStates.remove(param)?.dispose();
+    _reasoningJsonHintStates.remove(param)?.dispose();
   }
 
   @override

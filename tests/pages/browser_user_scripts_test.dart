@@ -489,7 +489,8 @@ run();
     fetchCompleter.complete(
       '// ==UserScript==\n// @name Preview test\n// ==/UserScript==\nconsole.log("preview");',
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     final preview = tester.widget<InputDecorator>(
       find.byType(InputDecorator).last,
     );
