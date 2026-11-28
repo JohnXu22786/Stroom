@@ -30,6 +30,28 @@ function mergeLegacyConfigs(migratedConfigs, existingEntries) {
   };
 }
 
+function prepareLegacyConfigs(configs) {
+  const workerSource = fs.readFileSync(
+    path.resolve(__dirname, '../../web/data_integrity_json_worker.js'),
+    'utf8',
+  );
+  let onMessage;
+  const messages = [];
+  const context = {
+    self: {
+      addEventListener: (_event, handler) => { onMessage = handler; },
+      postMessage: (message) => messages.push(message),
+    },
+  };
+  vm.runInNewContext(workerSource, context);
+  onMessage({data: ['prepareLegacyChatConfigs', JSON.stringify(configs)]});
+  const [metadataJson, payloadJson] = messages[0].split('\n');
+  return {
+    metadata: JSON.parse(metadataJson),
+    payload: payloadJson ? JSON.parse(payloadJson) : null,
+  };
+}
+
 function fixProviderEntries(entries) {
   const workerSource = fs.readFileSync(
     path.resolve(__dirname, '../../web/data_integrity_json_worker.js'),
@@ -65,6 +87,25 @@ function legacyConfig(temperature) {
     }],
   };
 }
+
+test('web preparation identifies malformed array entries without dropping valid configs', () => {
+  const validConfig = {
+    providerName: 'Recoverable provider',
+    host: 'https://legacy.example.com',
+    key: 'legacy-key',
+    models: [{modelId: 'legacy-model'}],
+  };
+  const result = prepareLegacyConfigs([validConfig, null, 'malformed entry']);
+
+  assert.deepEqual(result.metadata, {
+    status: 'ready',
+    legacyConfigCount: 1,
+    malformedEntryCount: 2,
+  });
+  assert.deepEqual(result.payload.map((config) => config.providerName), [
+    'Recoverable provider',
+  ]);
+});
 
 test('web migration preserves distinct model settings and removes duplicates', () => {
   const existingConfig = legacyConfig(0.2);

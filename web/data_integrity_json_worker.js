@@ -300,7 +300,12 @@ function prepareLegacyChatConfigs(json) {
   if (!Array.isArray(decoded)) return { metadata: { status: 'notList' } };
 
   const oldList = decoded.filter(isRecord);
-  if (oldList.length === 0) return { metadata: { status: 'empty' } };
+  const malformedEntryCount = decoded.length - oldList.length;
+  if (oldList.length === 0) {
+    return {
+      metadata: {status: 'empty', malformedEntryCount},
+    };
+  }
 
   const migratedConfigs = oldList.map(function (oldItem) {
     const rawModels = oldItem.models;
@@ -333,7 +338,11 @@ function prepareLegacyChatConfigs(json) {
   });
 
   return {
-    metadata: { status: 'ready', legacyConfigCount: oldList.length },
+    metadata: {
+      status: 'ready',
+      legacyConfigCount: oldList.length,
+      malformedEntryCount,
+    },
     payload: JSON.stringify(migratedConfigs),
   };
 }
