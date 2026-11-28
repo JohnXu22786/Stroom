@@ -233,6 +233,25 @@ class M3U8Parser {
     String content,
     String baseUrl, {
     M3U8HeadersForUrl? headersForUrl,
+    Future<void>? cancellationSignal,
+  }) async {
+    return _parseSegments(
+      content,
+      baseUrl,
+      headersForUrl: headersForUrl,
+      cancellationSignal: cancellationSignal,
+      visitedUrls: {_playlistUrlKey(baseUrl)},
+      variantDepth: 0,
+    );
+  }
+
+  static Future<List<({String url, double duration})>> _parseSegments(
+    String content,
+    String baseUrl, {
+    M3U8HeadersForUrl? headersForUrl,
+    Future<void>? cancellationSignal,
+    required Set<String> visitedUrls,
+    required int variantDepth,
   }) async {
     // 检测多码率播放列表
     if (content.contains('#EXT-X-STREAM-INF:')) {
@@ -256,13 +275,28 @@ class M3U8Parser {
       }
 
       if (bestUrl != null) {
+        if (variantDepth >= _maxVariantDepth) {
+          throw FormatException(
+              'Invalid HLS master playlist: nesting is too deep');
+        }
+        if (!visitedUrls.add(_playlistUrlKey(bestUrl))) {
+          throw FormatException(
+              'Invalid HLS master playlist: cyclic variant URL');
+        }
         debugPrint(
             '[M3U8Parser] parseSegments selected variant: bandwidth=$bestBandwidth');
-        final subContent = await _fetchUrl(bestUrl, headersForUrl);
-        return parseSegments(
+        final subContent = await _fetchUrl(
+          bestUrl,
+          headersForUrl,
+          cancellationSignal: cancellationSignal,
+        );
+        return _parseSegments(
           subContent,
           bestUrl,
           headersForUrl: headersForUrl,
+          cancellationSignal: cancellationSignal,
+          visitedUrls: visitedUrls,
+          variantDepth: variantDepth + 1,
         );
       }
       return [];

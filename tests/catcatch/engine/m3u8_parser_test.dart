@@ -283,4 +283,103 @@ ${Uri.parse(childUrl).path}
       await server.close(force: true);
     }
   });
+
+  test('rejects a cyclic variant URL in parseSegments', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requests = 0;
+    final serverSubscription = server.listen((request) async {
+      requests++;
+      if (requests == 1) {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.text
+          ..write('''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/cycle.m3u8
+''');
+      } else {
+        request.response.statusCode = HttpStatus.internalServerError;
+      }
+      await request.response.close();
+    });
+
+    try {
+      await expectLater(
+        M3U8Parser.parseSegments('''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/cycle.m3u8
+''', 'http://127.0.0.1:${server.port}/master.m3u8'),
+        throwsFormatException,
+      );
+      expect(requests, 1);
+    } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
+  });
+
+  test('rejects parseSegments variant nesting beyond the parser limit',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverSubscription = server.listen((request) async {
+      final depth = int.parse(
+        request.uri.pathSegments.single.replaceFirst('.m3u8', ''),
+      );
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.text
+        ..write('''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/${depth + 1}.m3u8
+''');
+      await request.response.close();
+    });
+
+    try {
+      await expectLater(
+        M3U8Parser.parseSegments('''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/0.m3u8
+''', 'http://127.0.0.1:${server.port}/master.m3u8'),
+        throwsFormatException,
+      );
+    } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
+  });
+
+  test('parses durations after nested variants in parseSegments', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverSubscription = server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.text
+        ..write('''
+#EXTM3U
+#EXTINF:6.5,
+segment.ts
+''');
+      await request.response.close();
+    });
+
+    try {
+      final segments = await M3U8Parser.parseSegments('''
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+/nested.m3u8
+''', 'http://127.0.0.1:${server.port}/master.m3u8');
+
+      expect(segments, [
+        (url: 'http://127.0.0.1:${server.port}/segment.ts', duration: 6.5),
+      ]);
+    } finally {
+      await serverSubscription.cancel();
+      await server.close(force: true);
+    }
+  });
 }
