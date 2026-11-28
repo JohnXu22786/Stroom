@@ -6,26 +6,12 @@ import 'package:path_provider/path_provider.dart';
 import 'web_file_store.dart';
 
 /// 跨平台文件存储服务
-/// - Web: 使用 WebFileStore（IndexedDB）持久化的内存 Map
+/// - Web: 使用 WebFileStore（IndexedDB）持久化文件
 /// - Native: 使用 dart:io + path_provider
 class StorageService {
   // =========================================================================
-  // Web: In-memory store backed by IndexedDB
+  // Web: IndexedDB-backed file storage
   // =========================================================================
-  static Map<String, Uint8List>? _webStore;
-
-  static Future<Map<String, Uint8List>> _ensureWebStore() async {
-    if (_webStore != null) return _webStore!;
-    _webStore = {};
-    // 从 WebFileStore (IndexedDB) 加载数据
-    try {
-      // WebFileStore 使用 'storage_service' 前缀存储所有文件
-      // 我们无法高效地列出所有 key，所以这里只初始化空 map
-      // 实际文件在 writeFile 时存储，在 readFile 时按需读取
-    } catch (_) {}
-    return _webStore!;
-  }
-
   // =========================================================================
   // Native
   // =========================================================================
@@ -51,8 +37,8 @@ class StorageService {
   static Future<bool> ttsDirExists() async {
     if (kIsWeb) {
       try {
-        final store = await _ensureWebStore();
-        return store.isNotEmpty;
+        final keys = await WebFileStore.keysWithPrefix('storage_service/');
+        return keys.isNotEmpty;
       } catch (_) {
         return false;
       }
@@ -198,7 +184,6 @@ class StorageService {
   static Future<void> clearWebStorage() async {
     if (!kIsWeb && !WebFileStore.isTestMode) return;
     await WebFileStore.deleteByPrefix('storage_service/');
-    _webStore?.clear();
   }
 }
 

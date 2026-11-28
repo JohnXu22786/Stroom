@@ -1,3 +1,6 @@
+@TestOn('browser')
+library;
+
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,8 +10,19 @@ import 'package:stroom/utils/web_file_store.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(WebFileStore.enableTestMode);
-  tearDown(WebFileStore.disableTestMode);
+  setUp(StorageService.clearWebStorage);
+  tearDown(StorageService.clearWebStorage);
+
+  test('ttsDirExists reflects persisted Web TTS entries', () async {
+    expect(await StorageService.ttsDirExists(), isFalse);
+
+    await WebFileStore.write('unrelated/keep.wav', Uint8List.fromList([3]));
+    expect(await StorageService.ttsDirExists(), isFalse);
+
+    await StorageService.writeFile('speech.wav', Uint8List.fromList([1]));
+
+    expect(await StorageService.ttsDirExists(), isTrue);
+  });
 
   test(
     'clearWebStorage removes persisted storage service files only',
