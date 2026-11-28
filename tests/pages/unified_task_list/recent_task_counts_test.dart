@@ -192,6 +192,30 @@ void main() {
       expect(result[1]['unread'], 1, reason: '1 of 2 tasks is unread');
     });
 
+    test('counts created task as unread when status timestamp is older', () {
+      final result = computeRecentTaskCounts(
+        launches: [baseTime, baseTime.add(const Duration(hours: 1))],
+        catcatchTasks: [
+          _catCatch(
+            id: 'created-after-read',
+            createdAt: baseTime.add(const Duration(minutes: 45)),
+            statusChangedAt: baseTime.add(const Duration(minutes: 15)),
+          ),
+        ],
+        synthesisTasks: [],
+        backgroundTasks: [],
+        unreadThreshold: baseTime.add(const Duration(minutes: 30)),
+      );
+
+      expect(result.single['total'], 1);
+      expect(
+        result.single['unread'],
+        1,
+        reason:
+            'A newer creation time must count even if statusChangedAt is older',
+      );
+    });
+
     test('handles all three task types together', () {
       final launches = [
         baseTime,
