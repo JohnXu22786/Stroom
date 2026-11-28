@@ -160,6 +160,10 @@ jobs:
               lib/pages/model_config_shared.dart)
                 test_f="tests/pages/settings/provider_config_detail_page_test.dart"
                 ;;
+              lib/pages/llm_model_config_shared.dart|\
+              lib/pages/llm_model_config_page_sections.dart)
+                test_f="tests/qa/round13_llm_shared_hints_capture_test.dart"
+                ;;
               lib/pages/provider_config_tool_dialogs.dart)
                 test_f="tests/widgets/mcp_config_card_style_test.dart"
                 ;;
