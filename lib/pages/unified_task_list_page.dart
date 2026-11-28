@@ -1000,7 +1000,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         }
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
-          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = t.createdAt.isAfter(lastRead) ||
+              (t.statusChangedAt?.isAfter(lastRead) ?? false);
           return CatCatchTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -1014,7 +1015,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
-          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = t.createdAt.isAfter(lastRead) ||
+              (t.statusChangedAt?.isAfter(lastRead) ?? false);
           return BackgroundTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -1026,7 +1028,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           );
         }
         final t = item.synthesisTask!;
-        final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+        final isUnread = t.createdAt.isAfter(lastRead) ||
+            (t.statusChangedAt?.isAfter(lastRead) ?? false);
         return SynthesisTaskCard(
           key: ValueKey(item.id),
           task: t,
