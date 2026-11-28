@@ -37,9 +37,9 @@ The route-specific captures below record the other production surfaces touched b
 
 | Route and state | Evidence |
 | --- | --- |
-| Context management, `de-DE`, 320 × 640, 1×, light theme; token field focused with `48000`, browser keyboard closed. The adjacent reveal preview uses 1.5× text. | [Focused route capture](../../../qa/context_management_labels/context-management-de-320x640-1x-light-focused.png) · [1.5× reveal preview](../../../qa/context_management_labels/threshold-label-reveal-de-320x640-1_5x.webm) |
-| Task Flow TTS block editor, `en-US`, 320 × 640, 1×, light theme; voice field empty and unfocused, keyboard closed. | [Production dialog capture](../../../qa/task_flow_tts_voice_hint/tts-voice-hint-en-320x640-1x-light.png) |
-| TTS synthesis form, `de-DE`, 320 × 640, 1×, light theme; new synthesis form with local provider fixture, no field focused, keyboard closed. | [Production form capture](../../../qa/tts_form_rows/tts-form-de-320x640-1x-light.png) |
+| Context management, `de-DE`, 320 × 640, 1×, light theme; token field focused with `48000`, browser keyboard closed. The adjacent reveal preview uses 1.5× text. | [Focused route capture](../../qa/context_management_labels/context-management-de-320x640-1x-light-focused.png) · [1.5× reveal preview](../../qa/context_management_labels/threshold-label-reveal-de-320x640-1_5x.webm) |
+| Task Flow TTS block editor, `en-US`, 320 × 640, 1×, light theme; voice field empty and unfocused, keyboard closed. | [Production dialog capture](../../qa/task_flow_tts_voice_hint/tts-voice-hint-en-320x640-1x-light.png) |
+| TTS synthesis form, `de-DE`, 320 × 640, 1×, light theme; new synthesis form with local provider fixture, no field focused, keyboard closed. | [Production form capture](../../qa/tts_form_rows/tts-form-de-320x640-1x-light.png) |
 | File rename dialog, `de-DE`, 320 × 640, 2×, light theme; new-name field empty and unfocused, keyboard closed in the widget capture. | [File rename hint capture](file-rename-hint-de-320x640-scale2-light.png) · capture test: `tests/widgets/file_manager_test.dart`, “captures the localized file rename input hint”. |
 
 The context, Task Flow, and TTS captures are existing Chromium captures of their production routes and are linked here to keep the complete route evidence discoverable with the Round 13 provider and OCR captures. The file-rename capture is newly rendered from the production file-manager dialog in the focused Flutter widget capture test.

@@ -5,6 +5,7 @@
 //   - file_preview_chip_test.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
