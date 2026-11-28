@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:path/path.dart' as p;
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -47,6 +48,27 @@ class SelectedVideo {
   final String format;
 
   SelectedVideo({required this.bytes, required this.name, this.format = 'mp4'});
+}
+
+@visibleForTesting
+Future<List<SelectedVideo>?> readPickedVideoFiles(
+  List<XFile> files, {
+  required bool Function() isMounted,
+}) async {
+  final videos = <SelectedVideo>[];
+  for (final file in files) {
+    final bytes = await file.readAsBytes();
+    if (!isMounted()) return null;
+    if (bytes.isEmpty) continue;
+    videos.add(
+      SelectedVideo(
+        bytes: bytes,
+        name: file.name,
+        format: detectFormat(file.name),
+      ),
+    );
+  }
+  return videos;
 }
 
 // ====================================================================
@@ -994,20 +1016,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         GalleryMediaKind.video,
         context: context,
       );
-      if (pickedFiles.isEmpty) return;
+      if (!mounted || pickedFiles.isEmpty) return;
 
-      final newVideos = <SelectedVideo>[];
-      for (final file in pickedFiles) {
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
-        newVideos.add(
-          SelectedVideo(
-            bytes: bytes,
-            name: file.name,
-            format: detectFormat(file.name),
-          ),
-        );
-      }
+      final newVideos = await readPickedVideoFiles(
+        pickedFiles,
+        isMounted: () => mounted,
+      );
+      if (newVideos == null) return;
 
       if (newVideos.isEmpty) {
         if (mounted) {
