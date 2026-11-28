@@ -286,7 +286,24 @@ jobs:
       - name: Test SAF log append module
         run: gradle -p android/saf_log_content test
       - name: Test Android boot wake-lock lifecycle
-        run: gradle -p android :flutter_background_service_android:testDebugUnitTest --tests '*BootReceiverWakeLockTest'
+        shell: bash
+        run: |
+          set -o pipefail
+          log_file="$(mktemp)"
+          if gradle -p android :flutter_background_service_android:testDebugUnitTest --tests '*BootReceiverWakeLockTest' --stacktrace --info --console=plain 2>&1 | tee "$log_file"; then
+            exit 0
+          else
+            status=$?
+            {
+              echo "### Android boot wake-lock lifecycle test failed (exit $status)"
+              echo
+              echo '```text'
+              tail -n 150 "$log_file"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Boot wake-lock lifecycle test failed::Gradle exited with status $status; see the step summary for the failure output."
+            exit "$status"
+          fi
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
