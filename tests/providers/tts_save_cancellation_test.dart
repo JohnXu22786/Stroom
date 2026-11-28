@@ -192,25 +192,24 @@ void main() {
       () async {
     final synthesisStarted = Completer<void>();
     final finishSynthesis = Completer<Uint8List>();
-    notifier.debugSynthesize = (_, __, ___) {
+    notifier.debugSynthesize = (_, _, _) async {
+      throw StateError('Initial synthesis failure');
+    };
+    final id = notifier.addTask(
+      title: 'Failed speech',
+      text: 'Retry this speech',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final failedTask = await waitForStatus(id, TaskStatus.failed);
+    expect(failedTask.completedAt, isNotNull);
+
+    notifier.debugSynthesize = (_, _, _) {
       synthesisStarted.complete();
       return finishSynthesis.future;
     };
-    final previousCompletedAt = DateTime.utc(2025, 1, 2);
-    notifier.state = [
-      SynthesisTask(
-        id: 'failed-speech',
-        title: 'Failed speech',
-        status: TaskStatus.failed,
-        error: 'previous failure',
-        completedAt: previousCompletedAt,
-        text: 'Retry this speech',
-        providerConfig: providerConfig,
-        modelConfig: modelConfig,
-      ),
-    ];
 
-    notifier.retryTask('failed-speech');
+    notifier.retryTask(id);
     await synthesisStarted.future.timeout(const Duration(seconds: 5));
 
     final retriedTask = container.read(taskListProvider).single;
@@ -218,7 +217,7 @@ void main() {
     expect(retriedTask.completedAt, isNull);
 
     finishSynthesis.complete(audio);
-    await waitForStatus('failed-speech', TaskStatus.completed);
+    await waitForStatus(id, TaskStatus.completed);
   });
 
   test('TTS provider localizes cancellation failure framing', () async {
