@@ -9,6 +9,7 @@ import 'package:fvp/mdk.dart' as mdk;
 import 'dart_ts_remuxer.dart';
 import 'dart_flv_remuxer.dart';
 import 'ev1_decoder.dart';
+import 'fvp_conversion_waiter.dart';
 
 /// 格式转换器
 ///
@@ -247,17 +248,19 @@ class FFmpegConverter {
         '[FFmpegConverter] Using fvp for conversion: $inputPath -> $outputPath');
 
     final player = mdk.Player();
+    var playerDisposed = false;
+    void disposePlayer() {
+      if (playerDisposed) return;
+      playerDisposed = true;
+      try {
+        player.dispose();
+      } catch (_) {}
+    }
+
     try {
       if (cancelToken?.isCancelled ?? false) {
         throw Exception('Task was cancelled');
       }
-
-      cancelToken?.whenCancel.then((_) {
-        try {
-          player.record(); // 停止录制
-          player.dispose();
-        } catch (_) {}
-      });
 
       // 设置输入媒体
       player.media = inputPath;
@@ -273,24 +276,33 @@ class FFmpegConverter {
       player.state = mdk.PlaybackState.playing;
 
       // 等待转码完成
-      final completer = Completer<void>();
+      final waiter = FvpConversionWaiter(
+        cancelToken: cancelToken,
+        stopPlayer: () {
+          try {
+            player.record(); // 停止录制
+          } finally {
+            disposePlayer();
+          }
+        },
+      );
       StreamSubscription<
           ({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>? statusSub;
       StreamSubscription<mdk.MediaEvent>? eventSub;
 
       statusSub = player.onMediaStatus.listen((event) {
         final newStatus = event.newValue;
-        if (newStatus.test(mdk.MediaStatus.end) && !completer.isCompleted) {
+        if (newStatus.test(mdk.MediaStatus.end) && !waiter.isCompleted) {
           player.record(); // 停止录制，保存文件
-          completer.complete();
+          waiter.complete();
         }
       });
 
       // 监听解码错误
       eventSub = player.onEvent.listen((event) {
-        if (event.error < 0 && !completer.isCompleted) {
+        if (event.error < 0 && !waiter.isCompleted) {
           player.record();
-          completer.completeError(Exception('转码失败: ${event.detail}'));
+          waiter.completeError(Exception('转码失败: ${event.detail}'));
         }
       });
 
@@ -313,14 +325,14 @@ class FFmpegConverter {
 
       // 设置超时（10分钟）
       final timeout = Future.delayed(const Duration(minutes: 10), () {
-        if (!completer.isCompleted) {
+        if (!waiter.isCompleted) {
           player.record();
-          completer.completeError(Exception('转换超时'));
+          waiter.completeError(Exception('转换超时'));
         }
       });
 
       try {
-        await completer.future;
+        await waiter.future;
       } finally {
         timeout.ignore();
         statusSub.cancel();
@@ -334,9 +346,7 @@ class FFmpegConverter {
       debugPrint('[FFmpegConverter] Conversion complete: $outputPath');
       return outputPath;
     } finally {
-      try {
-        player.dispose();
-      } catch (_) {}
+      disposePlayer();
     }
   }
 }
