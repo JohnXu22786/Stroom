@@ -345,6 +345,7 @@ class AnkiApkgImporter {
               card['id'] as int;
         }
         final cardMap = <int, int>{}; // source card ID → target card ID
+        int? dueDayOffset;
         for (final card in srcCards) {
           final targetNoteId =
               noteMap[card['nid'] as int] ?? card['nid'] as int;
@@ -359,6 +360,23 @@ class AnkiApkgImporter {
           final id = ++newId;
           final oldDid = card['did'] as int;
           final newDid = deckMap[oldDid] ?? oldDid;
+          final queue = card['queue'] as int;
+          final due = card['due'] as int;
+          var translatedDue = due;
+          if (queue == 2 || queue == 3) {
+            final sourceCreated = srcCol.first['crt'];
+            final targetCreated = tgtCol.first['crt'];
+            if (sourceCreated is! num) {
+              throw AnkiApkgException.unexpectedError(tmpDbPath);
+            }
+            if (targetCreated is! num) {
+              throw AnkiApkgException.unexpectedError(targetDbPath);
+            }
+            final secondsPerDay = Duration(days: 1).inSeconds;
+            dueDayOffset ??= (nowSec - targetCreated.toInt()) ~/ secondsPerDay -
+                (nowSec - sourceCreated.toInt()) ~/ secondsPerDay;
+            translatedDue += dueDayOffset;
+          }
 
           await txn.insert('cards', {
             'id': id,
@@ -368,8 +386,8 @@ class AnkiApkgImporter {
             'mod': nowSec,
             'usn': -1,
             'type': card['type'],
-            'queue': card['queue'],
-            'due': card['due'],
+            'queue': queue,
+            'due': translatedDue,
             'ivl': card['ivl'] ?? 0,
             'factor': card['factor'] ?? 2500,
             'reps': card['reps'] ?? 0,

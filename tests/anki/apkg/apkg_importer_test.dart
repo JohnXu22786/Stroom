@@ -1400,6 +1400,86 @@ void main() {
   });
 
   test(
+    'translates review day ordinals between collection creation dates',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_due_day_translation_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final sourcePath = '${documents.path}/source.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
+      const secondsPerDay = 24 * 60 * 60;
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final sourceCreated = (nowSec ~/ secondsPerDay - 20) * secondsPerDay;
+      final targetCreated = sourceCreated + 2 * secondsPerDay;
+
+      try {
+        await _createCollection(
+          sourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: sourceCreated,
+        );
+        await _createCollection(targetPath, collectionCreated: targetCreated);
+        final source = await sqflite.openDatabase(sourcePath);
+        try {
+          await source.update(
+            'cards',
+            {'queue': 0, 'due': 7},
+            where: 'id = ?',
+            whereArgs: [43],
+          );
+          for (final card in [
+            {'id': 44, 'ord': 1, 'queue': 1, 'due': nowSec + 3600},
+            {'id': 45, 'ord': 2, 'queue': 2, 'due': 28},
+            {'id': 46, 'ord': 3, 'queue': 3, 'due': 29},
+          ]) {
+            await source.insert('cards', {
+              'nid': 42,
+              'did': 1,
+              'mod': 0,
+              'usn': 0,
+              'type': card['queue'],
+              'ivl': 1,
+              'factor': 2500,
+              'reps': 0,
+              'lapses': 0,
+              'left': 0,
+              'odue': 0,
+              'odid': 0,
+              'flags': 0,
+              'data': '',
+              ...card,
+            });
+          }
+        } finally {
+          await source.close();
+        }
+        final packagePath = await _packageCollection(documents, sourcePath);
+
+        await AnkiApkgImporter.import(packagePath);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final cards = await target.query('cards', orderBy: 'ord');
+          expect(cards.map((card) => (card['queue'], card['due'])).toList(), [
+            (0, 7),
+            (1, nowSec + 3600),
+            (2, 26),
+            (3, 27),
+          ]);
+        } finally {
+          await target.close();
+        }
+      } finally {
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
     'maps invalid SQLite package data and removes the extracted temp file',
     () async {
       final documents = await Directory.systemTemp.createTemp(
