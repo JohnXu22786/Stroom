@@ -170,11 +170,13 @@ String _withoutMarkdownCode(String source) {
   final fenceEnd = RegExp(r'^ {0,3}(`{3,}|~{3,})[ \t]*$');
   final quotePrefix = RegExp(r'^ {0,3}>[ \t]?');
   final listPrefix = RegExp(r'^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])[ \t]');
+  final headingStart = RegExp(r'^ {0,3}#{1,6}(?:[ \t]|$)');
   var fenceCharacter = 0;
   var fenceLength = 0;
   var fenceQuoteDepth = 0;
   var fenceListIndent = 0;
   final listContentIndents = <int>[];
+  final inlineBlockStarts = <int>[];
   var lineStart = 0;
   while (lineStart < source.length) {
     var lineEnd = lineStart;
@@ -218,7 +220,10 @@ String _withoutMarkdownCode(String source) {
       content = content.substring(match.end);
     }
     if (foundListItem && fenceCharacter == 0) {
+      inlineBlockStarts.add(lineStart);
       listContentIndents.add(listIndent);
+    } else if (fenceCharacter == 0 && headingStart.hasMatch(content)) {
+      inlineBlockStarts.add(lineStart);
     }
 
     if (fenceCharacter != 0 && quoteDepth < fenceQuoteDepth) {
@@ -274,7 +279,10 @@ String _withoutMarkdownCode(String source) {
   ).allMatches(paragraphSource).toList();
   var paragraphIndex = 0;
   var paragraphBreakIndex = 0;
+  var inlineBlockIndex = 0;
+  var inlineBlockStartIndex = 0;
   final paragraphForRun = <int>[];
+  final inlineBlockForRun = <int>[];
   for (final run in runs) {
     while (paragraphBreakIndex < paragraphBreaks.length &&
         run.start >= paragraphBreaks[paragraphBreakIndex].end) {
@@ -282,6 +290,12 @@ String _withoutMarkdownCode(String source) {
       paragraphBreakIndex++;
     }
     paragraphForRun.add(paragraphIndex);
+    while (inlineBlockStartIndex < inlineBlockStarts.length &&
+        run.start >= inlineBlockStarts[inlineBlockStartIndex]) {
+      inlineBlockIndex++;
+      inlineBlockStartIndex++;
+    }
+    inlineBlockForRun.add(inlineBlockIndex);
   }
   final runIndicesByLength = <int, List<int>>{};
   for (var i = 0; i < runs.length; i++) {
@@ -321,7 +335,8 @@ String _withoutMarkdownCode(String source) {
 
     final closingRunIndex = nextRunOfLength(openingLength, runIndex);
     if (closingRunIndex == -1 ||
-        paragraphForRun[closingRunIndex] != paragraphForRun[runIndex]) {
+        paragraphForRun[closingRunIndex] != paragraphForRun[runIndex] ||
+        inlineBlockForRun[closingRunIndex] != inlineBlockForRun[runIndex]) {
       runIndex++;
       continue;
     }
