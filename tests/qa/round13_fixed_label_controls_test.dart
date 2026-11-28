@@ -39,7 +39,7 @@ void main() {
     final theme = ThemeData(
       brightness: brightness,
       fontFamily: 'Roboto',
-      fontFamilyFallback: const ['Noto Sans Symbols'],
+      fontFamilyFallback: const ['Stroom QA Symbols'],
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.blue,
@@ -382,9 +382,9 @@ Future<void> _loadRobotoTestFont() async {
       '$flutterRoot/bin/cache/dart-sdk/bin/resources/devtools/assets/fonts/MaterialIcons-Regular.otf',
     ),
     (
-      'Noto Sans Symbols',
-      '/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf',
-      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+      'Stroom QA Symbols',
+      'docs/ui-constrained-text-qa/r13_fixed_label_controls/fonts/StroomQASymbols-Arrow.ttf',
+      'docs/ui-constrained-text-qa/r13_fixed_label_controls/fonts/StroomQASymbols-Arrow.ttf',
     ),
   ]) {
     final path = File(font.$2).existsSync() ? font.$2 : font.$3;
