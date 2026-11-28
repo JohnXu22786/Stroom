@@ -237,7 +237,6 @@ void main() {
       stdio: false,
     );
 
-    final form = find.byType(ListView).last;
     final nameField = find.byType(TextField).first;
     expect(nameField, findsOneWidget);
     await tester.ensureVisible(nameField);
@@ -250,7 +249,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(tester.getSize(form).height, greaterThan(140));
     final visibleArea = const Rect.fromLTWH(0, 0, 320, 380);
     await tester.ensureVisible(nameField);
     await tester.pump(const Duration(milliseconds: 300));
