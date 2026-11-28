@@ -77,6 +77,13 @@ final Set<String> _textExtensions = {
   'hcl',
 };
 
+final Set<String> _textFileNames = {
+  '.env',
+  '.gitignore',
+  'dockerfile',
+  'makefile',
+};
+
 final Set<String> _videoExtensions = {
   'mp4',
   'mkv',
@@ -146,6 +153,9 @@ String _textManifestFileName(String filePath) {
 /// instead of treating their extensions as a media kind.
 Future<FileOpenKind> fileOpenKind(String filePath, {bool? isWeb}) async {
   final isWebPlatform = isWeb ?? kIsWeb;
+  if (_textFileNames.contains(p.basename(filePath).toLowerCase())) {
+    return FileOpenKind.text;
+  }
   final ext = p.extension(filePath).replaceAll('.', '').toLowerCase();
   if (_textExtensions.contains(ext)) return FileOpenKind.text;
   if (const {'mov', 'flv', 'avi', 'mpeg', 'mpg'}.contains(ext)) {

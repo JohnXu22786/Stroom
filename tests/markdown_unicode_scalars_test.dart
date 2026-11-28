@@ -23,6 +23,28 @@ void main() {
     );
   });
 
+  test('Unicode footnotes follow first-reference order', () {
+    final html = markdown.markdownToHtml(
+      '[^café] and [^äther]\n\n'
+      '[^Äther]: Äther note\n\n'
+      '[^café]: café note',
+      extensionSet: markdown.ExtensionSet.gitHubFlavored,
+    );
+
+    expect(_footnoteIds(html), ['fn-caf%C3%A9', 'fn-%C3%84ther']);
+  });
+
+  test('ASCII footnotes follow first-reference order', () {
+    final html = markdown.markdownToHtml(
+      '[^second] and [^first]\n\n'
+      '[^first]: first note\n\n'
+      '[^second]: second note',
+      extensionSet: markdown.ExtensionSet.gitHubFlavored,
+    );
+
+    expect(_footnoteIds(html), ['fn-second', 'fn-first']);
+  });
+
   test('numeric references replace surrogate code points only', () {
     expect(
       markdown.markdownToHtml('&#55296; &#xDFFF; &#1; &#128512; &#x1F600;'),
@@ -130,6 +152,55 @@ void main() {
     );
   });
 
+  test('bare reference destinations reject invalid unescaped characters', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target<part>'),
+      '<p>[text][foo]</p>\n<p>[foo]: target<part></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target>part'),
+      '<p>[text][foo]</p>\n<p>[foo]: target&gt;part</p>\n',
+    );
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: target\tpart'),
+      '<p>[text][foo]</p>\n<p>[foo]: target\tpart</p>\n',
+    );
+  });
+
+  test('bare reference destinations reject unescaped ASCII controls', () {
+    for (final control in ['\u0000', '\u000b']) {
+      expect(
+        markdown.markdownToHtml(
+          '[text][foo]\n\n[foo]: target${control}part',
+        ),
+        contains('<p>[text][foo]</p>'),
+      );
+    }
+  });
+
+  test(
+    'bare reference destinations accept escapes and balanced parentheses',
+    () {
+      expect(
+        markdown.markdownToHtml(
+          '[text][escaped]\n\n[escaped]: target\\<part\\>',
+        ),
+        '<p><a href="target%3Cpart%3E">text</a></p>\n',
+      );
+      expect(
+        markdown.markdownToHtml('[text][balanced]\n\n[balanced]: target(part)'),
+        '<p><a href="target(part)">text</a></p>\n',
+      );
+    },
+  );
+
+  test('bracketed reference destinations remain valid', () {
+    expect(
+      markdown.markdownToHtml('[text][foo]\n\n[foo]: <target>'),
+      '<p><a href="target">text</a></p>\n',
+    );
+  });
+
   test('a reference title ending in an escape stays literal', () {
     expect(
       markdown.markdownToHtml(r'[foo]: bar "baz\'),
@@ -137,3 +208,8 @@ void main() {
     );
   });
 }
+
+List<String> _footnoteIds(String html) => RegExp(r'<li id="(fn-[^"]+)">')
+    .allMatches(html)
+    .map((match) => match.group(1)!)
+    .toList();

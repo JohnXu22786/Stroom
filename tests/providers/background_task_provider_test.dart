@@ -29454,5 +29454,64 @@ void _defineSynthesisPersistenceTests() {
       ]);
       expect(await corruptRowsFile().exists(), isFalse);
     });
+
+    test('interrupted running tasks are durably failed on restore', () async {
+      final completedAt = DateTime.utc(2025, 1, 2).toIso8601String();
+      await tasksFile().parent.create(recursive: true);
+      await tasksFile().writeAsString(
+        jsonEncode([
+          _synthesisTaskRow('interrupted', status: 'running'),
+          {
+            ..._synthesisTaskRow('completed', status: 'completed'),
+            'completedAt': completedAt,
+          },
+          {
+            ..._synthesisTaskRow(
+              'failed',
+              status: 'failed',
+              error: 'old error',
+            ),
+            'completedAt': completedAt,
+          },
+        ]),
+      );
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(taskListProvider.notifier);
+      await notifier.restoreFromPersistence();
+
+      final restored = container.read(taskListProvider);
+      final interrupted = restored.firstWhere(
+        (task) => task.id == 'interrupted',
+      );
+      expect(interrupted.status, TaskStatus.failed);
+      expect(interrupted.error, '应用重启，已中断');
+      expect(interrupted.completedAt, isNotNull);
+
+      final durableRows =
+          jsonDecode(await tasksFile().readAsString()) as List<dynamic>;
+      final durableInterrupted = durableRows.firstWhere(
+        (row) => (row as Map<String, dynamic>)['id'] == 'interrupted',
+      ) as Map<String, dynamic>;
+      expect(durableInterrupted['status'], TaskStatus.failed.name);
+      expect(durableInterrupted['error'], '应用重启，已中断');
+      expect(durableInterrupted['completedAt'], isNotNull);
+
+      for (final id in ['completed', 'failed']) {
+        final inMemory = restored.firstWhere((task) => task.id == id);
+        final durable = durableRows.firstWhere(
+          (row) => (row as Map<String, dynamic>)['id'] == id,
+        ) as Map<String, dynamic>;
+        expect(
+          inMemory.status,
+          id == 'completed' ? TaskStatus.completed : TaskStatus.failed,
+        );
+        expect(inMemory.error, id == 'failed' ? 'old error' : isNull);
+        expect(durable['status'], inMemory.status.name);
+        expect(durable['error'], inMemory.error);
+        expect(durable['completedAt'], completedAt);
+      }
+    });
   });
 }
