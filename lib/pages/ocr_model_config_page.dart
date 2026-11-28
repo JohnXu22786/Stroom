@@ -776,24 +776,24 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 key: const Key('ocr_model_request_size_budget_mib'),
                 controller: _requestSizeBudgetController,
                 statesController: _requestSizeHintStates,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                label: ConstrainedText(
-                  AppLocalizations.of(context)!.ocrRequestSizeOverride,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
+                decoration: InputDecoration(
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hint: ExcludeSemantics(
                     child: ConstrainedInputHint(
                       AppLocalizations.of(context)!.ocrInheritProvider,
                       statesController: _requestSizeHintStates,
                     ),
                   ),
-                suffixText: 'MiB',
-                border: OutlineInputBorder(),
-              ),
+                  suffixText: 'MiB',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -997,7 +997,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                         param.options.isNotEmpty,
                                     _customParamValueFieldRevisions[i] ?? 0,
                                   )),
-                                  initialValue: _effectiveCustomParamValue(param),
+                                  initialValue:
+                                      _effectiveCustomParamValue(param),
                                   minLines: 4,
                                   maxLines: 8,
                                   style: const TextStyle(

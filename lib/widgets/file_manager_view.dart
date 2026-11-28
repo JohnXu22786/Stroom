@@ -2484,15 +2484,15 @@ class _FileManagerViewState<T extends FileRecord>
             key: const Key('fm_create_folder_input'),
             controller: _folderNameController,
             statesController: _folderNameHintStates,
-          decoration: InputDecoration(
-            hint: ExcludeSemantics(
-              child: ConstrainedInputHint(
-                AppLocalizations.of(context)!.fileManagerFolderNameHint,
-                statesController: _folderNameHintStates,
+            decoration: InputDecoration(
+              hint: ExcludeSemantics(
+                child: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.fileManagerFolderNameHint,
+                  statesController: _folderNameHintStates,
+                ),
               ),
+              border: OutlineInputBorder(),
             ),
-            border: OutlineInputBorder(),
-          ),
           ),
         ),
         actions: [
@@ -2609,15 +2609,15 @@ class _FileManagerViewState<T extends FileRecord>
             key: const Key('fm_rename_folder_input'),
             controller: _renameController,
             statesController: _renameHintStates,
-          decoration: InputDecoration(
-            hint: ExcludeSemantics(
-              child: ConstrainedInputHint(
-                AppLocalizations.of(context)!.fileManagerNewNameHint,
-                statesController: _renameHintStates,
+            decoration: InputDecoration(
+              hint: ExcludeSemantics(
+                child: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.fileManagerNewNameHint,
+                  statesController: _renameHintStates,
+                ),
               ),
+              border: OutlineInputBorder(),
             ),
-            border: OutlineInputBorder(),
-          ),
             autofocus: true,
           ),
         ),

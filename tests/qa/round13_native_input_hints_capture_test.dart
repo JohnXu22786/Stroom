@@ -24,7 +24,8 @@ void main() {
       final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
       await (FontLoader(
         family,
-      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
     }
   });
 
@@ -49,15 +50,14 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           debugShowCheckedModeBanner: false,
-          theme:
-              (darkTheme
-                      ? ThemeData.dark(useMaterial3: true)
-                      : ThemeData.light(useMaterial3: true))
-                  .copyWith(
-                    dialogTheme: const DialogThemeData(
-                      constraints: BoxConstraints(maxWidth: 340),
-                    ),
-                  ),
+          theme: (darkTheme
+                  ? ThemeData.dark(useMaterial3: true)
+                  : ThemeData.light(useMaterial3: true))
+              .copyWith(
+            dialogTheme: const DialogThemeData(
+              constraints: BoxConstraints(maxWidth: 340),
+            ),
+          ),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
@@ -176,7 +176,8 @@ void main() {
       size: const Size(1200, 800),
       locale: const Locale('en', 'US'),
       textScale: 1,
-      screenshot: '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-fitting-en-1200x800-scale1-light.png',
+      screenshot:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-fitting-en-1200x800-scale1-light.png',
     );
     for (final hint in tester.widgetList<ConstrainedInputHint>(
       find.byType(ConstrainedInputHint),
@@ -204,7 +205,8 @@ void main() {
       size: const Size(320, 640),
       locale: const Locale('fr', 'FR'),
       textScale: 2,
-      screenshot: '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-clipped-fr-320x640-scale2-light.png',
+      screenshot:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-clipped-fr-320x640-scale2-light.png',
     );
     final urlHint = AppLocalizations.of(tester.element(find.byType(Dialog)))!
         .providerApiUrlHint;
@@ -237,11 +239,13 @@ void main() {
         locale: const Locale('fr', 'FR'),
         textScale: 2,
         captureMotion: true,
-        screenshot: '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-clipped-fr-320x640-scale2-light.png',
+        screenshot:
+            '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-hints-clipped-fr-320x640-scale2-light.png',
       );
       final motionHint = AppLocalizations.of(
         tester.element(find.byType(Dialog)),
-      )!.providerApiUrlHint;
+      )!
+          .providerApiUrlHint;
       final motionHintFinder = find.byWidgetPredicate(
         (widget) => widget is ConstrainedInputHint && widget.data == motionHint,
       );
@@ -303,7 +307,8 @@ void main() {
       textScale: 2,
       providerType: 'ocr',
       checkOcrRequestSize: true,
-      screenshot: '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-ocr-budget-de-320x640-scale2-light.png',
+      screenshot:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-ocr-budget-de-320x640-scale2-light.png',
     );
   });
 
@@ -320,7 +325,8 @@ void main() {
       providerType: 'ocr',
       checkOcrRequestSize: true,
       darkTheme: true,
-      screenshot: '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-ocr-budget-de-320x640-scale2-dark.png',
+      screenshot:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-ocr-budget-de-320x640-scale2-dark.png',
     );
   });
 }

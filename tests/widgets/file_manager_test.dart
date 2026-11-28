@@ -2713,9 +2713,14 @@ void main() {
         await tester.enterText(field, 'new file name');
         expect(input.controller!.text, 'new file name');
         expect(
-          tester.widget<EditableText>(
-            find.descendant(of: field, matching: find.byType(EditableText)),
-          ).controller.value.selection.baseOffset,
+          tester
+              .widget<EditableText>(
+                find.descendant(of: field, matching: find.byType(EditableText)),
+              )
+              .controller
+              .value
+              .selection
+              .baseOffset,
           'new file name'.length,
         );
       });

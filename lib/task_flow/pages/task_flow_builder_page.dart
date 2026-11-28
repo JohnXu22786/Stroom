@@ -522,31 +522,31 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           Semantics(
             hint: AppLocalizations.of(context)!.taskFlowUiNameHint,
             child: TextField(
-            controller: _nameController,
-            statesController: _nameHintStates,
-            enabled: !_isSaving,
-            decoration: InputDecoration(
-              hint: ExcludeSemantics(
-                child: ConstrainedInputHint(
-                  AppLocalizations.of(context)!.taskFlowUiNameHint,
-                  statesController: _nameHintStates,
+              controller: _nameController,
+              statesController: _nameHintStates,
+              enabled: !_isSaving,
+              decoration: InputDecoration(
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.taskFlowUiNameHint,
+                    statesController: _nameHintStates,
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: cs.surfaceContainerLow,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
               ),
-              filled: true,
-              fillColor: cs.surfaceContainerLow,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-            ),
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1028,29 +1028,29 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: Semantics(
                     hint: AppLocalizations.of(context)!.taskFlowUiUrlHint,
                     child: TextField(
-                    controller: entry.urlController,
-                    statesController: entry.urlHintStates,
-                    decoration: InputDecoration(
-                      hint: ExcludeSemantics(
-                        child: ConstrainedInputHint(
-                          AppLocalizations.of(context)!.taskFlowUiUrlHint,
-                          statesController: entry.urlHintStates,
+                      controller: entry.urlController,
+                      statesController: entry.urlHintStates,
+                      decoration: InputDecoration(
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.taskFlowUiUrlHint,
+                            statesController: entry.urlHintStates,
+                          ),
+                        ),
+                        prefixIcon: const Icon(Icons.link, size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        filled: true,
+                        fillColor: cs.surface,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
                       ),
-                      prefixIcon: const Icon(Icons.link, size: 20),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      filled: true,
-                      fillColor: cs.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) => setState(() {}),
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) => setState(() {}),
                     ),
                   ),
                 ),

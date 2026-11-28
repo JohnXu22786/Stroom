@@ -612,7 +612,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
 }
 
 class _ConstrainedProviderHintField extends StatefulWidget {
-  const _ConstrainedProviderHintField({required this.hint, required this.builder});
+  const _ConstrainedProviderHintField(
+      {required this.hint, required this.builder});
 
   final String hint;
   final Widget Function(BuildContext, MaterialStatesController) builder;
