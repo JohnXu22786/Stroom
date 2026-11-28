@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
@@ -404,9 +404,17 @@ class TextManifest {
         final filePath = await writeText(record.storagePath, text);
         try {
           await addRecord(record);
-        } catch (_) {
-          await deleteFileIfUnreferenced(record.hash, record.storagePath);
-          rethrow;
+        } catch (insertionError, insertionStackTrace) {
+          try {
+            await deleteFileIfUnreferenced(record.hash, record.storagePath);
+          } catch (cleanupError, cleanupStackTrace) {
+            debugPrint(
+              'TextManifest.saveTextRecord cleanup failed after manifest '
+              'insertion failure ($insertionError): $cleanupError\n'
+              '$cleanupStackTrace',
+            );
+          }
+          Error.throwWithStackTrace(insertionError, insertionStackTrace);
         }
         return filePath;
       });
