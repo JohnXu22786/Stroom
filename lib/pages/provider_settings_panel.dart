@@ -358,6 +358,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
         () => MaterialStatesController(),
       );
 
+  void _disposeReasoningHintStates(ReasoningParam param) {
+    final valueStates = _reasoningValueHintStates.remove(param);
+    valueStates?.$1.dispose();
+    valueStates?.$2.dispose();
+    _reasoningNameHintStates.remove(param)?.dispose();
+    _reasoningJsonHintStates.remove(param)?.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;

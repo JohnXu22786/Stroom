@@ -192,6 +192,59 @@ void main() {
       },
     );
 
+    testWidgets('removing a reasoning parameter disposes hint controllers', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        selectParameterTabProgrammatically: true,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              type: 'json',
+              options: [''],
+            ),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      final nameHint = strings.providerParamNameHint('reasoning_effort');
+      final jsonHint = strings.providerOptionExampleHint(
+        '{"thinking": {"budget": 1024}}',
+      );
+      final nameHintWidget = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == nameHint,
+      );
+      final jsonHintWidget = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+      );
+      final nameStates =
+          tester.widget<ConstrainedInputHint>(nameHintWidget).statesController;
+      final jsonStates =
+          tester.widget<ConstrainedInputHint>(jsonHintWidget).statesController;
+
+      final removeButton = tester.widget<IconButton>(find.ancestor(
+        of: find.byIcon(Icons.delete),
+        matching: find.byType(IconButton),
+      ));
+      removeButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(() => nameStates.addListener(() {}), throwsFlutterError);
+      expect(() => jsonStates.addListener(() {}), throwsFlutterError);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('reasoning option values use measured native-field hints', (
       tester,
     ) async {

@@ -93,7 +93,8 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
 
   void _removeReasoningParam(int index) {
     setState(() {
-      _reasoningParams.removeAt(index);
+      final removed = _reasoningParams.removeAt(index);
+      _disposeReasoningHintStates(removed);
     });
   }
 
