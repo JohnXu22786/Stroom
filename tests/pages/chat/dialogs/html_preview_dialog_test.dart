@@ -109,7 +109,8 @@ class _PreviewPlatform extends InAppWebViewPlatform {
   @override
   PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
     PlatformInAppWebViewWidgetCreationParams params,
-  ) => webView = _PreviewWebView(params);
+  ) =>
+      webView = _PreviewWebView(params);
 }
 
 class _PreviewWebView extends PlatformInAppWebViewWidget {
@@ -130,9 +131,9 @@ class _PreviewWebView extends PlatformInAppWebViewWidget {
 
 class _PreviewController extends PlatformInAppWebViewController {
   _PreviewController()
-    : super.implementation(
-        const PlatformInAppWebViewControllerCreationParams(id: 0),
-      );
+      : super.implementation(
+          const PlatformInAppWebViewControllerCreationParams(id: 0),
+        );
 
   @override
   Future<void> loadUrl({
@@ -145,7 +146,8 @@ class _PreviewController extends PlatformInAppWebViewController {
   Future<dynamic> evaluateJavascript({
     required String source,
     ContentWorld? contentWorld,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   void addJavaScriptHandler({
