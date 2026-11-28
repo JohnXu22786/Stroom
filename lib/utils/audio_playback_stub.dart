@@ -15,7 +15,7 @@ import 'tts_stream_audio_source.dart';
 /// 内部使用 just_audio 的 AudioPlayer
 class AudioPlayerAdapter {
   AudioPlayerAdapter({AudioPlayer Function()? createPlayer})
-      : _createPlayer = createPlayer ?? AudioPlayer.new;
+    : _createPlayer = createPlayer ?? AudioPlayer.new;
 
   final AudioPlayer Function() _createPlayer;
   AudioPlayer? _player;
@@ -31,6 +31,7 @@ class AudioPlayerAdapter {
   StreamSubscription<PlayerState>? _stateSub;
   Completer<void>? _streamPlaybackDone;
   int _streamPlaybackGeneration = 0;
+  int _playerLifecycleGeneration = 0;
   int? _streamSourceSetupGeneration;
   Future<void>? _playerDisposal;
 
@@ -58,10 +59,13 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
+    final lifecycleGeneration = _playerLifecycleGeneration;
     _streamPlaybackGeneration++;
     _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
     await _disposePlayer();
+    if (lifecycleGeneration != _playerLifecycleGeneration) return;
+
     _player = _createPlayer();
     _setupListeners();
 
@@ -161,6 +165,7 @@ class AudioPlayerAdapter {
 
   /// 释放资源
   Future<void> dispose() async {
+    _playerLifecycleGeneration++;
     _streamPlaybackGeneration++;
     _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
