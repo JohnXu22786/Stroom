@@ -5,6 +5,44 @@ void chatServiceRequestGroup3() {
   // From chat_service_param_fix_test.dart
   // ====================================================================
 
+  test('empty model custom parameter names are excluded from API params',
+      () async {
+    final providerConfig = ProviderConfigItem(
+      providerName: 'Test provider',
+      customParams: [
+        CustomParam(paramName: 'inherited', defaultValue: 'provider-value'),
+        CustomParam(paramName: 'overridden', defaultValue: 'provider-value'),
+      ],
+    );
+    final modelConfig = ModelConfig(
+      modelId: 'test-model',
+      name: 'Test',
+      typeConfig: {'context': 4096},
+      customParams: [
+        CustomParam(paramName: '', defaultValue: 'must-not-be-sent'),
+        CustomParam(paramName: 'overridden', defaultValue: 'model-value'),
+        CustomParam(paramName: 'model_only', defaultValue: 'model-value'),
+      ],
+    );
+    final provider = _CapturingProvider();
+    final service = ChatService(
+      provider: provider,
+      modelConfig: modelConfig,
+      providerConfig: providerConfig,
+    );
+
+    service.sendStream('Hi', history: []).listen((_) {});
+    await Future<void>.delayed(Duration.zero);
+
+    final params = provider.capturedExtraParams;
+    expect(params, isNotNull);
+    expect(params!.containsKey(''), isFalse,
+        reason: 'blank editor rows must not create an empty API key');
+    expect(params['inherited'], 'provider-value');
+    expect(params['overridden'], 'model-value');
+    expect(params['model_only'], 'model-value');
+  });
+
   group('ChatService._buildExtraParams - JSON type handling', () {
     test('JSON type model-level custom param is properly parsed', () async {
       final modelConfig = ModelConfig(
