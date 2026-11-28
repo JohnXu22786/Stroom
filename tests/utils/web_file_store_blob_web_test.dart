@@ -60,13 +60,30 @@ void main() {
 
       try {
         expect(await WebFileStore.migrateAttachmentValuesToBlobs(), isTrue);
+        expect(
+          await WebFileStore.readPrefix(attachmentKey, maxBytes: 32),
+          orderedEquals(payload.take(32)),
+        );
+        var blobBytesMaterialized = false;
+        WebFileStore.readBlobOverrideForTesting = (_) async {
+          blobBytesMaterialized = true;
+          return payload;
+        };
         await expectLater(
           WebFileStore.read(
             attachmentKey,
             maxBytes: maxAttachmentBytes,
           ),
-          throwsA(isA<WebFileStoreReadLimitExceededException>()),
+          throwsA(
+            isA<WebFileStoreReadLimitExceededException>().having(
+              (error) => error.headerBytes,
+              'bounded header bytes',
+              orderedEquals(payload.take(32)),
+            ),
+          ),
         );
+        expect(blobBytesMaterialized, isFalse);
+        WebFileStore.readBlobOverrideForTesting = null;
         expect(
           await WebFileStore.read(attachmentKey, maxBytes: payload.length),
           orderedEquals(payload),

@@ -26,6 +26,13 @@ Future<Uint8List?> readBlob(Object? value) async {
   return Uint8List.view(buffer.toDart);
 }
 
+Future<Uint8List?> readBlobPrefix(Object? value, int maxBytes) async {
+  final blob = _blobFromStoredValue(value);
+  if (blob == null) return null;
+  final buffer = await blob.slice(0, maxBytes).arrayBuffer().toDart;
+  return Uint8List.view(buffer.toDart);
+}
+
 Future<Uint8List?> readBlobCancellable(
   Object? value,
   Future<void> cancellation,
