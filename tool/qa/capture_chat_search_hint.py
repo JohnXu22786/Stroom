@@ -9,7 +9,6 @@ from playwright.sync_api import sync_playwright
 ROOT = Path('docs/ui-constrained-text-qa/chat-search-hint')
 ROOT.mkdir(parents=True, exist_ok=True)
 WEB = Path('/tmp/chat-search-hint-web')
-PORT = 8894
 
 def focused_capture(page, path):
     width = page.viewport_size['width']
@@ -26,7 +25,10 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-server = ThreadingHTTPServer(('127.0.0.1', PORT), lambda *a, **kw: Handler(*a, directory=WEB, **kw))
+server = ThreadingHTTPServer(
+    ('127.0.0.1', 0), lambda *a, **kw: Handler(*a, directory=WEB, **kw)
+)
+PORT = server.server_address[1]
 Thread(target=server.serve_forever, daemon=True).start()
 time.sleep(0.2)
 

@@ -64,7 +64,7 @@ with sync_playwright() as playwright:
         )
         video_page.close()
         video_context.close()
-        preview = OUTPUT / "topic-metadata-reveal-fr-320x640-1x-light.webm"
+        preview = OUTPUT / "topic-metadata-reveal-fr-320x640-2x-light.webm"
         subprocess.run(
             [
                 "ffmpeg",
