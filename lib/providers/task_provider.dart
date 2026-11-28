@@ -385,7 +385,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final newState = [...state];
     newState[index] = newState[index].copyWith(
       status: TaskStatus.paused,
-      completedAt: null,
+      clearCompletedAt: true,
     );
     state = newState;
     _persistTasks();
@@ -404,7 +404,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       modelConfig: modelConfig,
       status: TaskStatus.running,
       error: null,
-      completedAt: null,
+      clearCompletedAt: true,
     );
     final newState = [...state];
     newState[index] = updated;
@@ -426,7 +426,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final updated = oldTask.copyWith(
       status: TaskStatus.running,
       error: null,
-      completedAt: null,
+      clearCompletedAt: true,
     );
     final newState = [...state];
     newState[index] = updated;
