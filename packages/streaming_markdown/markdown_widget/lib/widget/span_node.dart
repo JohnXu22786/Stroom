@@ -4,17 +4,15 @@ import 'package:flutter/material.dart';
 abstract class SpanNode {
   InlineSpan build();
 
-  SpanNode? _parent;
+  SpanNode? parent;
 
   TextStyle? style;
 
-  TextStyle? get parentStyle => _parent?.style;
-
-  SpanNode? get parent => _parent;
+  TextStyle? get parentStyle => parent?.style;
 
   ///use [_acceptParent] to accept a parent
   void _acceptParent(SpanNode node) {
-    _parent = node;
+    parent = node;
     onAccepted(node);
   }
 
