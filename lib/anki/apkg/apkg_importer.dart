@@ -196,8 +196,11 @@ class AnkiApkgImporter {
         final tgtModels = jsonDecode(
           tgtCol.first['models'] as String,
         ) as Map<String, dynamic>;
+        final srcDeckConfigs = _decodeOptionalJsonMap(srcCol.first['dconf']);
+        final tgtDeckConfigs = _decodeOptionalJsonMap(tgtCol.first['dconf']);
 
         final deckMap = <int, int>{}; // old ID → new ID
+        final importedDeckIds = <int>{};
         for (final entry in srcDecks.entries) {
           final oldId = int.parse(entry.key);
           final deckData = entry.value as Map<String, dynamic>;
@@ -219,7 +222,94 @@ class AnkiApkgImporter {
           deckData['mod'] = nowSec;
           deckData['usn'] = -1;
           tgtDecks[id.toString()] = deckData;
+          importedDeckIds.add(oldId);
           decksImported++;
+        }
+
+        // Import only presets referenced by decks that were added above. A
+        // same-name deck keeps its existing target preset along with its ID.
+        final neededDeckConfigIds = <int>{};
+        for (final entry in srcDecks.entries) {
+          final sourceDeckId = int.parse(entry.key);
+          if (!importedDeckIds.contains(sourceDeckId)) continue;
+          final deck = entry.value as Map;
+          final configId = deck['conf'];
+          final sourceConfigId = configId is int ? configId : 1;
+          if (srcDeckConfigs[sourceConfigId.toString()] is Map) {
+            neededDeckConfigIds.add(sourceConfigId);
+          }
+        }
+        if (neededDeckConfigIds.isNotEmpty) {
+          final localDeckConfigRows = await txn.query('deck_config');
+          final localDeckConfigIds = <int>{};
+          for (final row in localDeckConfigRows) {
+            final id = (row['id'] as num).toInt();
+            localDeckConfigIds.add(id);
+            tgtDeckConfigs.putIfAbsent(id.toString(), () {
+              final config = _decodeOptionalJsonMap(row['config']);
+              return {
+                ...config,
+                'id': id,
+                'name': row['name'],
+              };
+            });
+          }
+
+          final deckConfigMap = <int, int>{};
+          for (final sourceConfigId in neededDeckConfigIds) {
+            final sourceConfig = srcDeckConfigs[sourceConfigId.toString()];
+            if (sourceConfig is! Map) continue;
+            final config = Map<String, dynamic>.from(sourceConfig);
+            config['id'] = sourceConfigId;
+            final existingConfig = tgtDeckConfigs[sourceConfigId.toString()];
+            var targetConfigId = sourceConfigId;
+            if (existingConfig != null &&
+                !_sameDeckConfigDefinition(
+                  config,
+                  Map<String, dynamic>.from(existingConfig as Map),
+                )) {
+              do {
+                targetConfigId = ++newId;
+              } while (tgtDeckConfigs.containsKey(targetConfigId.toString()));
+            }
+            deckConfigMap[sourceConfigId] = targetConfigId;
+            if (existingConfig != null &&
+                targetConfigId == sourceConfigId &&
+                localDeckConfigIds.contains(sourceConfigId)) {
+              continue;
+            }
+
+            final targetConfig = Map<String, dynamic>.from(config)
+              ..['id'] = targetConfigId;
+            tgtDeckConfigs[targetConfigId.toString()] = targetConfig;
+            final storedConfig = Map<String, dynamic>.from(targetConfig)
+              ..remove('id')
+              ..remove('name');
+            await txn.insert(
+              'deck_config',
+              {
+                'id': targetConfigId,
+                'name': targetConfig['name']?.toString() ?? 'Default',
+                'mtime_secs': nowSec,
+                'usn': -1,
+                'config': jsonEncode(storedConfig),
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            localDeckConfigIds.add(targetConfigId);
+          }
+
+          for (final sourceDeckId in importedDeckIds) {
+            final deck = srcDecks[sourceDeckId.toString()] as Map;
+            final sourceConfigId =
+                deck['conf'] is int ? deck['conf'] as int : 1;
+            final targetConfigId = deckConfigMap[sourceConfigId];
+            if (targetConfigId != null) {
+              final targetDeckId = deckMap[sourceDeckId]!;
+              (tgtDecks[targetDeckId.toString()] as Map)['conf'] =
+                  targetConfigId;
+            }
+          }
         }
 
         // Preserve package note type definitions, remapping IDs that collide
@@ -257,6 +347,8 @@ class AnkiApkgImporter {
             {
               'decks': jsonEncode(tgtDecks),
               'models': jsonEncode(tgtModels),
+              if (tgtCol.first.containsKey('dconf'))
+                'dconf': jsonEncode(tgtDeckConfigs),
               'mod': nowSec,
               'dty': 1,
             },
@@ -923,6 +1015,30 @@ class AnkiApkgImporter {
       ..remove('mod')
       ..remove('usn');
     return _sameJsonValue(leftDefinition, rightDefinition);
+  }
+
+  static bool _sameDeckConfigDefinition(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final leftDefinition = Map<String, dynamic>.from(left)
+      ..remove('id')
+      ..remove('name')
+      ..remove('mod')
+      ..remove('usn');
+    final rightDefinition = Map<String, dynamic>.from(right)
+      ..remove('id')
+      ..remove('name')
+      ..remove('mod')
+      ..remove('usn');
+    return _sameJsonValue(leftDefinition, rightDefinition);
+  }
+
+  static Map<String, dynamic> _decodeOptionalJsonMap(Object? value) {
+    if (value == null) return {};
+    final decoded = jsonDecode(value as String);
+    if (decoded is! Map) return {};
+    return Map<String, dynamic>.from(decoded);
   }
 
   static bool _sameReview(
