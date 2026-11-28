@@ -110,6 +110,7 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
 
     def test_qa_capture_scripts_use_transitive_build_dependency_check(self):
         script_calls = {
+            ("tools/qa", "capture_vertical_reasoning_param_header.py"): "entrypoint",
             ("tool/qa", "capture_anki_delete_confirmation.py"): "capture_entrypoint",
             ("tool/qa", "capture_file_info_label.py"): "capture_entrypoint",
             ("tool/qa", "capture_vertical_editor_gutter_scale.py"): "entrypoint",
@@ -169,6 +170,11 @@ class CaptureBuildDependenciesTest(unittest.TestCase):
     def test_vertical_provider_config_header_capture_tracks_transitive_source(self):
         self._assert_newer_transitive_source_requires_rebuild(
             "tool/qa/vertical_provider_config_header_capture.dart"
+        )
+
+    def test_vertical_reasoning_param_header_capture_tracks_transitive_source(self):
+        self._assert_newer_transitive_source_requires_rebuild(
+            "tools/qa/vertical_reasoning_param_header_capture.dart"
         )
 
     def test_newer_conditional_production_import_requires_rebuild(self):
