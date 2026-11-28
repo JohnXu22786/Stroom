@@ -146,11 +146,15 @@ class Document {
       // Sort footnotes by appearing order.
       final ordinal = {
         for (var i = 0; i < footnoteLabels.length; i++)
-          'fn-${footnoteLabels[i]}': i,
+          Uri.encodeComponent('fn-${footnoteLabels[i]}'): i,
       };
       footnotes.sort((l, r) {
-        final idl = l.attributes['id']?.toLowerCase() ?? '';
-        final idr = r.attributes['id']?.toLowerCase() ?? '';
+        final idl = Uri.encodeComponent(
+          Uri.decodeComponent(l.attributes['id'] ?? '').toLowerCase(),
+        );
+        final idr = Uri.encodeComponent(
+          Uri.decodeComponent(r.attributes['id'] ?? '').toLowerCase(),
+        );
         return (ordinal[idl] ?? 0) - (ordinal[idr] ?? 0);
       });
       final list = Element('ol', footnotes);
