@@ -29,6 +29,8 @@ import 'package:stroom/widgets/constrained_text.dart';
 catcatch.CatCatchTask _createCompletedTask({
   required String id,
   String? downloadedFilePath,
+  DateTime? createdAt,
+  DateTime? statusChangedAt,
 }) {
   return catcatch.CatCatchTask(
     id: id,
@@ -36,7 +38,8 @@ catcatch.CatCatchTask _createCompletedTask({
     expectedDurationSec: 120,
     title: '测试视频 $id',
     status: catcatch.TaskStatus.completed,
-    createdAt: DateTime(2025, 1, 1),
+    createdAt: createdAt ?? DateTime(2025, 1, 1),
+    statusChangedAt: statusChangedAt,
     completedAt: DateTime(2025, 1, 1).add(const Duration(minutes: 5)),
     downloadedFilePath: downloadedFilePath,
   );
@@ -796,6 +799,31 @@ void main() {
           reason: 'Completed download task should be visible on 全部 tab');
       expect(find.text('运行中 running-1'), findsOneWidget,
           reason: 'Running download task should be visible on 全部 tab');
+    });
+
+    testWidgets('task created after last read shows its unread indicator',
+        (tester) async {
+      final now = DateTime.now();
+      await pumpPage(
+        tester,
+        [
+          _createCompletedTask(
+            id: 'unread-task',
+            createdAt: now.add(const Duration(minutes: 1)),
+            statusChangedAt: now.subtract(const Duration(minutes: 1)),
+          ),
+        ],
+      );
+
+      final taskCard = tester.widget<CatCatchTaskCard>(
+        find.byKey(const ValueKey('unread-task')),
+      );
+      expect(
+        taskCard.isUnread,
+        isTrue,
+        reason:
+            'The task card must render its unread indicator based on either timestamp',
+      );
     });
 
     testWidgets('empty task list shows placeholder', (tester) async {
