@@ -38,6 +38,8 @@ class ModelConfigPage extends ConsumerStatefulWidget {
   )? testAudioRequest;
   @visibleForTesting
   final AudioPlayerAdapter Function()? testAudioPlayerFactory;
+  @visibleForTesting
+  final VoidCallback? testOnAudioResponseHandled;
 
   const ModelConfigPage({
     super.key,
@@ -47,6 +49,7 @@ class ModelConfigPage extends ConsumerStatefulWidget {
     this.initialModel,
     this.testAudioRequest,
     this.testAudioPlayerFactory,
+    this.testOnAudioResponseHandled,
   });
 
   @override
@@ -665,6 +668,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             )
           : await widget.testAudioRequest!(host, body);
       if (!mounted) return;
+      widget.testOnAudioResponseHandled?.call();
 
       // 检查响应 Content-Type，若不是音频则按错误处理
       // 同时检查响应体是否以 { 或 [ 开头（JSON 错误响应）

@@ -10,6 +10,7 @@ import 'package:stroom/pages/model_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/utils/audio_playback.dart';
 
+// Functional suite mapping: feature-ui.
 void main() {
   // ignore: invalid_use_of_visible_for_testing_member
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -28,6 +29,7 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(harness.responseHandled, isFalse);
     expect(harness.playerCreations, 0);
   });
 
@@ -42,6 +44,7 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(harness.responseHandled, isFalse);
     expect(harness.playerCreations, 0);
   });
 
@@ -56,6 +59,7 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(harness.responseHandled, isFalse);
     expect(harness.playerCreations, 0);
   });
 }
@@ -63,6 +67,7 @@ void main() {
 Future<_Harness> _startTestAudio(WidgetTester tester) async {
   final response = Completer<Response<dynamic>>();
   var playerCreations = 0;
+  var responseHandled = false;
   final configState = ProviderEntriesState(
     entries: [
       ProviderEntry(
@@ -106,6 +111,7 @@ Future<_Harness> _startTestAudio(WidgetTester tester) async {
                         playerCreations++;
                         return _FakeAudioPlayerAdapter();
                       },
+                      testOnAudioResponseHandled: () => responseHandled = true,
                     ),
                   ),
                 ),
@@ -142,6 +148,7 @@ Future<_Harness> _startTestAudio(WidgetTester tester) async {
   return _Harness(
     response: response,
     getPlayerCreations: () => playerCreations,
+    getResponseHandled: () => responseHandled,
     disposeRoute: () => tester.pumpWidget(const SizedBox.shrink()),
   );
 }
@@ -149,13 +156,16 @@ Future<_Harness> _startTestAudio(WidgetTester tester) async {
 class _Harness {
   final Completer<Response<dynamic>> response;
   final int Function() getPlayerCreations;
+  final bool Function() getResponseHandled;
   final Future<void> Function() disposeRoute;
 
   int get playerCreations => getPlayerCreations();
+  bool get responseHandled => getResponseHandled();
 
   _Harness({
     required this.response,
     required this.getPlayerCreations,
+    required this.getResponseHandled,
     required this.disposeRoute,
   });
 
