@@ -568,6 +568,33 @@ void main() {
   });
 
   group('GitHub footnote definitions', () {
+    test('keeps backlinks outside a final list', () {
+      for (final marker in ['-', '1.']) {
+        final nodes = m.Document(extensionSet: m.ExtensionSet.gitHubFlavored)
+            .parse('Reference[^note]\n\n[^note]:\n    $marker list item');
+
+        final section = _findElement(nodes, 'section');
+        expect(section, isNotNull);
+        final footnote = (section!.children!.single as m.Element)
+            .children!
+            .single as m.Element;
+        final children = footnote.children!;
+        expect(children, hasLength(2));
+
+        final list = children.first as m.Element;
+        expect(list.tag, marker == '-' ? 'ul' : 'ol');
+        expect(list.children, hasLength(1));
+        expect((list.children!.single as m.Element).tag, 'li');
+
+        final backlinkParagraph = children.last as m.Element;
+        expect(backlinkParagraph.tag, 'p');
+        final backlink = backlinkParagraph.children!.last as m.Element;
+        expect(backlink.tag, 'a');
+        expect(backlink.attributes['class'], 'footnote-backref');
+        expect(backlink.attributes['href'], '#fnref-note');
+      }
+    });
+
     test('appends backlinks after a final self-closing child', () {
       final nodes = m.Document(extensionSet: m.ExtensionSet.gitHubFlavored)
           .parse('Reference[^note]\n\n[^note]: note text\n\n    ---');
