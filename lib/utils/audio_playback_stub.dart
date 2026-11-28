@@ -80,6 +80,10 @@ class AudioPlayerAdapter {
         _stateCtrl.add(null);
       }
     } catch (e) {
+      if (generation != _streamPlaybackGeneration ||
+          !identical(_player, player)) {
+        return;
+      }
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
       rethrow;
     }

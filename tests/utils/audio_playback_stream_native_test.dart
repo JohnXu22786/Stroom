@@ -181,6 +181,46 @@ void main() {
   );
 
   test(
+    'a stale native source failure is ignored after a newer load succeeds',
+    () async {
+      final firstPlayer = _MockAudioPlayer();
+      final latestPlayer = _MockAudioPlayer();
+      final firstSetupStarted = Completer<void>();
+      final firstSetup = Completer<Duration?>();
+      final players = [firstPlayer, latestPlayer];
+      var createdPlayers = 0;
+      for (final player in players) {
+        when(() => player.positionStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => player.durationStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => player.playerStateStream)
+            .thenAnswer((_) => const Stream.empty());
+        when(() => player.dispose()).thenAnswer((_) async {});
+      }
+      when(() => firstPlayer.setAudioSource(any<AudioSource>()))
+          .thenAnswer((_) {
+        firstSetupStarted.complete();
+        return firstSetup.future;
+      });
+      when(() => latestPlayer.setAudioSource(any<AudioSource>()))
+          .thenAnswer((_) async => null);
+
+      final adapter = AudioPlayerAdapter(
+        createPlayer: () => players[createdPlayers++],
+      );
+      addTearDown(adapter.dispose);
+
+      final staleLoad = adapter.load('stale');
+      await firstSetupStarted.future;
+      await adapter.load('latest');
+
+      firstSetup.completeError(StateError('stale source failed'));
+      await expectLater(staleLoad, completes);
+    },
+  );
+
+  test(
     'stopping keeps listeners active for the current native player',
     () async {
       final player = _MockAudioPlayer();
