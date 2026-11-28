@@ -1902,12 +1902,10 @@ void main() {
           ),
         );
         final chunks = chunker.split(wav);
-        final durations = chunks
-            .map((chunk) {
-              final info = parseWavHeader(chunk);
-              return info.totalSamples / info.sampleRate;
-            })
-            .toList();
+        final durations = chunks.map((chunk) {
+          final info = parseWavHeader(chunk);
+          return info.totalSamples / info.sampleRate;
+        }).toList();
 
         expect(chunks.length, greaterThan(1));
         expect(durations.first, closeTo(20.0, 0.01));
