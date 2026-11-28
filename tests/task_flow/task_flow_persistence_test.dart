@@ -103,8 +103,7 @@ void main() {
     final taskFlowsDir = Directory('${tempDir.path}/task_flows');
     await taskFlowsDir.create();
     final persistenceFile = File('${taskFlowsDir.path}/flows.json');
-    const contents =
-        '[{"id":"recoverable","name":"Valid flow"},{"id":12}]';
+    const contents = '[{"id":"recoverable","name":"Valid flow"},{"id":12}]';
     await persistenceFile.writeAsString(contents);
 
     final notifier = TaskFlowNotifier();
