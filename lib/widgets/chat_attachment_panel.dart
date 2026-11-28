@@ -279,12 +279,12 @@ class _FileActionButton extends StatelessWidget {
   });
 
   Widget withWidth(double width) => _FileActionButton(
-    icon: icon,
-    label: label,
-    color: color,
-    onTap: onTap,
-    width: width,
-  );
+        icon: icon,
+        label: label,
+        color: color,
+        onTap: onTap,
+        width: width,
+      );
 
   @override
   Widget build(BuildContext context) {

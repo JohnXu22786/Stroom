@@ -22,7 +22,8 @@ void main() {
       final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
       await (FontLoader(
         family,
-      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
     }
   });
 
