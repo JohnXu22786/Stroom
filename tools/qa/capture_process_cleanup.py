@@ -10,5 +10,7 @@ def cleanup_server(server, server_log, server_log_path):
             server.kill()
             server.wait()
     finally:
-        server_log.close()
-        server_log_path.unlink(missing_ok=True)
+        try:
+            server_log.close()
+        finally:
+            server_log_path.unlink(missing_ok=True)
