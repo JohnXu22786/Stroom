@@ -15,7 +15,7 @@ import 'tts_stream_audio_source.dart';
 /// 内部使用 just_audio 的 AudioPlayer
 class AudioPlayerAdapter {
   AudioPlayerAdapter({AudioPlayer Function()? createPlayer})
-      : _createPlayer = createPlayer ?? AudioPlayer.new;
+    : _createPlayer = createPlayer ?? AudioPlayer.new;
 
   final AudioPlayer Function() _createPlayer;
   AudioPlayer? _player;
@@ -59,19 +59,26 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
+    final generation = ++_streamPlaybackGeneration;
     final lifecycleGeneration = _playerLifecycleGeneration;
-    _streamPlaybackGeneration++;
     _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
     await _disposePlayer();
-    if (lifecycleGeneration != _playerLifecycleGeneration) return;
+    if (generation != _streamPlaybackGeneration ||
+        lifecycleGeneration != _playerLifecycleGeneration) {
+      return;
+    }
 
-    _player = _createPlayer();
-    _setupListeners();
+    final player = _createPlayer();
+    _player = player;
+    _setupListeners(player);
 
     try {
-      await _player!.setAudioSource(AudioSource.uri(audioSourceUri(url)));
-      _stateCtrl.add(null);
+      await player.setAudioSource(AudioSource.uri(audioSourceUri(url)));
+      if (generation == _streamPlaybackGeneration &&
+          identical(_player, player)) {
+        _stateCtrl.add(null);
+      }
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
       rethrow;
@@ -90,7 +97,7 @@ class AudioPlayerAdapter {
     if (generation != _streamPlaybackGeneration) return false;
 
     _player = _createPlayer();
-    _setupListeners();
+    _setupListeners(_player!);
     final source = TtsStreamAudioSource(chunks, contentType: contentType);
     final playbackDone = Completer<void>();
     _streamPlaybackDone = playbackDone;
@@ -180,15 +187,21 @@ class AudioPlayerAdapter {
     _streamPlaybackDone = null;
   }
 
-  void _setupListeners() {
-    _posSub = _player!.positionStream.listen((pos) {
-      _positionCtrl.add(pos);
+  void _setupListeners(AudioPlayer player) {
+    _posSub = player.positionStream.listen((pos) {
+      if (identical(_player, player)) {
+        _positionCtrl.add(pos);
+      }
     });
-    _durSub = _player!.durationStream.listen((dur) {
-      _durationCtrl.add(dur);
+    _durSub = player.durationStream.listen((dur) {
+      if (identical(_player, player)) {
+        _durationCtrl.add(dur);
+      }
     });
-    _stateSub = _player!.playerStateStream.listen((_) {
-      _stateCtrl.add(null);
+    _stateSub = player.playerStateStream.listen((_) {
+      if (identical(_player, player)) {
+        _stateCtrl.add(null);
+      }
     });
   }
 
