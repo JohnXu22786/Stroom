@@ -1025,6 +1025,14 @@ void main() {
     testWidgets('wide screen shows more columns than narrow screen', (
       tester,
     ) async {
+      Set<double> columnPositions() {
+        final cards = find.byType(assistant_shared.AssistantCard);
+        return {
+          for (var i = 0; i < cards.evaluate().length; i++)
+            tester.getTopLeft(cards.at(i)).dx,
+        };
+      }
+
       // First, test on a narrow screen
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -1046,6 +1054,7 @@ void main() {
       // On a narrow screen, the grid should auto-calculate columns
       // (MaxCrossAxisExtent handles this automatically)
       expect(tester.takeException(), isNull);
+      final narrowColumnPositions = columnPositions();
 
       // Now test on a wide screen
       tester.view.physicalSize = const Size(1200, 800);
@@ -1053,6 +1062,12 @@ void main() {
       // Rebuild with wide screen
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      final wideColumnPositions = columnPositions();
+
+      expect(
+        wideColumnPositions.length,
+        greaterThan(narrowColumnPositions.length),
+      );
     });
 
     testWidgets(
