@@ -40,50 +40,22 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
 
   /// 添加力度值：弹出输入框，输入后作为勾选块出现（默认选中）。
   Future<void> _addEffortBlockWithDialog() async {
-    final controller = TextEditingController();
+    final strings = AppLocalizations.of(context)!;
     final value = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: ConstrainedText(
-          AppLocalizations.of(context)!.reasoningAddEffortValue,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.reasoningEffortExample,
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.batchDlgConfirm,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (_) => _ReasoningEffortValueDialog(
+        title: strings.reasoningAddEffortValue,
+        hint: strings.reasoningEffortExample,
+        cancelLabel: strings.batchDlgCancel,
+        confirmLabel: strings.batchDlgConfirm,
       ),
     );
     if (value == null || value.isEmpty || !mounted) return;
+    final option = value;
     setState(() {
-      if (!_effortBlockValues.contains(value)) {
-        _effortBlockValues.add(value);
-        _effortSelectedValues.add(value);
+      if (!_effortBlockValues.contains(option)) {
+        _effortBlockValues.add(option);
+        _effortSelectedValues.add(option);
       }
     });
   }
@@ -171,14 +143,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ],
             ),
             const SizedBox(height: 8),
-            TextFormField(
+            _ConstrainedHintField(
+              key: ValueKey((toggle, 'name')),
               initialValue: toggle.paramName,
+              hint: AppLocalizations.of(context)!.reasoningNameExample,
               decoration: InputDecoration(
                 label: _reasoningFieldLabel(
                   AppLocalizations.of(context)!
                       .reasoningParameterNameSource(_paramSourceLabel(toggle)),
                 ),
-                hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
                 errorText: isToggleDuplicate
@@ -207,14 +180,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
+                    child: _ConstrainedHintField(
+                      key: ValueKey((toggle, 'onValue')),
                       initialValue: toggle.onValue ?? '',
+                      hint: AppLocalizations.of(context)!.reasoningOnExample,
                       decoration: InputDecoration(
                         label: _reasoningFieldLabel(
                           AppLocalizations.of(context)!.reasoningOnValue,
                         ),
-                        hintText:
-                            AppLocalizations.of(context)!.reasoningOnExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -226,14 +199,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
+                    child: _ConstrainedHintField(
+                      key: ValueKey((toggle, 'offValue')),
                       initialValue: toggle.offValue ?? '',
+                      hint: AppLocalizations.of(context)!.reasoningOffExample,
                       decoration: InputDecoration(
                         label: _reasoningFieldLabel(
                           AppLocalizations.of(context)!.reasoningOffValue,
                         ),
-                        hintText:
-                            AppLocalizations.of(context)!.reasoningOffExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -346,15 +319,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ],
             ),
             const SizedBox(height: 8),
-            TextFormField(
+            _ConstrainedHintField(
+              key: ValueKey((effort, 'name')),
               initialValue: effort.paramName,
-              readOnly: false,
+              hint: AppLocalizations.of(context)!.reasoningNameExample,
               decoration: InputDecoration(
                 label: _reasoningFieldLabel(
                   AppLocalizations.of(context)!
                       .reasoningParameterNameSource(_paramSourceLabel(effort)),
                 ),
-                hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
                 errorText: isDuplicate
@@ -382,17 +355,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
               )
             else if (effort.type == 'json')
-              TextFormField(
+              _ConstrainedHintField(
+                key: ValueKey((effort, 'jsonValue')),
                 initialValue:
                     effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: false,
+                hint: AppLocalizations.of(context)!
+                    .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                 maxLines: 5,
                 decoration: InputDecoration(
                   label: _reasoningFieldLabel(
                     AppLocalizations.of(context)!.reasoningJsonValue,
                   ),
-                  hintText: AppLocalizations.of(context)!
-                      .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
@@ -583,8 +556,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                           _buildDragHandle(index: displayIndex),
                           const SizedBox(width: 2),
                           Expanded(
-                            child: TextFormField(
+                            child: _ConstrainedHintField(
+                              key: ValueKey((param, 'name')),
                               initialValue: param.paramName,
+                              hint: AppLocalizations.of(context)!
+                                  .reasoningNameExample,
                               decoration: InputDecoration(
                                 label: _reasoningFieldLabel(
                                   AppLocalizations.of(context)!
@@ -594,8 +570,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                                 ),
                                 border: const OutlineInputBorder(),
                                 isDense: true,
-                                hintText: AppLocalizations.of(context)!
-                                    .reasoningNameExample,
                                 errorText: isDuplicate
                                     ? AppLocalizations.of(context)!
                                         .modelParamDuplicate(
@@ -630,16 +604,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
               )
             else if (param.type == 'json')
-              TextFormField(
+              _ConstrainedHintField(
+                key: ValueKey((param, 'jsonValue')),
                 initialValue:
                     param.options.isNotEmpty ? param.options.first : '',
+                hint: AppLocalizations.of(context)!
+                    .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                 maxLines: 5,
                 decoration: InputDecoration(
                   label: _reasoningFieldLabel(
                     AppLocalizations.of(context)!.reasoningJsonValue,
                   ),
-                  hintText: AppLocalizations.of(context)!
-                      .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
@@ -696,6 +671,138 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ConstrainedHintField extends StatefulWidget {
+  const _ConstrainedHintField({
+    super.key,
+    required this.hint,
+    required this.decoration,
+    this.controller,
+    this.initialValue,
+    this.maxLines = 1,
+    this.autofocus = false,
+    this.onChanged,
+  }) : assert(controller == null || initialValue == null);
+
+  final String hint;
+  final InputDecoration decoration;
+  final TextEditingController? controller;
+  final String? initialValue;
+  final int maxLines;
+  final bool autofocus;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  State<_ConstrainedHintField> createState() => _ConstrainedHintFieldState();
+}
+
+class _ConstrainedHintFieldState extends State<_ConstrainedHintField> {
+  final _statesController = WidgetStatesController();
+
+  @override
+  void dispose() {
+    _statesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = widget.decoration.copyWith(
+      hint: ExcludeSemantics(
+        child: ConstrainedInputHint(
+          widget.hint,
+          statesController: _statesController,
+          maxLines: widget.maxLines,
+        ),
+      ),
+    );
+    final field = widget.controller == null
+        ? TextFormField(
+            initialValue: widget.initialValue,
+            statesController: _statesController,
+            maxLines: widget.maxLines,
+            autofocus: widget.autofocus,
+            decoration: decoration,
+            onChanged: widget.onChanged,
+          )
+        : TextField(
+            controller: widget.controller,
+            statesController: _statesController,
+            maxLines: widget.maxLines,
+            autofocus: widget.autofocus,
+            decoration: decoration,
+            onChanged: widget.onChanged,
+          );
+    return Semantics(hint: widget.hint, child: field);
+  }
+}
+
+class _ReasoningEffortValueDialog extends StatefulWidget {
+  const _ReasoningEffortValueDialog({
+    required this.title,
+    required this.hint,
+    required this.cancelLabel,
+    required this.confirmLabel,
+  });
+
+  final String title;
+  final String hint;
+  final String cancelLabel;
+  final String confirmLabel;
+
+  @override
+  State<_ReasoningEffortValueDialog> createState() =>
+      _ReasoningEffortValueDialogState();
+}
+
+class _ReasoningEffortValueDialogState
+    extends State<_ReasoningEffortValueDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: ConstrainedText(
+        widget.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: _ConstrainedHintField(
+        controller: _controller,
+        autofocus: true,
+        hint: widget.hint,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: ConstrainedText(
+            widget.cancelLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: ConstrainedText(
+            widget.confirmLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
