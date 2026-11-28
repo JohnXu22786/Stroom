@@ -69,7 +69,21 @@ Future<void> disposeAudioPlayerTempFile({
   required Future<void> Function() disposePlayer,
   required String? tempFilePath,
 }) async {
-  await disposePlayer();
+  try {
+    await disposePlayer();
+  } catch (disposeError, stackTrace) {
+    if (tempFilePath != null) {
+      try {
+        await deleteAudioPlayerTempFile(File(tempFilePath));
+      } catch (cleanupError) {
+        debugPrint(
+          'Failed to remove audio temp file $tempFilePath after player '
+          'disposal error ($disposeError): $cleanupError',
+        );
+      }
+    }
+    Error.throwWithStackTrace(disposeError, stackTrace);
+  }
   if (tempFilePath != null) {
     await deleteAudioPlayerTempFile(File(tempFilePath));
   }
