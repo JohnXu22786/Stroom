@@ -190,7 +190,8 @@ void main() {
           'col',
           columns: ['mod'],
           where: 'id = 1',
-        )).single['mod'],
+        ))
+            .single['mod'],
         greaterThan(1),
       );
     },
