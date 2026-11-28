@@ -366,9 +366,8 @@ class AnkiApkgImporter {
           final newDid = deckMap[oldDid] ?? oldDid;
           final queue = card['queue'] as int;
           final due = card['due'] as int;
-          final translatedDue = queue == 2 || queue == 3
-              ? due + targetToday - sourceToday
-              : due;
+          final translatedDue =
+              queue == 2 || queue == 3 ? due + targetToday - sourceToday : due;
 
           await txn.insert('cards', {
             'id': id,
