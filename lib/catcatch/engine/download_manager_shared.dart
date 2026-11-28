@@ -83,13 +83,19 @@ Future<void> downloadSingleSegment({
       (rangeLength != null && rangeLength <= 0)) {
     throw ArgumentError('Invalid segment byte range');
   }
+  if (cancelToken?.isCancelled ?? false) return;
+
   await semaphore.acquire();
   try {
+    if (cancelToken?.isCancelled ?? false) return;
+
     final partPath = p.join(tempDir, 'part_$index');
     partFiles[index] = partPath;
 
     int retries = 0;
     while (retries <= DefaultRules.maxRetriesPerSegment) {
+      if (cancelToken?.isCancelled ?? false) return;
+
       try {
         final dio = Dio();
         cancelToken?.whenCancel.then((_) => dio.close());
@@ -158,6 +164,7 @@ Future<void> downloadSingleSegment({
             if (isRangeRequest && receivedBytes > 0) {
               onBytesDelta?.call(-receivedBytes);
             }
+            if (cancelToken?.isCancelled ?? false) return;
             if (retries < DefaultRules.maxRetriesPerSegment) {
               retries++;
               continue;
@@ -172,6 +179,7 @@ Future<void> downloadSingleSegment({
           dio.close();
         }
       } catch (e) {
+        if (cancelToken?.isCancelled ?? false) return;
         retries++;
         if (retries > DefaultRules.maxRetriesPerSegment) {
           errors[index] = e.toString();
