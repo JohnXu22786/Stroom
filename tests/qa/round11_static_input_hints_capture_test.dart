@@ -174,17 +174,61 @@ void main() {
       tester.element(find.byType(TextField).first),
     )!;
     expect(tester.takeException(), isNull);
-    await expectLater(
-      find.byKey(_captureKey),
-      matchesGoldenFile(
-        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-light.png',
-      ),
-    );
     final localizedHint =
         '${localizedStrings.paramTypeJsonHint}{"key": "value"}';
     verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
+    final clippedField = find.byType(TextFormField).last;
+    await tester.enterText(clippedField, 'x');
+    await tester.enterText(clippedField, '');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(localizedHint), findsOneWidget);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-widget-test-light.png',
+      ),
+    );
     expect(find.byType(TextFormField), findsWidgets);
     expect(find.byType(TextField), findsWidgets);
+
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData.dark(useMaterial3: true),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: SimpleModelConfigPage(
+            model: ModelConfig(
+              name: 'Example',
+              modelId: 'gpt-4o',
+              customParams: [CustomParam(paramName: 'response', type: 'json')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
+    final darkClippedField = find.byType(TextFormField).last;
+    await tester.enterText(darkClippedField, 'x');
+    await tester.enterText(darkClippedField, '');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(localizedHint), findsOneWidget);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-widget-test-dark.png',
+      ),
+    );
   });
 
   testWidgets('captures text creation field and compact provider option row', (
