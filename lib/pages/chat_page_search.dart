@@ -66,8 +66,8 @@ class _ChatPageSearchFieldState extends State<_ChatPageSearchField> {
         onExit: (_) {
           if (_isHovered) setState(() => _isHovered = false);
         },
-        child: SizedBox(
-          height: 32,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 32),
           child: TextField(
             controller: widget.controller,
             focusNode: _focusNode,
