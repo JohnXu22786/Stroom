@@ -1275,6 +1275,115 @@ void main() {
     },
   );
 
+  test(
+    'imports the configuration preset referenced by an imported deck',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_deck_config_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final sourcePath = '${documents.path}/source.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
+      const sourceConfigId = 7;
+
+      try {
+        await _createCollection(
+          sourcePath,
+          includeNote: true,
+          includeCard: true,
+          noteModelId: 200,
+          models: {'200': _modelJson(200, 'Imported type')},
+          decks: {
+            '2': {
+              'id': 2,
+              'name': 'Configured deck',
+              'conf': sourceConfigId,
+            },
+            '3': {
+              'id': 3,
+              'name': 'Conflicting configured deck',
+              'conf': 1,
+            },
+          },
+          dconf: {
+            '1': {
+              'id': 1,
+              'name': 'Source default preset',
+              'new': {'perDay': 91},
+            },
+            '$sourceConfigId': {
+              'id': sourceConfigId,
+              'name': 'Imported preset',
+              'new': {'perDay': 37},
+              'rev': {'perDay': 123},
+            },
+          },
+        );
+        await _createCollection(
+          targetPath,
+          dconf: {
+            '1': {
+              'id': 1,
+              'name': 'Target default preset',
+              'new': {'perDay': 20},
+            },
+          },
+        );
+        final packagePath = await _packageCollection(documents, sourcePath);
+
+        await AnkiApkgImporter.import(packagePath);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final collection = (await target.query('col')).single;
+          final decks = jsonDecode(collection['decks'] as String) as Map;
+          final deck = decks.values.singleWhere(
+            (entry) => entry['name'] == 'Configured deck',
+          );
+          expect(deck['conf'], sourceConfigId);
+          final collidingDeck = decks.values.singleWhere(
+            (entry) => entry['name'] == 'Conflicting configured deck',
+          );
+          expect(collidingDeck['conf'], isNot(1));
+
+          final deckConfigs = jsonDecode(collection['dconf'] as String) as Map;
+          expect(deckConfigs['1']['name'], 'Target default preset');
+          expect(deckConfigs['$sourceConfigId']['name'], 'Imported preset');
+          expect(deckConfigs['$sourceConfigId']['new']['perDay'], 37);
+          expect(deckConfigs['$sourceConfigId']['rev']['perDay'], 123);
+          final remappedConfig = deckConfigs[collidingDeck['conf'].toString()];
+          expect(remappedConfig['name'], 'Source default preset');
+          expect(remappedConfig['new']['perDay'], 91);
+
+          final normalizedConfig = (await target.query(
+            'deck_config',
+            where: 'id = ?',
+            whereArgs: [sourceConfigId],
+          ))
+              .single;
+          expect(normalizedConfig['name'], 'Imported preset');
+          expect(
+            jsonDecode(normalizedConfig['config'] as String)['new']['perDay'],
+            37,
+          );
+
+          final models = jsonDecode(collection['models'] as String) as Map;
+          expect(models, contains('200'));
+          final note = (await target.query('notes')).single;
+          final card = (await target.query('cards')).single;
+          expect(note['mid'], 200);
+          expect(card['nid'], note['id']);
+        } finally {
+          await target.close();
+        }
+      } finally {
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
   test('remaps imported notes when a note type ID collides', () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_apkg_import_note_type_collision_test_',
@@ -1713,6 +1822,7 @@ Future<void> _createCollection(
   int noteModelId = 1,
   Map<String, dynamic>? models,
   Map<String, dynamic> decks = const {},
+  Map<String, dynamic> dconf = const {},
   List<Map<String, Object?>> revlogs = const [],
 }) async {
   final collectionModels = models ?? {'1': _modelJson(1, 'Basic')};
@@ -1721,14 +1831,36 @@ Future<void> _createCollection(
     version: 1,
     onCreate: (db, _) async {
       await db.execute(
-        'CREATE TABLE col (id INTEGER PRIMARY KEY, crt INTEGER, decks TEXT, models TEXT, mod INTEGER, dty INTEGER)',
+        'CREATE TABLE col (id INTEGER PRIMARY KEY, crt INTEGER, decks TEXT, models TEXT, dconf TEXT, mod INTEGER, dty INTEGER)',
       );
+      await db.execute('''
+        CREATE TABLE deck_config (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          mtime_secs INTEGER NOT NULL,
+          usn INTEGER NOT NULL,
+          config TEXT NOT NULL
+        )
+      ''');
       await db.insert('col', {
         'id': 1,
         'crt': collectionCreated,
         'decks': jsonEncode(decks),
         'models': jsonEncode(collectionModels),
+        'dconf': jsonEncode(dconf),
       });
+      for (final entry in dconf.entries) {
+        final config = Map<String, dynamic>.from(entry.value as Map)
+          ..remove('id')
+          ..remove('name');
+        await db.insert('deck_config', {
+          'id': int.parse(entry.key),
+          'name': (entry.value as Map)['name'] as String? ?? 'Default',
+          'mtime_secs': 0,
+          'usn': 0,
+          'config': jsonEncode(config),
+        });
+      }
       await db.execute(
         'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, mod INTEGER, usn INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
       );
