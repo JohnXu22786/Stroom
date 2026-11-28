@@ -186,11 +186,6 @@ class AnkiApkgImporter {
         if (tgtCol.isEmpty) {
           throw AnkiApkgException.unexpectedError(targetDbPath);
         }
-        final secondsPerDay = Duration(days: 1).inSeconds;
-        final sourceToday =
-            (nowSec - (srcCol.first['crt'] as num).toInt()) ~/ secondsPerDay;
-        final targetToday =
-            (nowSec - (tgtCol.first['crt'] as num).toInt()) ~/ secondsPerDay;
         final srcDecks =
             jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
         final tgtDecks =
@@ -350,6 +345,7 @@ class AnkiApkgImporter {
               card['id'] as int;
         }
         final cardMap = <int, int>{}; // source card ID → target card ID
+        int? dueDayOffset;
         for (final card in srcCards) {
           final targetNoteId =
               noteMap[card['nid'] as int] ?? card['nid'] as int;
@@ -366,8 +362,21 @@ class AnkiApkgImporter {
           final newDid = deckMap[oldDid] ?? oldDid;
           final queue = card['queue'] as int;
           final due = card['due'] as int;
-          final translatedDue =
-              queue == 2 || queue == 3 ? due + targetToday - sourceToday : due;
+          var translatedDue = due;
+          if (queue == 2 || queue == 3) {
+            final sourceCreated = srcCol.first['crt'];
+            final targetCreated = tgtCol.first['crt'];
+            if (sourceCreated is! num) {
+              throw AnkiApkgException.unexpectedError(tmpDbPath);
+            }
+            if (targetCreated is! num) {
+              throw AnkiApkgException.unexpectedError(targetDbPath);
+            }
+            final secondsPerDay = Duration(days: 1).inSeconds;
+            dueDayOffset ??= (nowSec - targetCreated.toInt()) ~/ secondsPerDay -
+                (nowSec - sourceCreated.toInt()) ~/ secondsPerDay;
+            translatedDue += dueDayOffset;
+          }
 
           await txn.insert('cards', {
             'id': id,
