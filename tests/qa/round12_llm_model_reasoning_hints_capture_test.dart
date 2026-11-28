@@ -249,4 +249,92 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+
+  testWidgets('captures clipped reasoning field hint in dark theme', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData.dark(useMaterial3: true),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+              disableAnimations: true,
+            ),
+            child: child!,
+          ),
+          home: LlmModelConfigPage(
+            provider: ProviderConfigItem(
+              providerName: 'Capture Provider',
+              host: 'https://example.test',
+              key: 'test-key',
+              reasoningParams: [
+                ReasoningParam(
+                  paramName: 'thinking.type',
+                  isReasoningToggle: true,
+                  onValue: '',
+                  offValue: 'disabled',
+                ),
+                ReasoningParam(
+                  paramName: 'reasoning_effort',
+                  isEffortParam: true,
+                  type: 'string',
+                  options: ['low'],
+                ),
+                ReasoningParam(
+                  paramName: 'budget_tokens',
+                  type: 'json',
+                  options: ['1024'],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final strings =
+        AppLocalizations.of(tester.element(find.byType(LlmModelConfigPage)))!;
+    await tester.scrollUntilVisible(
+      find.text(strings.llmReasoningParams),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final hint = strings.reasoningOnExample;
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == hint,
+    );
+    await tester.ensureVisible(hintFinder);
+    verifyHintMeasurement(tester, clipped: true, expectedHint: hint);
+    final field = find.ancestor(
+      of: hintFinder,
+      matching: find.byType(TextFormField),
+    );
+    final editable = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    final semantics = tester.ensureSemantics();
+    tester.widget<EditableText>(editable).focusNode.requestFocus();
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round12-llm-config-reasoning-hints/reasoning-toggle-value-de-320x640-scale2-dark.png',
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
 }

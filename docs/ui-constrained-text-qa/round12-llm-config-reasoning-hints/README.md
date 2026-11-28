@@ -5,6 +5,7 @@ This capture uses the production `LlmModelConfigPage` route with local provider 
 The on-value example has a 94 × 48 dp one-line slot. The complete localized hint exceeds the slot, so `ConstrainedInputHint` reveals it while the editor remains a native `TextFormField`. The regression checks the screen reader hint before and after native typing. JSON examples remain native five-line fields and use the same measured hint component.
 
 - [Focused on-value hint](reasoning-toggle-value-de-320x640-scale2-light.png)
+- [Focused on-value hint, dark theme](reasoning-toggle-value-de-320x640-scale2-dark.png)
 - [Effort add-value dialog hint](effort-add-value-dialog-de-320x640-scale2-light.png)
 - [8-second scroll preview (320 × 640, 5 fps)](reasoning-hint-scroll-preview.webm)
 
