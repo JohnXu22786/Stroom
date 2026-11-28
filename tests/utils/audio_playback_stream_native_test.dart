@@ -123,9 +123,8 @@ void main() {
       expect(createdPlayers, 1);
       final source =
           verify(() => players.first.setAudioSource(captureAny<AudioSource>()))
-                  .captured
-                  .single
-              as UriAudioSource;
+              .captured
+              .single as UriAudioSource;
       expect(source.uri, Uri.parse('latest'));
       verifyNever(() => players.last.setAudioSource(any<AudioSource>()));
     },
@@ -151,9 +150,9 @@ void main() {
       }
       when(() => firstPlayer.setAudioSource(any<AudioSource>()))
           .thenAnswer((_) {
-            firstSetupStarted.complete();
-            return firstSetup.future;
-          });
+        firstSetupStarted.complete();
+        return firstSetup.future;
+      });
       when(() => latestPlayer.setAudioSource(any<AudioSource>()))
           .thenAnswer((_) async => null);
 
