@@ -127,10 +127,30 @@ void main() {
       final field = find.byKey(
         const Key('ocr_provider_request_size_budget_mib'),
       );
+      await tester.tap(field);
+      await tester.pumpAndSettle();
       final input = tester.widget<TextField>(field);
       final hint = tester.widget<ConstrainedInputHint>(hintFinder);
       expect(input.statesController, hint.statesController);
       expect(input.decoration!.suffixText, 'MiB');
+      final suffixFinder = find.text('MiB');
+      expect(suffixFinder, findsOneWidget);
+      final fieldRect = tester.getRect(field);
+      final suffixRect = tester.getRect(suffixFinder);
+      final hintRect = tester.getRect(hintFinder);
+      expect(suffixRect.left, greaterThan(fieldRect.left));
+      expect(suffixRect.right, lessThanOrEqualTo(fieldRect.right));
+      final suffixOpacity = tester.widget<AnimatedOpacity>(
+        find
+            .ancestor(of: suffixFinder, matching: find.byType(AnimatedOpacity))
+            .first,
+      );
+      expect(suffixOpacity.opacity, 1);
+      expect(
+        hintRect.right,
+        lessThanOrEqualTo(suffixRect.left),
+        reason: 'The measured hint must leave room for the MiB suffix.',
+      );
       expect(
         input.keyboardType,
         const TextInputType.numberWithOptions(decimal: true),

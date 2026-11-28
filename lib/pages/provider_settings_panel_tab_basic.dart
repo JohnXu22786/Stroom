@@ -166,11 +166,25 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   label: _buildProviderInputLabel(
                     AppLocalizations.of(context)!.providerRequestJsonDefault,
                   ),
-                  hint: ExcludeSemantics(
-                    child: ConstrainedInputHint(
-                      AppLocalizations.of(context)!.providerUseAppDefault,
-                      statesController: hintStates,
-                    ),
+                  hint: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxWidth = constraints.maxWidth;
+                      final hintWidth = maxWidth.isFinite
+                          ? (maxWidth - 40).clamp(0.0, maxWidth).toDouble()
+                          : maxWidth;
+                      return ClipRect(
+                        child: SizedBox(
+                          width: hintWidth,
+                          child: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!
+                                  .providerUseAppDefault,
+                              statesController: hintStates,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   suffixText: 'MiB',
                   border: OutlineInputBorder(),

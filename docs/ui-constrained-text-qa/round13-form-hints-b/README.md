@@ -1,10 +1,10 @@
 # Round 13 native form hints
 
-The capture test renders the production provider settings dialog with empty in-memory fixture values. It captures a fitting English view at 1200 × 800 logical pixels with 1× text scale and a clipped French view at 320 × 640 logical pixels with 2× text scale. Both use the light Material 3 theme and device-pixel ratio 1. No field is focused and the software keyboard is closed. No account data or provider request is used. The test checks that all three basic provider hints use measured hint widgets linked to their native editable fields.
+The capture test renders the production provider settings dialog with empty in-memory fixture values. It captures a fitting English view at 1200 × 800 logical pixels with 1× text scale and a clipped French view at 320 × 640 logical pixels with 2× text scale. Both use the light Material 3 theme and device-pixel ratio 1. No account data or provider request is used. The test checks that all three basic provider hints use measured hint widgets linked to their native editable fields.
 
 The French API endpoint hint is measured against its rendered one-line field slot to verify that it overflows at the narrow expanded-scale size. The fitting capture verifies that the basic provider fields remain visible in the wide normal-scale layout.
 
-The OCR provider parameter tab is captured in German at 320 × 640 logical pixels and 2× text scale in both light and dark Material 3 themes. The request-size input is scrolled into view; the regression verifies its measured hint remains attached to the native numeric field with the `MiB` suffix. The existing file rename dialog also has a focused regression checking that its new-name hint is measured while the text field still accepts edits and preserves the caret.
+The OCR provider parameter tab is captured in German at 320 × 640 logical pixels and 2× text scale in both light and dark Material 3 themes. The request-size input is scrolled into view and focused, which makes Flutter's native `MiB` suffix visible while the empty field hint remains present. The regression verifies the suffix is rendered inside the field and the measured hint leaves it room. The software keyboard is closed in these widget captures. The existing file rename dialog also has a focused regression checking that its new-name hint is measured while the text field still accepts edits and preserves the caret.
 
 Generate the screenshots with:
 
