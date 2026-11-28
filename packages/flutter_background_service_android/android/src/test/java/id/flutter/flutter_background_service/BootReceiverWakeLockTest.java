@@ -11,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.os.Build;
 import android.os.PowerManager;
 
 import org.junit.Test;
@@ -91,6 +92,30 @@ public class BootReceiverWakeLockTest {
 
         assertNotNull("receiver should acquire a wake lock before startup", acquiredWakeLock[0]);
         assertFalse("an unqueued service start should release the wake lock", acquiredWakeLock[0].isHeld());
+        BackgroundService.lockStatic = null;
+    }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = Build.VERSION_CODES.O)
+    public void foregroundBootStartThatIsNotQueuedReleasesWakeLock() {
+        Context context = RuntimeEnvironment.getApplication();
+        Config config = new Config(context);
+        config.setAutoStartOnBoot(true);
+        config.setIsForeground(true);
+        BackgroundService.lockStatic = null;
+        PowerManager.WakeLock[] acquiredWakeLock = new PowerManager.WakeLock[1];
+        ContextWrapper unavailableContext = new ContextWrapper(context) {
+            @Override
+            public ComponentName startForegroundService(Intent service) {
+                acquiredWakeLock[0] = BackgroundService.lockStatic;
+                return null;
+            }
+        };
+
+        new BootReceiver().onReceive(unavailableContext, new Intent(Intent.ACTION_BOOT_COMPLETED));
+
+        assertNotNull("receiver should acquire a wake lock before foreground startup", acquiredWakeLock[0]);
+        assertFalse("an unqueued foreground service start should release the wake lock", acquiredWakeLock[0].isHeld());
         BackgroundService.lockStatic = null;
     }
 

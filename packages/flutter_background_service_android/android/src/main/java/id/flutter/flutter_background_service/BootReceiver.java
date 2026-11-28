@@ -5,8 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-
-import androidx.core.content.ContextCompat;
+import android.os.Build;
 
 
 public class BootReceiver extends BroadcastReceiver {
@@ -24,11 +23,12 @@ public class BootReceiver extends BroadcastReceiver {
                 }
 
                 try {
+                    final Intent serviceIntent = new Intent(context, BackgroundService.class);
                     final ComponentName startedService;
-                    if (config.isForeground()) {
-                        startedService = ContextCompat.startForegroundService(context, new Intent(context, BackgroundService.class));
+                    if (config.isForeground() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startedService = context.startForegroundService(serviceIntent);
                     } else {
-                        startedService = context.startService(new Intent(context, BackgroundService.class));
+                        startedService = context.startService(serviceIntent);
                     }
                     if (startedService == null && acquiredWakeLock) {
                         BackgroundService.releaseLock();
