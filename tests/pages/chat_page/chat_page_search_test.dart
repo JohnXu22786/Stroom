@@ -253,9 +253,41 @@ void main() {
         ),
       );
 
-      await tester.enterText(scaledField, 'requête');
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        locale: const Locale('fr', 'FR'),
+        textScale: 2,
+        theme: ThemeData.dark(useMaterial3: true),
+      );
+      await tester.tap(find.byIcon(Icons.search).first);
       await tester.pump();
-      expect(tester.widget<TextField>(scaledField).controller!.text, 'requête');
+
+      final darkScaledField = find.byType(TextField).first;
+      expect(tester.getSize(darkScaledField).height, greaterThan(32));
+      expect(find.byIcon(Icons.keyboard_arrow_up), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(
+        tester.getRect(find.byIcon(Icons.close)).right,
+        lessThanOrEqualTo(320),
+      );
+      await expectLater(
+        find.byType(Scaffold).first,
+        matchesGoldenFile(
+          '../../../docs/ui-constrained-text-qa/round13-chat-search-height/chat-search-fr-320x640-scale2-dark.png',
+        ),
+      );
+
+      await tester.enterText(darkScaledField, 'requête');
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(darkScaledField).controller!.text,
+        'requête',
+      );
       expect(tester.takeException(), isNull);
     });
 
