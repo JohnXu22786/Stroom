@@ -147,6 +147,7 @@ void main() {
       tester,
       size: const Size(1200, 800),
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         locale: const Locale('en', 'US'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -168,6 +169,7 @@ void main() {
       RepaintBoundary(
         key: _captureKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           locale: const Locale('de', 'DE'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -197,7 +199,8 @@ void main() {
     final clippedField = nativeFieldForHint(localizedHint);
     await tester.enterText(clippedField, 'x');
     await tester.enterText(clippedField, '');
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text(localizedHint), findsOneWidget);
     await expectLater(
       find.byKey(_captureKey),
@@ -214,6 +217,7 @@ void main() {
       RepaintBoundary(
         key: _captureKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           locale: const Locale('de', 'DE'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -233,12 +237,14 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
     final darkClippedField = nativeFieldForHint(localizedHint);
     await tester.enterText(darkClippedField, 'x');
     await tester.enterText(darkClippedField, '');
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text(localizedHint), findsOneWidget);
     await expectLater(
       find.byKey(_captureKey),
@@ -638,6 +644,7 @@ void main() {
           child: UncontrolledProviderScope(
             container: container,
             child: MaterialApp(
+              debugShowCheckedModeBanner: false,
               locale: const Locale('de', 'DE'),
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: AppLocalizations.localizationsDelegates,
