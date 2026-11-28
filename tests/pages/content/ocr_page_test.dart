@@ -2847,6 +2847,11 @@ void main() {
             await tester.pumpAndSettle();
           }
 
+          await _pumpUntil(
+            tester,
+            () => find.text('1 image selected').evaluate().isNotEmpty,
+          );
+
           expect(find.text(resetWarning), findsNothing);
           expect(find.text(englishResetWarning), findsNothing);
           expect(find.text('1 image selected'), findsOneWidget);
@@ -6065,6 +6070,10 @@ void main() {
           await tester.pumpAndSettle();
         }
 
+        await _pumpUntil(
+          tester,
+          () => find.byKey(const Key('ocr_grid_item_0')).evaluate().isNotEmpty,
+        );
         expect(find.text('gallery image invalid'), findsNothing);
         expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
         expect(find.text('已选 1 张图片'), findsOneWidget);
@@ -6125,6 +6134,10 @@ void main() {
           await tester.pumpAndSettle();
         }
 
+        await _pumpUntil(
+          tester,
+          () => find.byKey(const Key('ocr_grid_item_1')).evaluate().isNotEmpty,
+        );
         expect(find.text(unrelatedError), findsOneWidget);
         expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
       },
@@ -7322,10 +7335,16 @@ void main() {
       await tester.tap(find.text('B_corrupt.png'));
       await _pumpUntil(tester, () => find.text('确定 (2)').evaluate().isNotEmpty);
       await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
-      await tester.pumpAndSettle();
-
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await _pumpUntil(
+        tester,
+        () => find.byKey(const Key('ocr_grid_item_0')).evaluate().isNotEmpty,
+      );
+      await _pumpUntil(
+        tester,
+        () => find.text('已加载 1 张图片').evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 30),
+      );
 
       expect(find.text('已加载 1 张图片'), findsOneWidget);
       expect(find.text('已加载 2 张图片'), findsNothing);
