@@ -10,6 +10,8 @@ Production widgets rendered by `tests/qa/round13_fixed_label_controls_test.dart`
 | Task Flow initial input header, before reflow | 320 × 640 logical px, DPR 1 | de-DE | 2.5× | light | Reproduced; heading collapsed to one character per line beside the dropdown | [PNG](task-flow-header-before-de-320x640-scale2_5-light.png) |
 | Task Flow initial input header, after reflow | 320 × 640 logical px, DPR 1 | de-DE | 2.5× | light | Pass; readable wrapped heading and operable dropdown are on separate rows | [PNG](task-flow-de-320x640-scale2_5-light.png) |
 | Task Flow initial input header, dark theme | 320 × 640 logical px, DPR 1 | de-DE | 2.5× | dark | Pass; same readable reflow with dark Material surfaces | [PNG](task-flow-de-320x640-scale2_5-dark.png) |
+| Task Flow initial input header, measured fit boundary | 820 × 640 logical px, DPR 1 | de-DE | 2.5× | light | Pass; dropdown remains beside the full label when the measured contents fit | [PNG](task-flow-fit-de-820x640-scale2_5-light.png) |
+| Task Flow initial input header, RTL reflow | 320 × 640 logical px, DPR 1 | de-DE strings with RTL direction | 2.5× | light | Pass; dropdown stays at the direction-aware trailing edge | [PNG](task-flow-rtl-de-320x640-scale2_5-light.png) |
 | Task Flow Add Block | 320 × 640 logical px, DPR 1 | de-DE | 2.5× | light | Pass; button grows for the scaled label line | [PNG](task-flow-de-320x640-scale2_5-light.png) |
 | Tutorial step badges | 320 × 640 logical px, DPR 1 | de-DE | 1× | light | Pass; badges remain 32 × 32 dp | [PNG](tutorial-de-320x640-scale1-light.png) |
 | Tutorial step badges | 320 × 640 logical px, DPR 1 | de-DE | 2.5× | light | Pass; circular badges grow with the numeral | [PNG](tutorial-de-320x640-scale2_5-light.png) |

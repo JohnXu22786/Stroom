@@ -190,6 +190,8 @@ class BlockChainEditor extends StatelessWidget {
   Widget _buildInitialInputCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
+    const inputTypeDropdownIconSize = 18.0;
+    const inputTypeDropdownHorizontalPadding = 8.0;
     final inputTypeStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
@@ -214,7 +216,10 @@ class BlockChainEditor extends StatelessWidget {
       ),
     );
     final inputTypeDropdown = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: inputTypeDropdownHorizontalPadding,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
@@ -228,7 +233,12 @@ class BlockChainEditor extends StatelessWidget {
           // The value must exist in items.
           value: inputType.userFacing,
           isDense: true,
-          icon: Icon(Icons.arrow_drop_down, size: 18, color: cs.primary),
+          iconSize: inputTypeDropdownIconSize,
+          icon: Icon(
+            Icons.arrow_drop_down,
+            size: inputTypeDropdownIconSize,
+            color: cs.primary,
+          ),
           style: inputTypeStyle,
           onChanged: (type) {
             if (type != null) onInputTypeChanged(type);
@@ -271,12 +281,19 @@ class BlockChainEditor extends StatelessWidget {
                       strings.taskFlowUiInitialInput,
                       inputLabel.style!,
                     );
-                    final typeWidth = _measureTextWidth(
-                      context,
-                      localizedIoTypeLabel(inputType.userFacing, strings),
-                      inputTypeStyle,
-                    );
-                    final rowWidth = 32 + 10 + labelWidth + typeWidth + 18 + 48;
+                    final widestTypeLabelWidth = _inputTypeOptions
+                        .map(
+                          (type) => _measureTextWidth(
+                            context,
+                            localizedIoTypeLabel(type, strings),
+                            inputTypeStyle,
+                          ),
+                        )
+                        .reduce((width, next) => width > next ? width : next);
+                    final dropdownWidth = widestTypeLabelWidth +
+                        inputTypeDropdownIconSize +
+                        inputTypeDropdownHorizontalPadding * 2;
+                    final rowWidth = 32 + 10 + labelWidth + dropdownWidth;
                     final textScale =
                         MediaQuery.textScalerOf(context).scale(14) / 14;
                     if (textScale > 1 && constraints.maxWidth < rowWidth) {
@@ -292,7 +309,7 @@ class BlockChainEditor extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Align(
-                            alignment: Alignment.centerRight,
+                            alignment: AlignmentDirectional.centerEnd,
                             child: inputTypeDropdown,
                           ),
                         ],

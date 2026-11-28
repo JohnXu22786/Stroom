@@ -231,6 +231,90 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('Task Flow header stays inline when its measured content fits', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(820, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpLocalized(
+      tester,
+      textScale: 2.5,
+      home: Scaffold(
+        body: BlockChainEditor(
+          blocks: const [],
+          inputType: IOType.text,
+          onInputTypeChanged: (_) {},
+          onAddBlock: (_) {},
+          onEditBlock: (_) {},
+          onDeleteBlock: (_) {},
+          onReplaceBlock: (_, _) {},
+        ),
+      ),
+    );
+
+    final labelRect = tester.getRect(find.textContaining('Anfangseingabe'));
+    final dropdownRect = tester.getRect(find.byType(DropdownButton<IOType>));
+    expect(
+      labelRect.top < dropdownRect.bottom &&
+          dropdownRect.top < labelRect.bottom,
+      isTrue,
+      reason: 'The dropdown remains beside the label when their measured '
+          'content fits the available width.',
+    );
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/r13_fixed_label_controls/task-flow-fit-de-820x640-scale2_5-light.png',
+      ),
+    );
+  });
+
+  testWidgets('Task Flow header reflow keeps dropdown at RTL trailing edge', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpLocalized(
+      tester,
+      textScale: 2.5,
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: BlockChainEditor(
+            blocks: const [],
+            inputType: IOType.text,
+            onInputTypeChanged: (_) {},
+            onAddBlock: (_) {},
+            onEditBlock: (_) {},
+            onDeleteBlock: (_) {},
+            onReplaceBlock: (_, _) {},
+          ),
+        ),
+      ),
+    );
+
+    final dropdownRect = tester.getRect(find.byType(DropdownButton<IOType>));
+    final cardRect = tester.getRect(find.byType(Card).first);
+    expect(
+      dropdownRect.center.dx,
+      lessThan(cardRect.center.dx),
+      reason: 'RTL trailing alignment places the reflowed dropdown on the '
+          'left edge of the card.',
+    );
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/r13_fixed_label_controls/task-flow-rtl-de-320x640-scale2_5-light.png',
+      ),
+    );
+  });
+
   testWidgets('tutorial step number badge grows with expanded text', (
     tester,
   ) async {
