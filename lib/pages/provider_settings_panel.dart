@@ -162,6 +162,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late bool _enableSeed;
   late final TextEditingController _maxTokensController;
   late final TextEditingController _seedController;
+  final _maxTokensHintStates = MaterialStatesController();
+  final _seedHintStates = MaterialStatesController();
+  final Map<ReasoningParam, (MaterialStatesController, MaterialStatesController)>
+      _reasoningValueHintStates = {};
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
 
@@ -311,7 +315,24 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _seedController.dispose();
     _maxFileSizeController.dispose();
     _ocrRequestSizeBudgetController.dispose();
+    _maxTokensHintStates.dispose();
+    _seedHintStates.dispose();
+    for (final states in _reasoningValueHintStates.values) {
+      states.$1.dispose();
+      states.$2.dispose();
+    }
     super.dispose();
+  }
+
+  MaterialStatesController _reasoningHintStates(
+    ReasoningParam param, {
+    required bool onValue,
+  }) {
+    final states = _reasoningValueHintStates.putIfAbsent(
+      param,
+      () => (MaterialStatesController(), MaterialStatesController()),
+    );
+    return onValue ? states.$1 : states.$2;
   }
 
   @override

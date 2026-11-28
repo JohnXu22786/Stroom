@@ -66,8 +66,15 @@ void main() {
           isA<ConstrainedText>(),
         );
         final titleField = find.byType(TextField).first;
+        final titleFieldWidget = tester.widget<TextField>(titleField);
+        expect(titleFieldWidget.statesController, isNotNull);
+        expect(titleFieldWidget.decoration!.hint, isA<ExcludeSemantics>());
+        expect(
+          (titleFieldWidget.decoration!.hint! as ExcludeSemantics).child,
+          isA<ConstrainedInputHint>(),
+        );
         final titleController =
-            tester.widget<TextField>(titleField).controller!;
+            titleFieldWidget.controller!;
 
         await tester.tap(titleField);
         await tester.enterText(titleField, 'draft title');

@@ -320,35 +320,35 @@ class AssistantEditorFields extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: TextField(
+            child: _AssistantEditorHintField(
               controller: nameController,
+              hint: nameHint,
+              autofocus: autofocusName,
               decoration: InputDecoration(
                 label: ConstrainedText(
                   AppLocalizations.of(context)!.assistantNameLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                hintText: nameHint,
                 border: const OutlineInputBorder(),
               ),
-              autofocus: autofocusName,
             ),
           ),
         ],
       ),
       const SizedBox(height: 12),
-      TextField(
+      _AssistantEditorHintField(
         controller: descriptionController,
+        hint: descriptionHint,
+        maxLines: 2,
         decoration: InputDecoration(
           label: ConstrainedText(
             AppLocalizations.of(context)!.assistantDescriptionOptional,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          hintText: descriptionHint,
           border: const OutlineInputBorder(),
         ),
-        maxLines: 2,
       ),
       const SizedBox(height: 12),
     ];
@@ -372,6 +372,61 @@ class AssistantEditorFields extends StatelessWidget {
             child: _promptField(AppLocalizations.of(context)!),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AssistantEditorHintField extends StatefulWidget {
+  final TextEditingController controller;
+  final String? hint;
+  final InputDecoration decoration;
+  final int? maxLines;
+  final bool autofocus;
+
+  const _AssistantEditorHintField({
+    required this.controller,
+    required this.hint,
+    required this.decoration,
+    this.maxLines,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_AssistantEditorHintField> createState() =>
+      _AssistantEditorHintFieldState();
+}
+
+class _AssistantEditorHintFieldState extends State<_AssistantEditorHintField> {
+  final _hintStates = MaterialStatesController();
+
+  @override
+  void dispose() {
+    _hintStates.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = widget.hint;
+    return Semantics(
+      hint: hint,
+      child: TextField(
+        controller: widget.controller,
+        statesController: _hintStates,
+        decoration: widget.decoration.copyWith(
+          hint: hint == null
+              ? null
+              : ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    hint,
+                    statesController: _hintStates,
+                    maxLines: widget.maxLines ?? 1,
+                  ),
+                ),
+        ),
+        maxLines: widget.maxLines,
+        autofocus: widget.autofocus,
       ),
     );
   }

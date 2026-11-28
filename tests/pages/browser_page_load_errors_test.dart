@@ -9,6 +9,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import '../qa/round11_hint_measurement.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -104,13 +106,79 @@ void main() {
     addTearDown(() => InAppWebViewPlatform.instance =
         previousPlatform ?? _BrowserPagePlatform());
 
-    await _startNavigation(tester, platform);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _startNavigation(
+      tester,
+      platform,
+      locale: const Locale('fr', 'FR'),
+      textScale: 1.8,
+    );
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(BrowserPage)))!;
+    final addressHint = l10n.browserAddressHint;
+    final addressField = tester.widget<TextField>(find.byType(TextField).first);
+    expect(addressField.statesController, isNotNull);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedInputHint && widget.data == addressHint,
+      ),
+      findsOneWidget,
+    );
+    expectHintMeasurement(tester, hint: addressHint, clipped: true);
 
     expect(
       platform.webView!.params.initialSettings?.mixedContentMode,
       MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
     );
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('script import URL hint measures its narrow native field', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr', 'FR'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.8)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => // ignore: invalid_use_of_visible_for_testing_member
+                  showBrowserUserScriptImportDialog(
+                context,
+                fetchSource: (_) async => '',
+              ),
+              child: const Text('Import'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Import'));
+    await tester.pumpAndSettle();
+
+    expectHintMeasurement(
+      tester,
+      hint: 'https://greasyfork.org/scripts/…/script.user.js',
+      clipped: true,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('injects saved userscripts when preferences load after page',
@@ -729,12 +797,17 @@ _BrowserPagePlatform _installBrowserPagePlatform() {
 
 Future<InAppWebViewController> _startNavigation(
     WidgetTester tester, _BrowserPagePlatform platform,
-    {Locale locale = const Locale('en', 'US')}) async {
+    {Locale locale = const Locale('en', 'US'), double textScale = 1}) async {
   await tester.pumpWidget(
     MaterialApp(
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: const BrowserPage(initialUrl: 'https://failed.example/'),
     ),
   );

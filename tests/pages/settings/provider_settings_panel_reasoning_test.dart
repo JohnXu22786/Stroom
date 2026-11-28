@@ -8,12 +8,15 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/llm_model_config_shared.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import '../../qa/round11_hint_measurement.dart';
 
 /// 打开供应商设置面板并返回保存结果（null 表示未保存成功）。
 Future<ProviderConfigItem?> _openAndSave(
   WidgetTester tester, {
   required ProviderConfigItem config,
   bool tapSave = true,
+  double textScale = 1,
 }) async {
   ProviderConfigItem? saved;
   await tester.pumpWidget(
@@ -21,6 +24,11 @@ Future<ProviderConfigItem?> _openAndSave(
       locale: const Locale('zh', 'CN'),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -92,6 +100,58 @@ void main() {
   });
 
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets('toggle value examples use measured native-field hints', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(430, 820);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        textScale: 2,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.mode',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      for (final hint in [
+        strings.providerParamNameHint('enabled, true'),
+        strings.providerParamNameHint('disabled, false'),
+      ]) {
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedInputHint && widget.data == hint,
+          ),
+          findsOneWidget,
+        );
+      }
+      expectHintMeasurement(
+        tester,
+        hint: strings.providerParamNameHint('enabled, true'),
+        clipped: true,
+      );
+      expectHintMeasurement(
+        tester,
+        hint: strings.providerParamNameHint('disabled, false'),
+        clipped: true,
+      );
+      expect(find.byType(TextFormField), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('trims surrounding whitespace from saved custom-param names', (
       tester,
     ) async {

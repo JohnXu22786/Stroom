@@ -49,6 +49,7 @@ class TextCreatePage extends StatefulWidget {
 
 class TextCreatePageState extends State<TextCreatePage> {
   final _titleController = TextEditingController();
+  final _titleHintStates = MaterialStatesController();
   final _contentController = TextEditingController();
   bool _isSaving = false;
   String _selectedFormat = 'txt';
@@ -56,6 +57,7 @@ class TextCreatePageState extends State<TextCreatePage> {
   @override
   void dispose() {
     _titleController.dispose();
+    _titleHintStates.dispose();
     _contentController.dispose();
     super.dispose();
   }
@@ -160,17 +162,25 @@ class TextCreatePageState extends State<TextCreatePage> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    decoration: InputDecoration(
-                      label: ConstrainedText(
-                        AppLocalizations.of(context)!.textCreateTitleLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  child: Semantics(
+                    hint: AppLocalizations.of(context)!.textCreateTitleHint,
+                    child: TextField(
+                      controller: _titleController,
+                      statesController: _titleHintStates,
+                      decoration: InputDecoration(
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.textCreateTitleLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            AppLocalizations.of(context)!.textCreateTitleHint,
+                            statesController: _titleHintStates,
+                          ),
+                        ),
+                        border: OutlineInputBorder(),
                       ),
-                      hintText:
-                          AppLocalizations.of(context)!.textCreateTitleHint,
-                      border: OutlineInputBorder(),
                     ),
                   ),
                 ),

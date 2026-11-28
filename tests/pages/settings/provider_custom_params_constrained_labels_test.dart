@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/llm_model_config_shared.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/constrained_text.dart';
+import '../../qa/round11_hint_measurement.dart';
 
 void main() {
   testWidgets(
@@ -83,6 +85,17 @@ void main() {
         isTrue,
         reason: 'The title and add action must reflow or fit without overlap.',
       );
+      final optionHint = strings.providerOptionExampleHint(
+        'low, enabled, true, max',
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedInputHint && widget.data == optionHint,
+        ),
+        findsWidgets,
+      );
+      expectHintMeasurement(tester, hint: optionHint, clipped: true);
       expect(tester.takeException(), isNull);
     },
   );
@@ -154,6 +167,79 @@ void main() {
     );
     expect(find.byType(TextFormField), findsNWidgets(2));
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('LLM numeric examples use measured native-field hints', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final maxTokensController = TextEditingController();
+    final seedController = TextEditingController();
+    final maxTokensHintStates = MaterialStatesController();
+    final seedHintStates = MaterialStatesController();
+    addTearDown(maxTokensController.dispose);
+    addTearDown(seedController.dispose);
+    addTearDown(maxTokensHintStates.dispose);
+    addTearDown(seedHintStates.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) {
+            final strings = AppLocalizations.of(context)!;
+            return Scaffold(
+              body: ListView(
+                children: [
+                  LlmToggleTextField(
+                    label: 'Max tokens',
+                    controller: maxTokensController,
+                    enabled: true,
+                    onToggle: (_) {},
+                    hintText: strings.providerOptionalExample('4096'),
+                    constrainedHint: true,
+                    hintStatesController: maxTokensHintStates,
+                  ),
+                  LlmToggleTextField(
+                    label: 'Seed',
+                    controller: seedController,
+                    enabled: true,
+                    onToggle: (_) {},
+                    hintText: strings.providerOptionalExample('42'),
+                    constrainedHint: true,
+                    hintStatesController: seedHintStates,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    final strings = AppLocalizations.of(tester.element(find.byType(Scaffold)))!;
+    expectHintMeasurement(
+      tester,
+      hint: strings.providerOptionalExample('4096'),
+      clipped: true,
+    );
+    await tester.ensureVisible(find.byType(LlmToggleTextField).last);
+    await tester.pump();
+    expectHintMeasurement(
+      tester,
+      hint: strings.providerOptionalExample('42'),
+      clipped: true,
+    );
     expect(tester.takeException(), isNull);
   });
 }

@@ -329,6 +329,8 @@ class SyncedValueField extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final InputDecoration decoration;
   final bool readOnly;
+  final bool constrainedHint;
+  final String? hintText;
 
   const SyncedValueField({
     super.key,
@@ -336,6 +338,8 @@ class SyncedValueField extends StatefulWidget {
     required this.onChanged,
     required this.decoration,
     this.readOnly = false,
+    this.constrainedHint = false,
+    this.hintText,
   });
 
   @override
@@ -345,6 +349,7 @@ class SyncedValueField extends StatefulWidget {
 class _SyncedValueFieldState extends State<SyncedValueField> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.value);
+  final MaterialStatesController _hintStates = MaterialStatesController();
 
   @override
   void didUpdateWidget(SyncedValueField oldWidget) {
@@ -358,17 +363,38 @@ class _SyncedValueFieldState extends State<SyncedValueField> {
   @override
   void dispose() {
     _controller.dispose();
+    _hintStates.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
+    final hintText = widget.hintText;
+    final decoration = widget.constrainedHint && hintText != null
+        ? InputDecoration(
+            label: widget.decoration.label,
+            labelText: widget.decoration.labelText,
+            border: widget.decoration.border,
+            isDense: widget.decoration.isDense,
+            contentPadding: widget.decoration.contentPadding,
+            hint: ExcludeSemantics(
+              child: ConstrainedInputHint(
+                hintText,
+                statesController: _hintStates,
+              ),
+            ),
+          )
+        : widget.decoration;
+    final field = TextFormField(
       controller: _controller,
       readOnly: widget.readOnly,
-      decoration: widget.decoration,
+      statesController: widget.constrainedHint ? _hintStates : null,
+      decoration: decoration,
       onChanged: widget.onChanged,
     );
+    return widget.constrainedHint && hintText != null
+        ? Semantics(hint: hintText, child: field)
+        : field;
   }
 }
 
@@ -496,6 +522,14 @@ class LlmToggleTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hint = constrainedHint && hintText != null
+        ? ExcludeSemantics(
+            child: ConstrainedInputHint(
+              hintText!,
+              statesController: hintStatesController!,
+            ),
+          )
+        : null;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -534,12 +568,7 @@ class LlmToggleTextField extends StatelessWidget {
                         controller: controller,
                         statesController: hintStatesController,
                         decoration: InputDecoration(
-                          hint: ExcludeSemantics(
-                            child: ConstrainedInputHint(
-                              hintText!,
-                              statesController: hintStatesController!,
-                            ),
-                          ),
+                          hint: hint,
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),

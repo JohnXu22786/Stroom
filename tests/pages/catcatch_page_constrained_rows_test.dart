@@ -8,6 +8,7 @@ import 'package:stroom/pages/catcatch_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/constrained_text.dart';
+import '../qa/round11_hint_measurement.dart';
 
 Widget _testApp({
   Locale locale = const Locale('de', 'DE'),
@@ -53,6 +54,18 @@ void main() {
       );
       await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
+
+      final urlHint = AppLocalizations.of(
+        tester.element(find.byType(CatCatchPage)),
+      )!.catCatchUrlHint;
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedInputHint && widget.data == urlHint,
+        ),
+        findsOneWidget,
+      );
+      expectHintMeasurement(tester, hint: urlHint, clipped: true);
 
       final fields = find.byType(TextFormField);
       TextField textField(int index) => tester.widget<TextField>(

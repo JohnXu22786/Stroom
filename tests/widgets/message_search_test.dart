@@ -82,6 +82,7 @@ List<Conversation> _createTestConversations() {
 Widget createMessageSearchTestApp({
   List<Conversation>? conversations,
   Locale locale = const Locale('zh', 'CN'),
+  double textScale = 1,
 }) {
   SharedPreferences.setMockInitialValues({});
   final convs = conversations ?? _createTestConversations();
@@ -101,6 +102,13 @@ Widget createMessageSearchTestApp({
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+          disableAnimations: true,
+        ),
+        child: child!,
+      ),
       home: const MessageSearchPage(),
     ),
   );
@@ -229,6 +237,14 @@ void main() {
       await tester.pumpWidget(createMessageSearchTestApp());
       await tester.pumpAndSettle();
 
+      final searchField = tester.widget<TextField>(find.byType(TextField));
+      expect(searchField.statesController, isNotNull);
+      expect(searchField.decoration!.hint, isA<ExcludeSemantics>());
+      expect(
+        (searchField.decoration!.hint! as ExcludeSemantics).child,
+        isA<ConstrainedInputHint>(),
+      );
+
       expect(find.text('全局消息搜索'), findsOneWidget);
       expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
 
@@ -244,6 +260,10 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'Flutter');
       await tester.pumpAndSettle();
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        'Flutter',
+      );
 
       expect(find.text('2 matches'), findsNWidgets(2));
       expect(find.text('Flutter讨论'), findsOneWidget);
