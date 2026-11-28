@@ -41,7 +41,8 @@ Uint8List pcmToWav(
   int numChannels = 1,
 }) {
   final dataSize = pcmData.length;
-  final fileSize = 36 + dataSize;
+  final paddingSize = dataSize & 1;
+  final fileSize = 36 + dataSize + paddingSize;
 
   final writer = _WavWriter();
 
@@ -64,6 +65,7 @@ Uint8List pcmToWav(
   writer.writeString('data');
   writer.writeInt32(dataSize);
   writer.writeBytes(pcmData);
+  if (paddingSize != 0) writer.writeBytes(Uint8List(1));
 
   return writer.toBytes();
 }

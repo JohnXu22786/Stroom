@@ -221,6 +221,29 @@ void main() {
     });
   });
 
+  group('pcmToWav', () {
+    test('pads odd PCM payloads without changing the data chunk size', () {
+      final oddPcm = Uint8List.fromList([0x12, 0x34, 0x56]);
+      final oddWav = pcmToWav(oddPcm);
+      final oddHeader = ByteData.sublistView(oddWav);
+
+      expect(oddHeader.getUint32(4, Endian.little), oddWav.length - 8);
+      expect(oddHeader.getUint32(40, Endian.little), oddPcm.length);
+      expect(oddWav.length, 44 + oddPcm.length + 1);
+      expect(oddWav.sublist(44, 47), oddPcm);
+      expect(oddWav[47], 0);
+
+      final evenPcm = Uint8List.fromList([0x78, 0x9A]);
+      final evenWav = pcmToWav(evenPcm);
+      final evenHeader = ByteData.sublistView(evenWav);
+
+      expect(evenHeader.getUint32(4, Endian.little), evenWav.length - 8);
+      expect(evenHeader.getUint32(40, Endian.little), evenPcm.length);
+      expect(evenWav.length, 44 + evenPcm.length);
+      expect(evenWav.sublist(44), evenPcm);
+    });
+  });
+
   group('resolveAudioFormat', () {
     test('prefers a known content signature over the requested format', () {
       final wav = pcmToWav(Uint8List.fromList([0, 0]));
