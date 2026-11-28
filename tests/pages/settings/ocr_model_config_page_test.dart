@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/pages/ocr_model_config_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Pumps a host screen with a button that pushes [OcrModelConfigPage] and
 /// delivers the popped [ModelConfig] result via [onSaved] (mirrors the real
@@ -67,10 +68,10 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
 }
 
 Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
-  final field = find.byWidgetPredicate(
-    (widget) =>
-        widget is TextField && widget.decoration?.hintText == '可选，例如 4096',
+  final hint = find.byWidgetPredicate(
+    (widget) => widget is ConstrainedInputHint && widget.data == '可选，例如 4096',
   );
+  final field = find.ancestor(of: hint, matching: find.byType(TextField));
   await tester.enterText(field, text);
   await tester.pump();
 }
