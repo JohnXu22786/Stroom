@@ -10,6 +10,16 @@ ROOT = Path('docs/ui-constrained-text-qa/chat-search-hint')
 ROOT.mkdir(parents=True, exist_ok=True)
 WEB = Path('/tmp/chat-search-hint-web')
 
+def raise_for_page_errors(captures):
+    print({'page_errors': captures})
+    errors = [
+        f"{capture['capture']}: {error}"
+        for capture in captures
+        for error in capture['errors']
+    ]
+    if errors:
+        raise RuntimeError(f'Browser reported runtime errors during capture: {errors}')
+
 def focused_capture(page, path):
     width = page.viewport_size['width']
     captured_at = time.monotonic()
@@ -39,12 +49,15 @@ with sync_playwright() as playwright:
         args=['--no-sandbox', '--disable-dev-shm-usage'],
     )
 
-    def open_page(locale, scale, theme, width=320, height=640, motion='off', record=False):
+    captured_page_errors = []
+
+    def open_page(capture, locale, scale, theme, width=320, height=640, motion='off'):
         context_args = {'viewport': {'width': width, 'height': height}, 'device_scale_factor': 1}
         context = browser.new_context(**context_args)
         page = context.new_page()
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
+        captured_page_errors.append({'capture': capture, 'errors': errors})
         page.goto(
             f'http://127.0.0.1:{PORT}/?locale={locale}&scale={scale}&theme={theme}&motion={motion}',
             wait_until='load', timeout=120_000,
@@ -56,7 +69,7 @@ with sync_playwright() as playwright:
         return context, page, errors
 
     for theme in ('light', 'dark'):
-        context, page, errors = open_page('fr-FR', 2, theme)
+        context, page, errors = open_page(f'fr-FR scale2 {theme} screenshot', 'fr-FR', 2, theme)
         page.get_by_role('button', name='Rechercher dans les messages').evaluate(
             'element => element.click()'
         )
@@ -67,7 +80,7 @@ with sync_playwright() as playwright:
         print({'screenshot': theme, 'errors': errors})
         context.close()
 
-    context, page, errors = open_page('de-DE', 1, 'light')
+    context, page, errors = open_page('de-DE scale1 light screenshot', 'de-DE', 1, 'light')
     page.get_by_role('button', name='Nachrichten suchen').evaluate(
         'element => element.click()'
     )
@@ -77,7 +90,9 @@ with sync_playwright() as playwright:
     print({'screenshot': 'alternate locale', 'errors': errors})
     context.close()
 
-    context, page, errors = open_page('en-US', 1, 'light', width=1000, height=700)
+    context, page, errors = open_page(
+        'en-US scale1 light fitting screenshot', 'en-US', 1, 'light', width=1000, height=700
+    )
     page.get_by_role('button', name='Search messages').evaluate(
         'element => element.click()'
     )
@@ -86,7 +101,9 @@ with sync_playwright() as playwright:
     print({'screenshot': 'fitting', 'errors': errors})
     context.close()
 
-    context, page, errors = open_page('fr-FR', 2, 'light', motion='on')
+    context, page, errors = open_page(
+        'fr-FR scale2 light motion video', 'fr-FR', 2, 'light', motion='on'
+    )
     cycle_duration = 28.0
     frame_rate = 4
     cycle_started = time.monotonic()
@@ -170,7 +187,8 @@ with sync_playwright() as playwright:
     for frame in frames.iterdir():
         frame.unlink()
     frames.rmdir()
-    print({'video': str(output_video), 'errors': errors})
+    print({'video': str(output_video)})
+    raise_for_page_errors(captured_page_errors)
 
     browser.close()
 server.shutdown()
