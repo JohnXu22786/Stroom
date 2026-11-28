@@ -166,6 +166,7 @@ void main() {
         ..interval = 10
         ..reps = 2;
       await collection.cards.insert(card);
+      await collection.db.update('col', {'mod': 1}, where: 'id = 1');
       final today = collection.col.dayOrdinalAt(
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
       );
@@ -184,6 +185,14 @@ void main() {
       expect(answered.interval, 25);
       expect(answered.due, today + 25);
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
+      expect(
+        (await collection.db.query(
+          'col',
+          columns: ['mod'],
+          where: 'id = 1',
+        )).single['mod'],
+        greaterThan(1),
+      );
     },
   );
 
@@ -276,7 +285,8 @@ void main() {
     );
   });
 
-  test('revlog insert failure rolls back the card answer', () async {
+  test('collection save failure rolls back card, revlog, and col mod',
+      () async {
     final note = Note.createNew(
       notetype_id: collection.col.modelList.first.id,
       fields: ['front', 'back'],
@@ -299,16 +309,21 @@ void main() {
     ))
         .single['mod'];
     await collection.db.execute('''
-      CREATE TRIGGER fail_review_log_insert
-      BEFORE INSERT ON revlog
+      CREATE TRIGGER fail_collection_save
+      BEFORE UPDATE OF decks ON col
       BEGIN
-        SELECT RAISE(ABORT, 'injected revlog insert failure');
+        SELECT RAISE(ABORT, 'injected collection save failure');
       END
     ''');
 
     await expectLater(
       AnkiScheduler().answerCard(collection.col, collection.cards, card.id, 3),
-      throwsA(anything),
+      throwsA(
+        predicate(
+          (error) =>
+              error.toString().contains('injected collection save failure'),
+        ),
+      ),
     );
 
     expect((await collection.cards.get(card.id))!.toMap(), beforeCard);
