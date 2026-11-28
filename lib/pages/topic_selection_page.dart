@@ -35,6 +35,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   bool _checkedRemoteAssistant = false;
+  final _renameHintStates = WidgetStatesController();
+  final _renameController = TextEditingController();
 
   @override
   void initState() {
@@ -42,6 +44,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkSelectedAssistantForUpdate();
     });
+  }
+
+  @override
+  void dispose() {
+    _renameController.dispose();
+    _renameHintStates.dispose();
+    super.dispose();
   }
 
   Future<void> _checkSelectedAssistantForUpdate() async {
@@ -477,8 +486,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   void _renameTopic(String id, String currentTitle) {
     final l10n = AppLocalizations.of(context)!;
-    final controller = TextEditingController(text: currentTitle);
-    final hintStatesController = MaterialStatesController();
+    _renameController.text = currentTitle;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -490,14 +498,14 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         content: Semantics(
           hint: l10n.conversationRenameHint,
           child: TextField(
-            controller: controller,
-            statesController: hintStatesController,
+            controller: _renameController,
+            statesController: _renameHintStates,
             autofocus: true,
             decoration: InputDecoration(
               hint: ExcludeSemantics(
                 child: ConstrainedInputHint(
                   l10n.conversationRenameHint,
-                  statesController: hintStatesController,
+                  statesController: _renameHintStates,
                 ),
               ),
               border: OutlineInputBorder(),
@@ -508,8 +516,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                     .read(conversationsProvider.notifier)
                     .renameConversation(id, value.trim());
               }
-              controller.dispose();
-              hintStatesController.dispose();
               Navigator.of(ctx).pop();
             },
           ),
@@ -517,8 +523,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         actions: [
           TextButton(
             onPressed: () {
-              controller.dispose();
-              hintStatesController.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
@@ -529,14 +533,12 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           ),
           TextButton(
             onPressed: () {
-              final value = controller.text.trim();
+              final value = _renameController.text.trim();
               if (value.isNotEmpty) {
                 ref
                     .read(conversationsProvider.notifier)
                     .renameConversation(id, value);
               }
-              controller.dispose();
-              hintStatesController.dispose();
               Navigator.of(ctx).pop();
             },
             child: ConstrainedText(
