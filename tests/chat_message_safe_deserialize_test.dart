@@ -542,8 +542,20 @@ void main() {
 
     test('handles a message with truly corrupt data that throws during fromMap',
         () {
-      // This message map has an impossible structure that would cause
-      // ChatMessage.fromMap to throw (e.g., messages with non-Map entries)
+      // A NaN tool-call round start passes the list type check but cannot be
+      // converted to an integer by ChatMessage.fromMap.
+      final malformedMessage = <String, dynamic>{
+        'id': 'throw-msg',
+        'role': 'user',
+        'content': 'Bad',
+        'createdAt': DateTime.now().toIso8601String(),
+        'toolCallRoundStarts': <double>[double.nan],
+      };
+      expect(
+        () => ChatMessage.fromMap(Map<String, dynamic>.from(malformedMessage)),
+        throwsA(isA<UnsupportedError>()),
+      );
+
       final convMap = <String, dynamic>{
         'id': 'conv-throwing-msg',
         'title': 'Test',
@@ -557,20 +569,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'attachments': <dynamic>[],
           },
-          // A message where attachments field causes .fromMap to fail
-          // by providing a Map that can't be cast to Map<String, dynamic>
-          <String, dynamic>{
-            'id': 'throw-msg',
-            'role': 'user',
-            'content': 'Bad',
-            'createdAt': DateTime.now().toIso8601String(),
-            'attachments': <dynamic>[
-              <String, dynamic>{
-                // This attachment itself should be fine
-              },
-            ],
-            // Ensure Conversation.fromMap catches the throw
-          },
+          malformedMessage,
           <String, dynamic>{
             'id': 'good-msg-2',
             'role': 'assistant',
@@ -587,10 +586,10 @@ void main() {
       // Should not throw — the corrupt message should be skipped
       final conv = Conversation.fromMap(convMap);
       expect(conv.id, 'conv-throwing-msg');
-      // Good messages should still be present
-      expect(conv.messages.length, greaterThanOrEqualTo(1),
-          reason:
-              'At least good messages should survive; the throwing one is skipped');
+      expect(conv.messages.map((message) => message.id), [
+        'good-msg',
+        'good-msg-2',
+      ]);
     });
   });
 
