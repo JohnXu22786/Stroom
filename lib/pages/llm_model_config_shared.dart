@@ -32,7 +32,7 @@ class LabeledTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.maxLines,
     this.suggestions,
-    this.constrainedHint = false,
+    this.constrainedHint = true,
     this.hintStatesController,
   });
 
@@ -42,6 +42,7 @@ class LabeledTextField extends StatefulWidget {
 
 class _LabeledTextFieldState extends State<LabeledTextField>
     with WidgetsBindingObserver {
+  final MaterialStatesController _ownedHintStates = MaterialStatesController();
   final FocusNode _focusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
   final GlobalKey _popupKey = GlobalKey();
@@ -58,6 +59,9 @@ class _LabeledTextFieldState extends State<LabeledTextField>
 
   bool get _hasSuggestions =>
       widget.suggestions != null && widget.suggestions!.isNotEmpty;
+
+  MaterialStatesController get _hintStates =>
+      widget.hintStatesController ?? _ownedHintStates;
 
   /// Suggestions filtered by the current input; empty input shows all.
   List<String> get _filteredSuggestions {
@@ -97,6 +101,7 @@ class _LabeledTextFieldState extends State<LabeledTextField>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _focusNode.dispose();
+    _ownedHintStates.dispose();
     widget.controller.removeListener(_handleTextChange);
     _removeOverlay();
     super.dispose();
@@ -280,14 +285,14 @@ class _LabeledTextFieldState extends State<LabeledTextField>
                     child: TextField(
                       controller: widget.controller,
                       focusNode: _focusNode,
-                      statesController: widget.hintStatesController,
+                      statesController: _hintStates,
                       // 无备选值的字段不接管 onTapOutside，保持默认失焦行为。
                       onTapOutside: _hasSuggestions ? _handleTapOutside : null,
                       decoration: InputDecoration(
                         hint: ExcludeSemantics(
                           child: ConstrainedInputHint(
                             widget.hintText!,
-                            statesController: widget.hintStatesController!,
+                            statesController: _hintStates,
                             maxLines: widget.maxLines ?? 1,
                           ),
                         ),
@@ -494,7 +499,7 @@ class LlmToggleSlider extends StatelessWidget {
 // LlmToggleTextField — text field with toggle switch
 // ============================================================================
 
-class LlmToggleTextField extends StatelessWidget {
+class LlmToggleTextField extends StatefulWidget {
   final String label;
   final String? description;
   final bool enabled;
@@ -516,17 +521,33 @@ class LlmToggleTextField extends StatelessWidget {
     this.hintText,
     this.required = false,
     this.keyboardType = TextInputType.text,
-    this.constrainedHint = false,
+    this.constrainedHint = true,
     this.hintStatesController,
   });
 
   @override
+  State<LlmToggleTextField> createState() => _LlmToggleTextFieldState();
+}
+
+class _LlmToggleTextFieldState extends State<LlmToggleTextField> {
+  final MaterialStatesController _ownedHintStates = MaterialStatesController();
+
+  MaterialStatesController get _hintStates =>
+      widget.hintStatesController ?? _ownedHintStates;
+
+  @override
+  void dispose() {
+    _ownedHintStates.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hint = constrainedHint && hintText != null
+    final hint = widget.constrainedHint && widget.hintText != null
         ? ExcludeSemantics(
             child: ConstrainedInputHint(
-              hintText!,
-              statesController: hintStatesController!,
+              widget.hintText!,
+              statesController: _hintStates,
             ),
           )
         : null;
@@ -540,49 +561,48 @@ class LlmToggleTextField extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('$label${required ? ' *' : ''}',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    '${widget.label}${widget.required ? ' *' : ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                Switch(
-                  value: enabled,
-                  onChanged: onToggle,
-                ),
+                Switch(value: widget.enabled, onChanged: widget.onToggle),
               ],
             ),
-            if (description != null)
+            if (widget.description != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  description!,
+                  widget.description!,
                   style: TextStyle(
                     fontSize: 11,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
-            if (enabled)
-              constrainedHint && hintText != null
+            if (widget.enabled)
+              widget.constrainedHint && widget.hintText != null
                   ? Semantics(
-                      hint: hintText,
+                      hint: widget.hintText,
                       child: TextField(
-                        controller: controller,
-                        statesController: hintStatesController,
+                        controller: widget.controller,
+                        statesController: _hintStates,
                         decoration: InputDecoration(
                           hint: hint,
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
-                        keyboardType: keyboardType,
+                        keyboardType: widget.keyboardType,
                       ),
                     )
                   : TextField(
-                      controller: controller,
+                      controller: widget.controller,
                       decoration: InputDecoration(
-                        hintText: hintText,
+                        hintText: widget.hintText,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
-                      keyboardType: keyboardType,
+                      keyboardType: widget.keyboardType,
                     ),
           ],
         ),
