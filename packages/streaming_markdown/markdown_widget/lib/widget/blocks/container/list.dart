@@ -98,7 +98,7 @@ class ListNode extends ElementNode {
     var usesDefaultOrderedMarker = false;
     if (isCheckbox) {
       marker = ProxyRichText(
-        children.removeAt(0).build(),
+        children.first.build(),
         richTextBuilder: visitor.richTextBuilder,
       );
     } else {
@@ -114,6 +114,7 @@ class ListNode extends ElementNode {
             config,
           );
     }
+    final childNodes = isCheckbox ? children.skip(1) : children;
     return WidgetSpan(
       child: Padding(
         padding: EdgeInsets.only(bottom: marginBottom),
@@ -137,8 +138,8 @@ class ListNode extends ElementNode {
               child: ProxyRichText(
                 TextSpan(
                   children: [
-                    if (children.isNotEmpty) children.first.build(),
-                    for (final child in children.skip(1)) ...[
+                    if (childNodes.isNotEmpty) childNodes.first.build(),
+                    for (final child in childNodes.skip(1)) ...[
                       if (child is UlOrOLNode) const TextSpan(text: '\n'),
                       child.build(),
                     ],
