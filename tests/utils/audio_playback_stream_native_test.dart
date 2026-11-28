@@ -54,4 +54,41 @@ void main() {
       await adapter.dispose();
     },
   );
+
+  test(
+    'dispose during native player replacement prevents creating another player',
+    () async {
+      final player = _MockAudioPlayer();
+      final disposeStarted = Completer<void>();
+      final releaseDispose = Completer<void>();
+      var createdPlayers = 0;
+      when(() => player.positionStream).thenAnswer((_) => const Stream.empty());
+      when(() => player.durationStream).thenAnswer((_) => const Stream.empty());
+      when(() => player.playerStateStream)
+          .thenAnswer((_) => const Stream.empty());
+      when(() => player.setAudioSource(any<AudioSource>()))
+          .thenAnswer((_) async => null);
+      when(() => player.dispose()).thenAnswer((_) {
+        if (!disposeStarted.isCompleted) disposeStarted.complete();
+        return releaseDispose.future;
+      });
+
+      final adapter = AudioPlayerAdapter(
+        createPlayer: () {
+          createdPlayers++;
+          return player;
+        },
+      );
+      await adapter.load('first');
+
+      final replacementLoad = adapter.load('replacement');
+      await disposeStarted.future;
+      final disposal = adapter.dispose();
+      releaseDispose.complete();
+      await Future.wait([replacementLoad, disposal]);
+
+      expect(createdPlayers, 1);
+      verify(() => player.setAudioSource(any<AudioSource>())).called(1);
+    },
+  );
 }
