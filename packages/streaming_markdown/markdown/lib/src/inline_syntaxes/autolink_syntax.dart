@@ -10,7 +10,7 @@ import 'inline_syntax.dart';
 /// Matches autolinks like `<http://foo.com>`.
 class AutolinkSyntax extends InlineSyntax {
   AutolinkSyntax()
-      : super(r'<(([a-zA-Z][a-zA-Z0-9.+-]{1,31}):(?://)?[^\s>]*)>');
+      : super(r'<(([a-zA-Z][a-zA-Z0-9.+-]{1,31}):(?://)?[^\s<>]*)>');
 
   @override
   bool onMatch(InlineParser parser, Match match) {
