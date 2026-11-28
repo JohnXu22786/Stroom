@@ -53,6 +53,12 @@ with sync_playwright() as playwright:
         if page.evaluate("devicePixelRatio") != 1:
             raise RuntimeError("Capture device pixel ratio was not 1")
         page.evaluate("document.activeElement.blur()")
+        page.evaluate(
+            """() => new Promise(resolve => requestAnimationFrame(
+                () => requestAnimationFrame(resolve)
+            ))"""
+        )
+        screenshot = page.screenshot()
         if errors:
             raise RuntimeError(f"Browser reported runtime errors: {errors}")
         OUTPUT.write_bytes(screenshot)
