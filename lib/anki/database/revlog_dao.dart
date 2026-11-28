@@ -8,9 +8,9 @@ class RevlogDao {
 
   Future<void> insert(RevlogEntry entry, {DatabaseExecutor? executor}) async {
     entry.usn = -1;
-    final db = executor ?? _db;
-    await db.insert('revlog', entry.toMap());
-    await db.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
+    final writeExecutor = executor ?? _db;
+    await writeExecutor.insert('revlog', entry.toMap());
+    await writeExecutor.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
     ]);
   }
