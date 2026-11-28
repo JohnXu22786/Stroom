@@ -1,6 +1,18 @@
 # Round 13 LLM shared field hints
 
-The screenshots are Flutter-rendered captures of the production `LabeledTextField` and `LlmToggleTextField` widgets using localized model-name, max-token, and seed hints. The matching regression is `tests/qa/round13_llm_shared_hints_capture_test.dart`.
+The original captures below exercise the production `LabeledTextField` and `LlmToggleTextField` widgets in isolation. The additional page captures exercise those controls in the actual `LlmModelConfigPage` editor route. Both capture and regression checks are in `tests/qa/round13_llm_shared_hints_capture_test.dart`.
+
+## Production model editor route
+
+The test opens `LlmModelConfigPage` through a pushed `MaterialPageRoute` and captures its real app bar, basic settings section, LLM parameter cards, descriptions, toggles, and native fields. The fixture is an existing model with an empty display name, a filled model ID and context length, and enabled Max output tokens and Seed controls with empty values.
+
+| Capture | Route state and conditions | Measurement |
+|---|---|---|
+| [`llm-model-editor-en-US-1200x1800-scale1-light.png`](llm-model-editor-en-US-1200x1800-scale1-light.png) | Editor route, initial scroll position; 1200 × 1800 logical px, en-US, 1× text scale, Material 3 light theme | All three hints fit in their production field slots and remain stationary. |
+| [`name`](llm-model-editor-de-DE-320x640-scale2_5-light-name.png), [`max tokens`](llm-model-editor-de-DE-320x640-scale2_5-light-tokens.png), and [`seed`](llm-model-editor-de-DE-320x640-scale2_5-light-seed.png) | Editor route; 320 × 640 logical px, de-DE, 2.5× text scale, Material 3 light theme. The name capture is at the initial scroll position; the other two show their respective fields after scrolling the page. | The model-name hint measures 634.4 dp in a 256 dp slot; max-token hint 352.2 dp in a 232 dp slot; seed hint 306.3 dp in a 232 dp slot. All three clip and reveal through the existing constrained hint behavior. |
+| [`name`](llm-model-editor-de-DE-320x640-scale2_5-dark-name.png), [`max tokens`](llm-model-editor-de-DE-320x640-scale2_5-dark-tokens.png), and [`seed`](llm-model-editor-de-DE-320x640-scale2_5-dark-seed.png) | Same editor route states, viewport, locale, and scale as the light captures, with Material 3 dark theme | Shows the shared production field alignment and hint treatment in dark theme. |
+
+The earlier component captures remain useful for focused measurements and focused/disabled state checks:
 
 | Capture | Conditions | Measurement |
 |---|---|---|
