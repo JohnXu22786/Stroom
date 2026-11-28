@@ -584,6 +584,33 @@ void main() {
       return Uint8List.fromList([...ftyp, ...extendedMdat, ...moov]);
     }
 
+    Uint8List buildMp4WithExtendedSizeMoov({required Uint8List audioData}) {
+      final source = buildMinimalMp4WithPcmAudio(
+        pcmFrames: audioData.length ~/ 2,
+        dataPattern: audioData,
+      );
+      final moovStart = _findFourCc(source, 'moov') - 4;
+      final moovSize = _readUint32BE(source, moovStart);
+      final ftyp = source.sublist(0, moovStart);
+      final moovBody = source.sublist(moovStart + 8, moovStart + moovSize);
+      final mdat = source.sublist(moovStart + moovSize);
+      final extendedMoov = Uint8List.fromList([
+        ..._u32be(1),
+        ..._fourCc('moov'),
+        ..._u64be(moovBody.length + 16),
+        ...moovBody,
+      ]);
+      final result = Uint8List.fromList([...ftyp, ...extendedMoov, ...mdat]);
+      final stcoTypeOffset = _findFourCc(result, 'stco');
+      final oldAudioOffset = _readUint32BE(result, stcoTypeOffset + 12);
+      result.setRange(
+        stcoTypeOffset + 12,
+        stcoTypeOffset + 16,
+        _u32be(oldAudioOffset + 8),
+      );
+      return result;
+    }
+
     Uint8List buildMinimalMp4WithTwoPcmAudioTracks() {
       final firstAudio = Uint8List.fromList([0x11, 0x22, 0x33, 0x44]);
       final secondAudio = Uint8List.fromList([0xA1, 0xB2, 0xC3, 0xD4]);
@@ -2033,6 +2060,24 @@ void main() {
       );
 
       expect(extractPcmFromWav(result), audioData);
+    });
+
+    test('extractAudio handles an extended-size moov with an audio track',
+        () async {
+      final audioData = Uint8List.fromList([0x11, 0x22, 0x33, 0x44]);
+      final mp4Bytes = buildMp4WithExtendedSizeMoov(audioData: audioData);
+
+      final syncResult = extractAudioSync(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+      final yieldingResult = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      expect(extractPcmFromWav(syncResult), audioData);
+      expect(extractPcmFromWav(yieldingResult), audioData);
     });
 
     test('extractAudio preserves original PCM audio data in WAV output',
