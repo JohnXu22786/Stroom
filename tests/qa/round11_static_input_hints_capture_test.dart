@@ -1,11 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/anki/database/col_dao.dart';
+import 'package:stroom/anki/models/deck.dart';
+import 'package:stroom/anki/models/model.dart' as anki_model;
+import 'package:stroom/anki/providers/anki_actions.dart';
+import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/tts_models.dart';
+import 'package:stroom/pages/anki_page.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
+import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/text_storage_shared.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -88,6 +97,16 @@ void main() {
     expect(painter.didExceedMaxLines, clipped);
   }
 
+  Finder nativeFieldForHint(String expectedHint) {
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == expectedHint,
+    );
+    return find.ancestor(
+      of: hintFinder,
+      matching: find.byType(TextFormField),
+    );
+  }
+
   testWidgets('captures fitting and clipped message search hint slots', (
     tester,
   ) async {
@@ -116,6 +135,123 @@ void main() {
     verifyHintMeasurement(tester, clipped: true);
     expect(find.byType(ConstrainedInputHint), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('captures fitting and clipped simple model ID hints', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await capture(
+      tester,
+      size: const Size(1200, 800),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: const SimpleModelConfigPage(),
+      ),
+      path:
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/model-id-fitting-en-1200x800-scale1-light.png',
+    );
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(TextField).first),
+    )!;
+    final hint = strings.modelIdExample('gpt-4o');
+    verifyHintMeasurement(tester, clipped: false, expectedHint: hint);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: SimpleModelConfigPage(
+            model: ModelConfig(
+              name: 'Example',
+              modelId: 'gpt-4o',
+              customParams: [CustomParam(paramName: 'response', type: 'json')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final localizedStrings = AppLocalizations.of(
+      tester.element(find.byType(TextField).first),
+    )!;
+    expect(tester.takeException(), isNull);
+    final localizedHint =
+        '${localizedStrings.paramTypeJsonHint}{"key": "value"}';
+    verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
+    final clippedField = nativeFieldForHint(localizedHint);
+    await tester.enterText(clippedField, 'x');
+    await tester.enterText(clippedField, '');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text(localizedHint), findsOneWidget);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-widget-test-light.png',
+      ),
+    );
+    expect(find.byType(TextFormField), findsWidgets);
+    expect(find.byType(TextField), findsWidgets);
+
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData.dark(useMaterial3: true),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: SimpleModelConfigPage(
+            model: ModelConfig(
+              name: 'Example',
+              modelId: 'gpt-4o',
+              customParams: [CustomParam(paramName: 'response', type: 'json')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
+    final darkClippedField = nativeFieldForHint(localizedHint);
+    await tester.enterText(darkClippedField, 'x');
+    await tester.enterText(darkClippedField, '');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text(localizedHint), findsOneWidget);
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round13-form-hints-a/custom-json-clipped-de-320x640-scale1_8-widget-test-dark.png',
+      ),
+    );
   });
 
   testWidgets('captures text creation field and compact provider option row', (
@@ -395,10 +531,8 @@ void main() {
     await tester.tap(find.text('Open settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    DefaultTabController.of(tester.element(find.byType(TabBar))).animateTo(
-      1,
-      duration: Duration.zero,
-    );
+    DefaultTabController.of(tester.element(find.byType(TabBar)))
+        .animateTo(1, duration: Duration.zero);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -425,20 +559,15 @@ void main() {
       matching: find.byType(TextFormField),
     );
     tester
-        .widget<EditableText>(find.descendant(
-          of: nameField,
-          matching: find.byType(EditableText),
-        ))
+        .widget<EditableText>(
+          find.descendant(of: nameField, matching: find.byType(EditableText)),
+        )
         .focusNode
         .requestFocus();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(milliseconds: 400));
-    verifyHintMeasurement(
-      tester,
-      clipped: true,
-      expectedHint: nameHints.first,
-    );
+    verifyHintMeasurement(tester, clipped: true, expectedHint: nameHints.first);
     await expectLater(
       find.byKey(_captureKey),
       matchesGoldenFile(
@@ -465,10 +594,9 @@ void main() {
       matching: find.byType(TextFormField),
     );
     tester
-        .widget<EditableText>(find.descendant(
-          of: jsonField,
-          matching: find.byType(EditableText),
-        ))
+        .widget<EditableText>(
+          find.descendant(of: jsonField, matching: find.byType(EditableText)),
+        )
         .focusNode
         .requestFocus();
     await tester.pump(const Duration(milliseconds: 100));
@@ -481,5 +609,131 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('captures Anki deck-name and tags hint slots', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+
+    final container = ProviderContainer(
+      overrides: [
+        ankiDeckListProvider.overrideWith(
+          (ref) async => [Deck(id: 1, name: 'Deck')],
+        ),
+        ankiDeckStatsProvider.overrideWith(
+          (ref, deckId) async => DeckStats(deckName: 'Deck'),
+        ),
+        ankiModelListProvider.overrideWith(
+          (ref) async => [anki_model.Notetype(id: 1, name: 'Basic')],
+        ),
+        ankiActionsProvider.overrideWith(AnkiActions.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(ankiDeckListProvider.future);
+    await container.read(ankiModelListProvider.future);
+
+    final strings = lookupAppLocalizations(const Locale('de', 'DE'));
+
+    Future<void> pumpPage(ThemeData theme) async {
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _captureKey,
+          child: UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              locale: const Locale('de', 'DE'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              theme: theme,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2.5)),
+                child: child!,
+              ),
+              home: const AnkiDroidPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    Future<void> captureHints(String themeName, ThemeData theme) async {
+      await pumpPage(theme);
+      await tester.tap(find.byTooltip(strings.ankiNewDeckTooltip));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      verifyHintMeasurement(
+        tester,
+        clipped: true,
+        expectedHint: strings.ankiDeckNameHint,
+      );
+      await expectLater(
+        find.byKey(_captureKey),
+        matchesGoldenFile(
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/anki-deck-name-de-320x640-scale2_5-$themeName.png',
+        ),
+      );
+      await tester.tap(find.text(strings.actionCancel));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(strings.ankiAddCardAction));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      verifyHintMeasurement(
+        tester,
+        clipped: true,
+        expectedHint: strings.ankiTagsHint,
+      );
+      final hintFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedInputHint &&
+            widget.data == strings.ankiTagsHint,
+      );
+      await tester.ensureVisible(hintFinder);
+      await tester.pump(const Duration(milliseconds: 100));
+      final field = find.ancestor(
+        of: hintFinder,
+        matching: find.byType(TextField),
+      );
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .requestFocus();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      await expectLater(
+        find.byKey(_captureKey),
+        matchesGoldenFile(
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/anki-tags-de-320x640-scale2_5-$themeName.png',
+        ),
+      );
+      await tester.enterText(field, 'Mathe Physik');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Mathe Physik'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text(strings.actionCancel).last);
+      await tester.pumpAndSettle();
+    }
+
+    await captureHints(
+      'light',
+      ThemeData.light(useMaterial3: true),
+    );
+    await captureHints(
+      'dark',
+      ThemeData.dark(useMaterial3: true),
+    );
   });
 }

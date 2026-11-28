@@ -60,12 +60,20 @@ void main() {
             (customHint.child as ConstrainedInputHint).data == hint;
       });
       expect(field, findsOneWidget, reason: name);
-      final paragraph = tester.renderObject<RenderParagraph>(find.text(hint));
+      final hintText = find.descendant(of: field, matching: find.text(hint));
+      final paragraph = tester.renderObject<RenderParagraph>(hintText.first);
       final fieldWidget = tester.widget<TextField>(field);
-      final hintContext = tester.element(find.text(hint));
+      final hintContext = tester.element(hintText.first);
       final slot = name == 'simple model'
-          ? tester.getSize(find.byType(ConstrainedInputHint))
-          : tester.getSize(find.text(hint));
+          ? tester.getSize(
+              find
+                  .descendant(
+                    of: field,
+                    matching: find.byType(ConstrainedInputHint),
+                  )
+                  .first,
+            )
+          : tester.getSize(hintText.first);
       final natural = TextPainter(
         text: TextSpan(
           text: hint,
