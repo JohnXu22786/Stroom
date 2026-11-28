@@ -946,7 +946,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   /// with a circular ripple via [CircleBorder].
   Widget _buildToolbarButton({
     required Widget child,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return Material(
       color: Colors.transparent,
@@ -962,7 +962,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return _buildToolbarButton(
       onTap: onTap,

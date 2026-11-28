@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
@@ -9,6 +10,14 @@ import 'package:stroom/widgets/html_code_block_widget.dart';
 Future<void> _showCodeView(WidgetTester tester) async {
   await tester.tap(find.text('查看代码'));
   await tester.pumpAndSettle();
+}
+
+void _useTestWebViewPlatform() {
+  final previousPlatform = InAppWebViewPlatform.instance;
+  InAppWebViewPlatform.instance = _TestWebViewPlatform();
+  addTearDown(() {
+    InAppWebViewPlatform.instance = previousPlatform ?? _TestWebViewPlatform();
+  });
 }
 
 /// The root sizing SizedBox of the code block display (first descendant
@@ -361,6 +370,73 @@ void main() {
               'rebuild');
       expect(find.text('查看代码'), findsNothing);
     });
+
+    testWidgets('streaming source view blocks preview but can return to card',
+        (tester) async {
+      _useTestWebViewPlatform();
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<p>growing</p>',
+              isStreaming: true,
+            ),
+          ),
+        ),
+      );
+
+      await _showCodeView(tester);
+      await tester.tap(find.byIcon(Icons.visibility));
+      await tester.pump();
+
+      expect(find.byType(Dialog), findsNothing,
+          reason: 'streaming HTML must not open the full-screen preview');
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget,
+          reason: 'return-to-card stays usable while HTML is streaming');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      expect(find.text('查看代码'), findsOneWidget);
+    });
+
+    testWidgets('source view preview works after streaming ends',
+        (tester) async {
+      _useTestWebViewPlatform();
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<p>finished</p>',
+              isStreaming: true,
+            ),
+          ),
+        ),
+      );
+
+      await _showCodeView(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<p>finished</p>'),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.visibility));
+      await tester.pump();
+
+      expect(find.byType(Dialog), findsOneWidget,
+          reason: 'finished HTML remains previewable from its source view');
+    });
   });
 
   group('HtmlCodeBlockWidget - code view behavior (regressions)', () {
@@ -608,4 +684,26 @@ void main() {
           reason: 'Custom height should override adaptive sizing');
     });
   });
+}
+
+class _TestWebViewPlatform extends InAppWebViewPlatform {
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+    PlatformInAppWebViewWidgetCreationParams params,
+  ) =>
+      _TestWebView(params);
+}
+
+class _TestWebView extends PlatformInAppWebViewWidget {
+  _TestWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
 }

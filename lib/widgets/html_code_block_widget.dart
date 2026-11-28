@@ -125,7 +125,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
           _buildActionButton(
             icon: Icons.visibility,
             label: AppLocalizations.of(context)!.htmlPreview,
-            onTap: () => _openFullScreen(context),
+            onTap: widget.isStreaming ? null : () => _openFullScreen(context),
           ),
           _buildActionButton(
             icon: Icons.arrow_back,
@@ -333,7 +333,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return Material(
       color: Colors.transparent,
