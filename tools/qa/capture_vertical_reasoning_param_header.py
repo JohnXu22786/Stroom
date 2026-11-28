@@ -39,6 +39,7 @@ environment["PATH"] = f"{toolchain / 'bin'}:{environment['PATH']}"
 entrypoint = ROOT / "tools/qa/vertical_reasoning_param_header_capture.dart"
 capture_sources = [
     entrypoint,
+    ROOT / "lib/pages/llm_model_config_page.dart",
     ROOT / "lib/pages/llm_model_config_page_reasoning_builders.dart",
 ]
 if not (WEB_BUILD / "index.html").exists() or any(
