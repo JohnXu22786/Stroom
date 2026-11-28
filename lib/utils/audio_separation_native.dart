@@ -1471,7 +1471,7 @@ class _Mp4Demuxer {
       if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
 
       _movieTimescale = _readMovieTimescale(moovOffset);
-      _offset = moovOffset + 8;
+      _offset = moovOffset + _boxHeaderSizeAt(moovOffset);
       final moovEnd = moovOffset + _boxSizeAt(moovOffset);
 
       _AudioTrackInfo? audioTrack;
@@ -1540,7 +1540,7 @@ class _Mp4Demuxer {
       if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
 
       _movieTimescale = await _readMovieTimescaleYielding(moovOffset);
-      _offset = moovOffset + 8;
+      _offset = moovOffset + _boxHeaderSizeAt(moovOffset);
       final moovEnd = moovOffset + _boxSizeAt(moovOffset);
 
       _AudioTrackInfo? audioTrack;
@@ -2252,7 +2252,7 @@ class _Mp4Demuxer {
 
   int? _readMovieTimescale(int moovOffset) {
     final moovEnd = moovOffset + _boxSizeAt(moovOffset);
-    var childOffset = moovOffset + 8;
+    var childOffset = moovOffset + _boxHeaderSizeAt(moovOffset);
     while (childOffset + 8 <= moovEnd) {
       final childSize = _uint32At(childOffset);
       if (childSize < 8 || childOffset + childSize > moovEnd) return null;
@@ -2269,7 +2269,7 @@ class _Mp4Demuxer {
 
   Future<int?> _readMovieTimescaleYielding(int moovOffset) async {
     final moovEnd = moovOffset + _boxSizeAt(moovOffset);
-    var childOffset = moovOffset + 8;
+    var childOffset = moovOffset + _boxHeaderSizeAt(moovOffset);
     while (childOffset + 8 <= moovEnd) {
       await _yieldIfNeeded();
       final childSize = _uint32At(childOffset);
@@ -2880,18 +2880,29 @@ class _Mp4Demuxer {
 
   int _boxSizeAt(int offset) {
     if (offset + 4 > _data.length) return 0;
-    return (_data[offset] << 24) |
+    final size = (_data[offset] << 24) |
         (_data[offset + 1] << 16) |
         (_data[offset + 2] << 8) |
         _data[offset + 3];
+    if (size != 1) return size;
+    if (offset + 16 > _data.length) return 0;
+    return _uint64At(offset + 8);
+  }
+
+  int _boxHeaderSizeAt(int offset) {
+    if (offset + 4 > _data.length) return 0;
+    return _uint32At(offset) == 1 ? 16 : 8;
   }
 
   bool _hasValidBoxAt(int offset, int parentEnd) {
     if (offset < 0 || parentEnd > _data.length || parentEnd - offset < 8) {
       return false;
     }
+    final headerSize = _boxHeaderSizeAt(offset);
     final boxSize = _boxSizeAt(offset);
-    return boxSize >= 8 && boxSize <= parentEnd - offset;
+    return headerSize > 0 &&
+        boxSize >= headerSize &&
+        boxSize <= parentEnd - offset;
   }
 }
 
