@@ -1224,7 +1224,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   bool _isValidUrl(String trimmed) {
     final uri = Uri.tryParse(trimmed);
-    return uri != null && uri.hasScheme && uri.hasAuthority;
+    if (uri == null || uri.host.isEmpty) return false;
+    final scheme = uri.scheme.toLowerCase();
+    return scheme == 'http' || scheme == 'https';
   }
 
   // ====================================================================
@@ -1358,9 +1360,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   bool _canStartFlow() {
     if (_isPickingFiles) return false;
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
-      return _catcatchInputs.any(
-        (e) => _isValidUrl(e.urlController.text.trim()),
-      );
+      final urls = _catcatchInputs
+          .map((e) => e.urlController.text.trim())
+          .where((url) => url.isNotEmpty)
+          .toList();
+      return urls.isNotEmpty && urls.every(_isValidUrl);
     }
     if (_isFileRunInput) {
       return _mediaInputs.isNotEmpty;

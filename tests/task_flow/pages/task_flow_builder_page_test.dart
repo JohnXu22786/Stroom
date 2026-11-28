@@ -7,9 +7,11 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
+import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
+import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 
 class _Flows extends TaskFlowNotifier {
@@ -49,6 +51,74 @@ void main() {
   // The repository keeps Flutter tests under tests/ rather than test/.
   // ignore: invalid_use_of_visible_for_testing_member
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('CatCatch run input accepts only HTTP and HTTPS URLs',
+      (tester) async {
+    final flows = _Flows();
+    final flow = TaskFlowDefinition(name: 'URL input', blocks: [
+      TaskFlowBlock(typeKey: BlockType.catcatch),
+    ]);
+    await flows.saveFlow(flow);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [taskFlowListProvider.overrideWith((_) => flows)],
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(
+          flowId: flow.id,
+          startInRunMode: true,
+          initialInput: const FlowRunInput(text: 'ftp://example.com'),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    FilledButton startButton() =>
+        tester.widget<FilledButton>(find.byType(FilledButton));
+
+    expect(startButton().onPressed, isNull);
+    final urlField = find.byType(TextField).first;
+    await tester.enterText(urlField, 'http://example.com');
+    await tester.pump();
+    expect(startButton().onPressed, isNotNull);
+    await tester.enterText(urlField, 'HTTPS://example.com');
+    await tester.pump();
+    expect(startButton().onPressed, isNotNull);
+    await validateTaskFlow(
+      flow,
+      [const FlowRunInput(text: 'HTTPS://example.com')],
+      providers: const ProviderEntriesState(),
+      assistants: const [],
+    );
+
+    await tester.enterText(urlField, 'http:///path');
+    await tester.pump();
+    expect(startButton().onPressed, isNull);
+
+    await tester.enterText(urlField, 'http://example.com');
+    await tester.pump();
+    await tester
+        .ensureVisible(find.byKey(const Key('taskflow_add_catcatch_input')));
+    await tester.tap(find.byKey(const Key('taskflow_add_catcatch_input')));
+    await tester.pump();
+    final urlFields = find.byType(TextField);
+    await tester.enterText(urlFields.at(4), 'ftp://invalid.example');
+    await tester.pump();
+    expect(startButton().onPressed, isNull);
+    await expectLater(
+      validateTaskFlow(
+        flow,
+        const [
+          FlowRunInput(text: 'http://example.com'),
+          FlowRunInput(text: 'ftp://invalid.example'),
+        ],
+        providers: const ProviderEntriesState(),
+        assistants: const [],
+      ),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+  });
 
   testWidgets(
       'delete preserves configured suffix, blocks save, and undo repairs',
