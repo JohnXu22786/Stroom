@@ -332,6 +332,30 @@ void main() {
       expect(await TextManifest.loadRecordsUncached(), isEmpty);
     });
 
+    test('preserves manifest insertion failure when cleanup also fails',
+        () async {
+      const content = 'unregistered text with cleanup failure';
+      final record = _textRecordWithContent('save-cleanup-failure', content);
+      final insertionFailure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          throw StateError('simulated manifest read failure');
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        throw insertionFailure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecord(record, content),
+        throwsA(same(insertionFailure)),
+      );
+
+      expect(await TextManifest.readText(record.storagePath), content);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
     test('removes unique text content when manifest registration fails',
         () async {
       const content = 'unregistered unique text';
