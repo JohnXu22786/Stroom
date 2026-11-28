@@ -120,6 +120,25 @@ void main() {
     );
   });
 
+  test('bare inline destinations allow escaped parentheses and depth 32', () {
+    final nested = '${'(' * 32}${')' * 32}';
+
+    expect(
+      markdown.markdownToHtml('[x](a$nested)'),
+      '<p><a href="a$nested">x</a></p>\n',
+    );
+    expect(
+      markdown.markdownToHtml(r'[x](foo\(bar\))'),
+      '<p><a href="foo(bar)">x</a></p>\n',
+    );
+  });
+
+  test('bare inline destinations reject more than 32 nested parentheses', () {
+    final nested = '${'(' * 33}${')' * 33}';
+
+    expect(markdown.markdownToHtml('[x](a$nested)'), '<p>[x](a$nested)</p>\n');
+  });
+
   test('a bare destination ending in an escape is accepted as a reference', () {
     expect(
       markdown.markdownToHtml('[text][foo]\n\n[foo]: bar\\'),

@@ -311,6 +311,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         # Cross-feature production capture for the shared finite input-hint
         # behavior exercised by several functional UI areas.
         "qa/round11_static_input_hints_capture_test.dart",
+        "qa/round12_llm_model_reasoning_hints_capture_test.dart",
         "pages/application_quit_confirmation_test.dart",
         "pages/application_startup_update_test.dart",
         "pages/background_optimization_page_test.dart",

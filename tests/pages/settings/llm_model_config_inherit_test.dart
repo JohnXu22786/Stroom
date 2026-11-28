@@ -191,6 +191,111 @@ Future<void> _tapBlock(WidgetTester tester, String value) async {
 }
 
 void main() {
+  testWidgets('reasoning editor hints remain measurable and native', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final toggle = ReasoningParam(
+      paramName: 'thinking.type',
+      isReasoningToggle: true,
+      onValue: 'enabled',
+      offValue: 'disabled',
+    );
+    final effort = ReasoningParam(
+      paramName: 'reasoning_effort',
+      isEffortParam: true,
+      type: 'json',
+      options: ['{"thinking": {"budget": 1024}}'],
+    );
+    final additional = ReasoningParam(
+      paramName: 'budget_tokens',
+      type: 'json',
+      options: ['1024'],
+    );
+    await _pumpAndSave(
+      tester,
+      locale: const Locale('de', 'DE'),
+      textScaleFactor: 2,
+      disableAnimations: true,
+      tapSave: false,
+      provider: ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [toggle, effort, additional],
+      ),
+    );
+
+    final page = find.byType(LlmModelConfigPage);
+    final l10n = AppLocalizations.of(tester.element(page))!;
+    await tester.scrollUntilVisible(
+      find.text(l10n.llmReasoningParams),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final onValueHint = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedInputHint &&
+          widget.data == l10n.reasoningOnExample,
+    );
+    final onValueTextField = find
+        .ancestor(
+          of: onValueHint.first,
+          matching: find.byType(TextFormField),
+        )
+        .first;
+    await tester.ensureVisible(onValueTextField);
+    await tester.pumpAndSettle();
+    for (final hint in [
+      l10n.reasoningNameExample,
+      l10n.reasoningOnExample,
+      l10n.reasoningOffExample,
+    ]) {
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ConstrainedInputHint && widget.data == hint,
+        ),
+        findsWidgets,
+      );
+    }
+
+    await tester.tap(onValueTextField);
+    await tester.enterText(onValueTextField, 'active');
+    await tester.pump();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: onValueTextField,
+              matching: find.byType(EditableText),
+            ),
+          )
+          .controller
+          .text,
+      'active',
+    );
+
+    final jsonHint = l10n.reasoningJsonExample(
+      '{"thinking": {"budget": 1024}}',
+    );
+    final jsonField = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+    );
+    await tester.ensureVisible(jsonField.first);
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+      ),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('measures clipped reasoning option hint in the production dialog',
       (
     tester,
