@@ -45,7 +45,8 @@ void main() {
     ).readAsStringSync();
     final onDestroy = _blockAfter(source, 'public void onDestroy()');
     final manualStop = _blockAfter(onDestroy, 'else');
-    final releaseLock = _blockAfter(source, 'static synchronized void releaseLock()');
+    final releaseLock =
+        _blockAfter(source, 'static synchronized void releaseLock()');
 
     expect(manualStop, contains('config.setManuallyStopped(true)'));
     expect(manualStop, contains('releaseLock()'));
