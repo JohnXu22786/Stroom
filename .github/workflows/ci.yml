@@ -260,9 +260,8 @@ jobs:
             exit 1
           fi
 
-  # KeepAliveSchedule has no Android dependencies. Test the exact production
-  # Kotlin sources in their standalone JVM build instead of building the full
-  # Flutter Android app and its plugins for four helper tests.
+  # Keep the standalone JVM helpers and focused boot wake-lock lifecycle test
+  # out of the full Flutter Android app build and its unrelated plugin graph.
   app-runtime-jvm:
     name: "Application Runtime (Kotlin/JVM)"
     runs-on: ubuntu-latest
@@ -279,6 +278,8 @@ jobs:
         run: gradle -p android/keep_alive_schedule test
       - name: Test SAF log append module
         run: gradle -p android/saf_log_content test
+      - name: Test Android boot wake-lock lifecycle
+        run: gradle -p packages/flutter_background_service_android/android testDebugUnitTest --tests '*BootReceiverWakeLockTest'
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
