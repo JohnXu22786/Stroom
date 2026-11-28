@@ -13,48 +13,75 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.providerNameLabel,
-              ),
-              hintText: AppLocalizations.of(context)!.providerNameHint,
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.label, color: Colors.teal),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _hostController,
-            decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.providerApiUrlLabel,
-              ),
-              hintText: AppLocalizations.of(context)!.providerApiUrlHint,
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.link, color: Colors.orange),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _keyController,
-            decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.mcpApiKey,
-              ),
-              hintText: AppLocalizations.of(context)!.providerApiKeyInputHint,
-              border: const OutlineInputBorder(),
-              prefixIcon: const Icon(Icons.key, color: Colors.amber),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureKey ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
+          _ConstrainedProviderHintField(
+            hint: AppLocalizations.of(context)!.providerNameHint,
+            builder: (context, hintStates) => TextField(
+              controller: _nameController,
+              statesController: hintStates,
+              decoration: InputDecoration(
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerNameLabel,
                 ),
-                onPressed: () => setState(() => _obscureKey = !_obscureKey),
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.providerNameHint,
+                    statesController: hintStates,
+                  ),
+                ),
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.label, color: Colors.teal),
               ),
             ),
-            obscureText: _obscureKey,
+          ),
+          const SizedBox(height: 16),
+          _ConstrainedProviderHintField(
+            hint: AppLocalizations.of(context)!.providerApiUrlHint,
+            builder: (context, hintStates) => TextField(
+              controller: _hostController,
+              statesController: hintStates,
+              decoration: InputDecoration(
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerApiUrlLabel,
+                ),
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.providerApiUrlHint,
+                    statesController: hintStates,
+                  ),
+                ),
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.link, color: Colors.orange),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _ConstrainedProviderHintField(
+            hint: AppLocalizations.of(context)!.providerApiKeyInputHint,
+            builder: (context, hintStates) => TextField(
+              controller: _keyController,
+              statesController: hintStates,
+              decoration: InputDecoration(
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.mcpApiKey,
+                ),
+                hint: ExcludeSemantics(
+                  child: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.providerApiKeyInputHint,
+                    statesController: hintStates,
+                  ),
+                ),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.key, color: Colors.amber),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureKey ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () => setState(() => _obscureKey = !_obscureKey),
+                ),
+              ),
+              obscureText: _obscureKey,
+            ),
           ),
           if (_isLlmType) ...[
             const SizedBox(height: 16),
@@ -126,19 +153,28 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         children: [
           ..._buildOverrideRuleSection(cs),
           if (_isOcrType) ...[
-            TextField(
-              key: const Key('ocr_provider_request_size_budget_mib'),
-              controller: _ocrRequestSizeBudgetController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                label: _buildProviderInputLabel(
-                  AppLocalizations.of(context)!.providerRequestJsonDefault,
+            _ConstrainedProviderHintField(
+              hint: AppLocalizations.of(context)!.providerUseAppDefault,
+              builder: (context, hintStates) => TextField(
+                key: const Key('ocr_provider_request_size_budget_mib'),
+                controller: _ocrRequestSizeBudgetController,
+                statesController: hintStates,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                hintText: AppLocalizations.of(context)!.providerUseAppDefault,
-                suffixText: 'MiB',
-                border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  label: _buildProviderInputLabel(
+                    AppLocalizations.of(context)!.providerRequestJsonDefault,
+                  ),
+                  hint: ExcludeSemantics(
+                    child: ConstrainedInputHint(
+                      AppLocalizations.of(context)!.providerUseAppDefault,
+                      statesController: hintStates,
+                    ),
+                  ),
+                  suffixText: 'MiB',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -559,4 +595,32 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       ),
     ];
   }
+}
+
+class _ConstrainedProviderHintField extends StatefulWidget {
+  const _ConstrainedProviderHintField({required this.hint, required this.builder});
+
+  final String hint;
+  final Widget Function(BuildContext, MaterialStatesController) builder;
+
+  @override
+  State<_ConstrainedProviderHintField> createState() =>
+      _ConstrainedProviderHintFieldState();
+}
+
+class _ConstrainedProviderHintFieldState
+    extends State<_ConstrainedProviderHintField> {
+  final _hintStates = MaterialStatesController();
+
+  @override
+  void dispose() {
+    _hintStates.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        hint: widget.hint,
+        child: widget.builder(context, _hintStates),
+      );
 }

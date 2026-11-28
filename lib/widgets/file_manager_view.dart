@@ -148,6 +148,8 @@ class _FileManagerViewState<T extends FileRecord>
     extends State<FileManagerView<T>> {
   final _folderNameController = TextEditingController();
   final _renameController = TextEditingController();
+  final _folderNameHintStates = MaterialStatesController();
+  final _renameHintStates = MaterialStatesController();
 
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
@@ -222,6 +224,8 @@ class _FileManagerViewState<T extends FileRecord>
   void dispose() {
     _folderNameController.dispose();
     _renameController.dispose();
+    _folderNameHintStates.dispose();
+    _renameHintStates.dispose();
     super.dispose();
   }
 
@@ -2474,12 +2478,21 @@ class _FileManagerViewState<T extends FileRecord>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        content: TextField(
-          key: const Key('fm_create_folder_input'),
-          controller: _folderNameController,
+        content: Semantics(
+          hint: AppLocalizations.of(context)!.fileManagerFolderNameHint,
+          child: TextField(
+            key: const Key('fm_create_folder_input'),
+            controller: _folderNameController,
+            statesController: _folderNameHintStates,
           decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.fileManagerFolderNameHint,
+            hint: ExcludeSemantics(
+              child: ConstrainedInputHint(
+                AppLocalizations.of(context)!.fileManagerFolderNameHint,
+                statesController: _folderNameHintStates,
+              ),
+            ),
             border: OutlineInputBorder(),
+          ),
           ),
         ),
         actions: [
@@ -2590,14 +2603,23 @@ class _FileManagerViewState<T extends FileRecord>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        content: TextField(
-          key: const Key('fm_rename_folder_input'),
-          controller: _renameController,
+        content: Semantics(
+          hint: AppLocalizations.of(context)!.fileManagerNewNameHint,
+          child: TextField(
+            key: const Key('fm_rename_folder_input'),
+            controller: _renameController,
+            statesController: _renameHintStates,
           decoration: InputDecoration(
-            hintText: AppLocalizations.of(context)!.fileManagerNewNameHint,
+            hint: ExcludeSemantics(
+              child: ConstrainedInputHint(
+                AppLocalizations.of(context)!.fileManagerNewNameHint,
+                statesController: _renameHintStates,
+              ),
+            ),
             border: OutlineInputBorder(),
           ),
-          autofocus: true,
+            autofocus: true,
+          ),
         ),
         actions: [
           TextButton(
@@ -3029,6 +3051,13 @@ class _RenameFileDialog extends StatefulWidget {
 
 class _RenameFileDialogState extends State<_RenameFileDialog> {
   late String _selectedFormat = widget.initialFormat;
+  final _renameHintStates = MaterialStatesController();
+
+  @override
+  void dispose() {
+    _renameHintStates.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3043,12 +3072,21 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              key: const Key('fm_rename_file_input'),
-              controller: widget.controller,
-              decoration: InputDecoration(
-                hintText: AppLocalizations.of(context)!.fileManagerNewNameHint,
-                border: OutlineInputBorder(),
+            Semantics(
+              hint: AppLocalizations.of(context)!.fileManagerNewNameHint,
+              child: TextField(
+                key: const Key('fm_rename_file_input'),
+                controller: widget.controller,
+                statesController: _renameHintStates,
+                decoration: InputDecoration(
+                  hint: ExcludeSemantics(
+                    child: ConstrainedInputHint(
+                      AppLocalizations.of(context)!.fileManagerNewNameHint,
+                      statesController: _renameHintStates,
+                    ),
+                  ),
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             if (widget.showFormatDropdown) ...[

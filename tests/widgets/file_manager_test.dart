@@ -2654,6 +2654,48 @@ void main() {
         expect(find.text('文件名不能为空'), findsOneWidget);
       });
 
+      testWidgets('file rename hint stays measured while the field edits', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {},
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+
+        final strings = AppLocalizations.of(
+          tester.element(find.byKey(const Key('fm_rename_file_dialog'))),
+        )!;
+        final hintFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedInputHint &&
+              widget.data == strings.fileManagerNewNameHint,
+        );
+        expect(hintFinder, findsOneWidget);
+        final field = find.byKey(const Key('fm_rename_file_input'));
+        final input = tester.widget<TextField>(field);
+        expect(
+          input.statesController,
+          tester.widget<ConstrainedInputHint>(hintFinder).statesController,
+        );
+        await tester.enterText(field, 'new file name');
+        expect(input.controller!.text, 'new file name');
+        expect(
+          tester.widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          ).controller.value.selection.baseOffset,
+          'new file name'.length,
+        );
+      });
+
       testWidgets('file rename rejects illegal characters', (tester) async {
         final renamed = <String>[];
         await tester.pumpWidget(

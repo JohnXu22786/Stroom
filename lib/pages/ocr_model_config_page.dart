@@ -72,6 +72,11 @@ class OcrModelConfigPage extends StatefulWidget {
 }
 
 class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
+  final _nameHintStates = MaterialStatesController();
+  final _modelIdHintStates = MaterialStatesController();
+  final _maxTokensHintStates = MaterialStatesController();
+  final _requestSizeHintStates = MaterialStatesController();
+  final Map<int, MaterialStatesController> _customValueHintStates = {};
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
@@ -224,6 +229,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _modelIdController.dispose();
     _maxTokensController.dispose();
     _requestSizeBudgetController.dispose();
+    _nameHintStates.dispose();
+    _modelIdHintStates.dispose();
+    _maxTokensHintStates.dispose();
+    _requestSizeHintStates.dispose();
+    for (final states in _customValueHintStates.values) {
+      states.dispose();
+    }
     super.dispose();
   }
 
@@ -659,6 +671,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               label: AppLocalizations.of(context)!.modelNameLabel,
               controller: _nameController,
               hintText: AppLocalizations.of(context)!.modelNameHint,
+              constrainedHint: true,
+              hintStatesController: _nameHintStates,
             ),
             const SizedBox(height: 16),
 
@@ -667,6 +681,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               label: AppLocalizations.of(context)!.modelIdLabel,
               controller: _modelIdController,
               hintText: AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
+              constrainedHint: true,
+              hintStatesController: _modelIdHintStates,
               required: true,
             ),
             const SizedBox(height: 24),
@@ -747,14 +763,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               enabled: _enableMaxTokens,
               onToggle: (v) => setState(() => _enableMaxTokens = v),
               hintText: AppLocalizations.of(context)!.llmMaxTokensHint,
+              constrainedHint: true,
+              hintStatesController: _maxTokensHintStates,
               keyboardType: TextInputType.number,
               description: AppLocalizations.of(context)!.llmTokensPerResponse,
             ),
 
             const SizedBox(height: 16),
-            TextField(
-              key: const Key('ocr_model_request_size_budget_mib'),
-              controller: _requestSizeBudgetController,
+            Semantics(
+              hint: AppLocalizations.of(context)!.ocrInheritProvider,
+              child: TextField(
+                key: const Key('ocr_model_request_size_budget_mib'),
+                controller: _requestSizeBudgetController,
+                statesController: _requestSizeHintStates,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -764,9 +785,15 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                hintText: AppLocalizations.of(context)!.ocrInheritProvider,
+                  hint: ExcludeSemantics(
+                    child: ConstrainedInputHint(
+                      AppLocalizations.of(context)!.ocrInheritProvider,
+                      statesController: _requestSizeHintStates,
+                    ),
+                  ),
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
+              ),
               ),
             ),
             const SizedBox(height: 6),
@@ -958,56 +985,74 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: TextFormField(
-                                key: ValueKey((
-                                  i,
-                                  param.type != 'json' &&
-                                      param.options.isNotEmpty,
-                                  _customParamValueFieldRevisions[i] ?? 0,
-                                )),
-                                initialValue: _effectiveCustomParamValue(param),
-                                minLines: 4,
-                                maxLines: 8,
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 13,
+                              child: Semantics(
+                                hint: localizedParamTypeDefaultValueHint(
+                                  AppLocalizations.of(context)!,
+                                  param.paramType,
                                 ),
-                                inputFormatters: const [
-                                  CodeSmartInputFormatter(),
-                                ],
-                                decoration: InputDecoration(
-                                  label: ConstrainedText(
-                                    AppLocalizations.of(context)!
-                                        .modelParamDefaultValue,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                child: TextFormField(
+                                  key: ValueKey((
+                                    i,
+                                    param.type != 'json' &&
+                                        param.options.isNotEmpty,
+                                    _customParamValueFieldRevisions[i] ?? 0,
+                                  )),
+                                  initialValue: _effectiveCustomParamValue(param),
+                                  minLines: 4,
+                                  maxLines: 8,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
                                   ),
-                                  hintText: localizedParamTypeDefaultValueHint(
-                                    AppLocalizations.of(context)!,
-                                    param.paramType,
+                                  statesController:
+                                      _customValueHintStates.putIfAbsent(
+                                    i,
+                                    MaterialStatesController.new,
                                   ),
-                                  border: const OutlineInputBorder(),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: _jsonParamHasError(i)
-                                          ? Colors.red
-                                          : Colors.grey.shade400,
+                                  inputFormatters: const [
+                                    CodeSmartInputFormatter(),
+                                  ],
+                                  decoration: InputDecoration(
+                                    label: ConstrainedText(
+                                      AppLocalizations.of(context)!
+                                          .modelParamDefaultValue,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: const BorderSide(
-                                      color: Colors.red,
+                                    hint: ExcludeSemantics(
+                                      child: ConstrainedInputHint(
+                                        localizedParamTypeDefaultValueHint(
+                                          AppLocalizations.of(context)!,
+                                          param.paramType,
+                                        ),
+                                        statesController:
+                                            _customValueHintStates[i]!,
+                                        hasError: _jsonErrors[i] != null,
+                                      ),
                                     ),
+                                    border: const OutlineInputBorder(),
+                                    errorBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: _jsonParamHasError(i)
+                                            ? Colors.red
+                                            : Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderSide: const BorderSide(
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    errorText: _jsonErrors[i],
+                                    errorMaxLines: 3,
+                                    alignLabelWithHint: true,
                                   ),
-                                  errorText: _jsonErrors[i],
-                                  errorMaxLines: 3,
-                                  alignLabelWithHint: true,
+                                  onChanged: (v) {
+                                    _setEffectiveCustomParamValue(param, v);
+                                    _validateJsonField(i, param);
+                                    setState(() {});
+                                  },
                                 ),
-                                onChanged: (v) {
-                                  _setEffectiveCustomParamValue(param, v);
-                                  _validateJsonField(i, param);
-                                  setState(() {});
-                                },
                               ),
                             ),
                             const SizedBox(width: 4),

@@ -350,6 +350,7 @@ class _TokenField extends StatefulWidget {
 }
 
 class _TokenFieldState extends State<_TokenField> {
+  final _hintStates = MaterialStatesController();
   late final TextEditingController _controller = TextEditingController(
     text: widget.value?.toString() ?? '',
   );
@@ -394,13 +395,17 @@ class _TokenFieldState extends State<_TokenField> {
   @override
   void dispose() {
     _controller.dispose();
+    _hintStates.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
+    return Semantics(
+      hint: AppLocalizations.of(context)!.contextThresholdHint,
+      child: TextFormField(
       controller: _controller,
+      statesController: _hintStates,
       enabled: widget.enabled,
       decoration: InputDecoration(
         label: ConstrainedText(
@@ -408,7 +413,12 @@ class _TokenFieldState extends State<_TokenField> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        hintText: AppLocalizations.of(context)!.contextThresholdHint,
+        hint: ExcludeSemantics(
+          child: ConstrainedInputHint(
+            AppLocalizations.of(context)!.contextThresholdHint,
+            statesController: _hintStates,
+          ),
+        ),
         border: OutlineInputBorder(),
         isDense: true,
       ),
@@ -439,6 +449,7 @@ class _TokenFieldState extends State<_TokenField> {
         FocusScope.of(context).unfocus();
       },
       onFieldSubmitted: (_) => _revertIfInvalid(),
+      ),
     );
   }
 }
@@ -460,6 +471,7 @@ class _PercentField extends StatefulWidget {
 }
 
 class _PercentFieldState extends State<_PercentField> {
+  final _hintStates = MaterialStatesController();
   late final TextEditingController _controller = TextEditingController(
     text: widget.value.toString(),
   );
@@ -507,14 +519,20 @@ class _PercentFieldState extends State<_PercentField> {
   @override
   void dispose() {
     _controller.dispose();
+    _hintStates.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
+    final hint = AppLocalizations.of(context)!
+        .contextPercentHint(kDefaultCompactionPercent);
+    return Semantics(
+      hint: hint,
+      child: TextFormField(
       key: const Key('global-percent-field'),
       controller: _controller,
+      statesController: _hintStates,
       enabled: widget.enabled,
       decoration: InputDecoration(
         label: ConstrainedText(
@@ -522,8 +540,9 @@ class _PercentFieldState extends State<_PercentField> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        hintText: AppLocalizations.of(context)!
-            .contextPercentHint(kDefaultCompactionPercent),
+        hint: ExcludeSemantics(
+          child: ConstrainedInputHint(hint, statesController: _hintStates),
+        ),
         suffixText: '%',
         border: OutlineInputBorder(),
         isDense: true,
@@ -543,6 +562,7 @@ class _PercentFieldState extends State<_PercentField> {
         FocusScope.of(context).unfocus();
       },
       onFieldSubmitted: (_) => _revertIfInvalid(),
+      ),
     );
   }
 }
