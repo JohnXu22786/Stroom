@@ -41,6 +41,7 @@ server = ThreadingHTTPServer(
 PORT = server.server_address[1]
 Thread(target=server.serve_forever, daemon=True).start()
 time.sleep(0.2)
+captured_page_errors = []
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -48,8 +49,6 @@ with sync_playwright() as playwright:
         executable_path='/usr/bin/chromium',
         args=['--no-sandbox', '--disable-dev-shm-usage'],
     )
-
-    captured_page_errors = []
 
     def open_page(capture, locale, scale, theme, width=320, height=640, motion='off'):
         context_args = {'viewport': {'width': width, 'height': height}, 'device_scale_factor': 1}
@@ -188,7 +187,7 @@ with sync_playwright() as playwright:
         frame.unlink()
     frames.rmdir()
     print({'video': str(output_video)})
-    raise_for_page_errors(captured_page_errors)
 
     browser.close()
 server.shutdown()
+raise_for_page_errors(captured_page_errors)
