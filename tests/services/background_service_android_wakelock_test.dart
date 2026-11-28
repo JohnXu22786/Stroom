@@ -25,7 +25,7 @@ void main() {
       'packages/flutter_background_service_android/android/src/main/java/'
       'id/flutter/flutter_background_service/BackgroundService.java',
     ).readAsStringSync();
-    final runServiceStart = source.indexOf('private void runService()');
+    final runServiceStart = source.indexOf('protected void runService()');
     final runServiceEnd = source.indexOf(
       'public void receiveData(',
       runServiceStart,
@@ -45,12 +45,15 @@ void main() {
     ).readAsStringSync();
     final onDestroy = _blockAfter(source, 'public void onDestroy()');
     final manualStop = _blockAfter(onDestroy, 'else');
+    final releaseLock =
+        _blockAfter(source, 'static synchronized void releaseLock()');
 
     expect(manualStop, contains('config.setManuallyStopped(true)'));
-    expect(manualStop, contains('if (lockStatic != null)'));
-    expect(manualStop, contains('if (lockStatic.isHeld())'));
-    expect(manualStop, contains('lockStatic.release()'));
-    expect(manualStop, contains('lockStatic = null'));
+    expect(manualStop, contains('releaseLock()'));
+    expect(releaseLock, contains('if (lockStatic != null)'));
+    expect(releaseLock, contains('if (lockStatic.isHeld())'));
+    expect(releaseLock, contains('lockStatic.release()'));
+    expect(releaseLock, contains('lockStatic = null'));
   });
 
   test('watchdog restart retains the wake lock until service recovery', () {
