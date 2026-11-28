@@ -39,6 +39,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         label: AppLocalizations.of(context)!.modelNameLabel,
         controller: _nameController,
         hintText: AppLocalizations.of(context)!.modelNameHint,
+        constrainedHint: true,
       ),
       const SizedBox(height: 16),
 
@@ -48,6 +49,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         controller: _modelIdController,
         hintText: AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
         required: true,
+        constrainedHint: true,
       ),
       const SizedBox(height: 16),
 
@@ -57,6 +59,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         controller: _contextController,
         hintText: AppLocalizations.of(context)!.llmContextHint,
         required: true,
+        constrainedHint: true,
         keyboardType: TextInputType.number,
         description: AppLocalizations.of(context)!.llmContextHelp,
         suggestions: kContextLengthSuggestions,
@@ -305,6 +308,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         hintText: AppLocalizations.of(context)!.llmMaxTokensHint,
         keyboardType: TextInputType.number,
         description: AppLocalizations.of(context)!.llmTokensPerResponse,
+        constrainedHint: true,
       ),
 
       // Seed
@@ -316,6 +320,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         hintText: AppLocalizations.of(context)!.llmSeedHint,
         keyboardType: TextInputType.number,
         description: AppLocalizations.of(context)!.llmSeedHelp,
+        constrainedHint: true,
       ),
 
       const SizedBox(height: 24),
