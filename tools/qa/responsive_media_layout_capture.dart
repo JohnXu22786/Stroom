@@ -64,30 +64,31 @@ class _MediaPickerCapture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: ElevatedButton(
-        onPressed: () => showMediaPickerDialog<_CaptureRecord>(
-          context,
-          MediaPickerConfig<_CaptureRecord>(
-            title: 'Médias locaux',
-            emptyIcon: Icons.folder_outlined,
-            emptyText: 'Aucun média',
-            fileIcon: Icons.image_outlined,
-            fileIconColor: Colors.blue,
-            multiSelect: true,
-            loadRecords: () async => const [
-              _CaptureRecord(id: 'one', name: 'photo-alpha.png', folder: ''),
-            ],
-            loadFolders: () async => <String>{},
-            readFile: (_) async => Uint8List.fromList([1, 2, 3]),
-            displayName: (record) => record.name,
-            subtitleBuilder: (_) => const Text('PNG · 1,2 Ko'),
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () => showMediaPickerDialog<_CaptureRecord>(
+              context,
+              MediaPickerConfig<_CaptureRecord>(
+                title: 'Médias locaux',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: 'Aucun média',
+                fileIcon: Icons.image_outlined,
+                fileIconColor: Colors.blue,
+                multiSelect: true,
+                loadRecords: () async => const [
+                  _CaptureRecord(
+                      id: 'one', name: 'photo-alpha.png', folder: ''),
+                ],
+                loadFolders: () async => <String>{},
+                readFile: (_) async => Uint8List.fromList([1, 2, 3]),
+                displayName: (record) => record.name,
+                subtitleBuilder: (_) => const Text('PNG · 1,2 Ko'),
+              ),
+            ),
+            child: const Text('Ouvrir le sélecteur'),
           ),
         ),
-        child: const Text('Ouvrir le sélecteur'),
-      ),
-    ),
-  );
+      );
 }
 
 class _CaptureRecord {
