@@ -1992,7 +1992,7 @@ class AudioChunker {
       for (var index = first; index < candidates.length; index++) {
         final candidate = candidates[index];
         if (candidate.samplePosition >= totalSamples ||
-            candidate.samplePosition > preferredPos + windowSamples) {
+            candidate.samplePosition > preferredPos) {
           break;
         }
         final distance = (candidate.samplePosition - preferredPos).abs();
@@ -2701,13 +2701,14 @@ class AudioChunker {
   ) {
     if (minimumPosition >= totalSamples) return totalSamples;
 
-    // Search for candidates within ±3s of preferredPos
+    // Search for candidates up to the preferred boundary and within 3s of it.
     final windowSamples = (3 * sampleRate).round();
     CandidateCut? nearest;
     int nearestDist = windowSamples + 1;
 
     for (final c in candidates) {
       if (c.samplePosition < minimumPosition ||
+          c.samplePosition > preferredPos ||
           c.samplePosition >= totalSamples) {
         continue;
       }

@@ -1880,6 +1880,52 @@ void main() {
       }
     });
 
+    test(
+      'forced cut never moves past maxChunkDuration for nearby silence',
+      () async {
+        final wav = _buildTestWav(
+          sampleRate: 8000,
+          segments: [
+            (20.5, 0.5), // Silence starts after the 20s maximum boundary.
+            (1.5, 0.0),
+            (20.0, 0.5),
+          ],
+        );
+
+        final chunker = AudioChunker(
+          config: AudioChunkConfig(
+            maxChunkBytes: 10 * 1024 * 1024,
+            minSilenceDuration: 0.5,
+            minChunkDuration: 5.0,
+            targetChunkDuration: 15.0,
+            maxChunkDuration: 20.0,
+          ),
+        );
+        final chunks = chunker.split(wav);
+        final durations = chunks
+            .map((chunk) {
+              final info = parseWavHeader(chunk);
+              return info.totalSamples / info.sampleRate;
+            })
+            .toList();
+
+        expect(chunks.length, greaterThan(1));
+        expect(durations.first, closeTo(20.0, 0.01));
+        expect(durations.every((duration) => duration <= 20.0), isTrue);
+
+        final yieldingPlan = await chunker.planWithEventLoopYield(
+          wav,
+          AudioChunkMethod.silence,
+        );
+        expect(yieldingPlan.first.durationSeconds, closeTo(20.0, 0.01));
+        expect(
+          yieldingPlan.every((chunk) => chunk.durationSeconds <= 20.0),
+          isTrue,
+        );
+        expect(yieldingPlan.length, greaterThan(1));
+      },
+    );
+
     test('uses smart scoring: prefers longer silence over shorter', () {
       // Audio with one long silence (good cut) and one short silence (bad cut)
       final wav = _buildTestWav(
