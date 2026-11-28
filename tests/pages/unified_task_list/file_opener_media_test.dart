@@ -47,6 +47,27 @@ void main() {
     expect(await fileOpenKind('/tmp/app.tsx'), FileOpenKind.text);
   });
 
+  test('routes supported extensionless text filenames by basename', () async {
+    for (final fileName in [
+      'Dockerfile',
+      'Makefile',
+      '.gitignore',
+      '.env',
+    ]) {
+      expect(
+        await fileOpenKind('/tmp/$fileName'),
+        FileOpenKind.text,
+        reason: '$fileName should open in the text preview',
+      );
+    }
+
+    expect(
+      await fileOpenKind('/tmp/unknownfile'),
+      FileOpenKind.system,
+      reason: 'unknown extensionless files should keep using the system opener',
+    );
+  });
+
   test('routes ambiguous containers to a browser viewer without IO probing',
       () async {
     expect(
