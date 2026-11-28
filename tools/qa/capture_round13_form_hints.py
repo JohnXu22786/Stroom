@@ -12,6 +12,9 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/round13-form-hints-a"
 PREVIEW = OUTPUT / "custom-json-hint-reveal-de-320x640-scale1_8-light.webm"
+FITTING_PREVIEW = OUTPUT / "model-id-fitting-en-1200x800-scale1-light.webm"
+EDITED_CAPTURE = OUTPUT / "custom-json-edited-de-320x640-scale1_8-light.png"
+FITTING_CAPTURE = OUTPUT / "model-id-fitting-production-en-1200x800-scale1-light.png"
 PORT = 8899
 URL = f"http://127.0.0.1:{PORT}/"
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -38,6 +41,41 @@ def focus_json_field(page):
     else:
         page.mouse.click(100, 520)
     page.wait_for_timeout(100)
+
+
+def capture_preview(page, frames, *, duration_seconds, frames_per_second):
+    frame_count = duration_seconds * frames_per_second
+    frame_interval = 1 / frames_per_second
+    start = time.monotonic()
+    for index in range(frame_count):
+        page.screenshot(path=str(frames / f"frame-{index:03d}.png"))
+        target = start + (index + 1) * frame_interval
+        delay = target - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+    return frame_count
+
+
+def encode_preview(frames, output_path, frames_per_second):
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(frames_per_second),
+            "-i",
+            str(frames / "frame-%03d.png"),
+            "-c:v",
+            "libvpx-vp9",
+            "-pix_fmt",
+            "yuv420p",
+            "-b:v",
+            "500k",
+            str(output_path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
 
 
 with tempfile.TemporaryDirectory(prefix="round13-form-hints-") as temp_dir:
@@ -87,6 +125,8 @@ with tempfile.TemporaryDirectory(prefix="round13-form-hints-") as temp_dir:
                 )
 
             errors = []
+            fitting_frame_dir = temp / "fitting-frames"
+            fitting_frame_dir.mkdir()
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(
                     headless=True,
@@ -100,7 +140,31 @@ with tempfile.TemporaryDirectory(prefix="round13-form-hints-") as temp_dir:
                 )
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
+                page.set_viewport_size({"width": 1200, "height": 800})
+                page.goto(
+                    f"{URL}?theme=light&case=fitting",
+                    wait_until="load",
+                    timeout=120_000,
+                )
+                wait_for_rendered_flutter(page)
+                page.wait_for_timeout(1500)
+                fitting_screenshot = page.screenshot()
+                fitting_image = Image.open(BytesIO(fitting_screenshot)).convert("RGB")
+                if fitting_image.size != (1200, 800):
+                    raise RuntimeError(f"Unexpected fitting screenshot size: {fitting_image.size}")
+                FITTING_CAPTURE.write_bytes(fitting_screenshot)
+                fitting_duration = 4
+                fitting_fps = 2
+                fitting_frames = capture_preview(
+                    page,
+                    fitting_frame_dir,
+                    duration_seconds=fitting_duration,
+                    frames_per_second=fitting_fps,
+                )
+                encode_preview(fitting_frame_dir, FITTING_PREVIEW, fitting_fps)
+
                 for theme in ("light", "dark"):
+                    page.set_viewport_size({"width": 320, "height": 640})
                     page.goto(f"{URL}?theme={theme}", wait_until="load", timeout=120_000)
                     wait_for_rendered_flutter(page)
                     focus_json_field(page)
@@ -112,20 +176,23 @@ with tempfile.TemporaryDirectory(prefix="round13-form-hints-") as temp_dir:
                         screenshot
                     )
 
+                    if theme == "light":
+                        page.get_by_role("textbox").last.fill('{"key": "value"}')
+                        page.wait_for_timeout(200)
+                        edited_screenshot = page.screenshot()
+                        (OUTPUT / EDITED_CAPTURE.name).write_bytes(edited_screenshot)
+
                 page.goto(f"{URL}?theme=light", wait_until="load", timeout=120_000)
                 wait_for_rendered_flutter(page)
                 focus_json_field(page)
                 duration_seconds = 10
                 frames_per_second = 8
-                frame_count = duration_seconds * frames_per_second
-                frame_interval = 1 / frames_per_second
-                start = time.monotonic()
-                for index in range(frame_count):
-                    page.screenshot(path=str(frames / f"frame-{index:03d}.png"))
-                    target = start + (index + 1) * frame_interval
-                    delay = target - time.monotonic()
-                    if delay > 0:
-                        time.sleep(delay)
+                frame_count = capture_preview(
+                    page,
+                    frames,
+                    duration_seconds=duration_seconds,
+                    frames_per_second=frames_per_second,
+                )
 
                 device_pixel_ratio = page.evaluate("devicePixelRatio")
                 browser.close()
@@ -142,29 +209,16 @@ with tempfile.TemporaryDirectory(prefix="round13-form-hints-") as temp_dir:
     if device_pixel_ratio != 1:
         raise RuntimeError(f"Unexpected device pixel ratio: {device_pixel_ratio}")
 
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-framerate",
-            str(frames_per_second),
-            "-i",
-            str(frames / "frame-%03d.png"),
-            "-c:v",
-            "libvpx-vp9",
-            "-pix_fmt",
-            "yuv420p",
-            "-b:v",
-            "500k",
-            str(PREVIEW),
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-    )
+    encode_preview(frames, PREVIEW, frames_per_second)
 
 print(
     {
         "preview": str(PREVIEW.relative_to(ROOT)),
+        "fitting_preview": str(FITTING_PREVIEW.relative_to(ROOT)),
+        "fitting_capture": str(FITTING_CAPTURE.relative_to(ROOT)),
+        "fitting_preview_duration_seconds": fitting_duration,
+        "fitting_preview_frames": fitting_frames,
+        "edited_capture": str(EDITED_CAPTURE.relative_to(ROOT)),
         "captures": [
             "custom-json-clipped-de-320x640-scale1_8-light.png",
             "custom-json-clipped-de-320x640-scale1_8-dark.png",

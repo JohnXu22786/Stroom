@@ -5,12 +5,15 @@ import 'package:stroom/pages/simple_model_config_page.dart';
 
 void main() {
   final isDark = Uri.base.queryParameters['theme'] == 'dark';
+  final fitting = Uri.base.queryParameters['case'] == 'fitting';
   final brightness = isDark ? Brightness.dark : Brightness.light;
+  final locale = fitting ? const Locale('en', 'US') : const Locale('de', 'DE');
+  final textScale = fitting ? 1.0 : 1.8;
 
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      locale: const Locale('de', 'DE'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: ThemeData(
@@ -22,17 +25,19 @@ void main() {
       ),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context)
-            .copyWith(textScaler: const TextScaler.linear(1.8)),
+            .copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
       home: SimpleModelConfigPage(
-        model: ModelConfig(
-          name: 'Example',
-          modelId: 'gpt-4o',
-          customParams: [
-            CustomParam(paramName: 'response', type: 'json'),
-          ],
-        ),
+        model: fitting
+            ? null
+            : ModelConfig(
+                name: 'Example',
+                modelId: 'gpt-4o',
+                customParams: [
+                  CustomParam(paramName: 'response', type: 'json'),
+                ],
+              ),
       ),
     ),
   );
