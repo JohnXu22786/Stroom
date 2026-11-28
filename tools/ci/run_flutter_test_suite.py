@@ -351,6 +351,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 BROWSER_ONLY_TESTS: dict[str, str] = {
     "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
     "services/userscript_http_web_test.dart": "component-integrations",
+    "utils/tts_storage_service_test.dart": "application-shared",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 
