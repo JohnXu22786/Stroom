@@ -1758,7 +1758,8 @@ class _Mp4Demuxer {
                   } else if (scType == 'stsc') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
-                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 12)) {
+                    if (!_hasValidTableEntries(
+                        scStart, scEnd, entryCount, 12)) {
                       return null;
                     }
                     for (var i = 0; i < entryCount; i++) {
@@ -2093,7 +2094,8 @@ class _Mp4Demuxer {
                   } else if (scType == 'stsc') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
-                    if (!_hasValidTableEntries(scStart, scEnd, entryCount, 12)) {
+                    if (!_hasValidTableEntries(
+                        scStart, scEnd, entryCount, 12)) {
                       return null;
                     }
                     for (var i = 0; i < entryCount; i++) {
