@@ -1316,6 +1316,54 @@ void main() {
       );
     });
 
+    test('rejects oversized MP4 sample table counts promptly in both APIs',
+        () async {
+      for (final table in ['stts', 'stsc', 'stco', 'co64']) {
+        final malformed = Uint8List.fromList(
+          buildMinimalMp4WithPcmAudio(pcmFrames: 2, useCo64: table == 'co64'),
+        );
+        final tableTypeOffset = _findFourCc(malformed, table);
+        expect(tableTypeOffset, greaterThanOrEqualTo(0));
+        // Keep the table box short while claiming a million entries.
+        malformed.setRange(
+          tableTypeOffset + 8,
+          tableTypeOffset + 12,
+          _u32be(1000000),
+        );
+
+        for (final (extract, name) in [
+          (_extractAudioInIsolateForTesting, 'sync'),
+          (_extractAudioAsyncInIsolateForTesting, 'async'),
+        ]) {
+          final response = ReceivePort();
+          final stopwatch = Stopwatch()..start();
+          final isolate = await Isolate.spawn(extract, [
+            response.sendPort,
+            malformed,
+          ]);
+          final Object? result;
+          try {
+            result = await response.first.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => 'timed-out',
+            );
+          } finally {
+            isolate.kill(priority: Isolate.immediate);
+            response.close();
+          }
+          stopwatch.stop();
+
+          expect(result, startsWith('Exception:'), reason: '$table $name');
+          expect(result, isNot('timed-out'), reason: '$table $name');
+          expect(
+            stopwatch.elapsed,
+            lessThan(const Duration(seconds: 1)),
+            reason: '$table $name should reject before iterating the count',
+          );
+        }
+      }
+    });
+
     test(
       'rejects a truncated trailing moov with oversized stbl without hanging',
       () async {
