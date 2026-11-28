@@ -171,6 +171,7 @@ class AnkiDroidPage extends ConsumerWidget {
   void _showCreateDeckDialog(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final c = TextEditingController();
+    final hintStates = WidgetStatesController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -181,9 +182,13 @@ class AnkiDroidPage extends ConsumerWidget {
         ),
         content: TextField(
           controller: c,
+          statesController: hintStates,
           autofocus: true,
           decoration: InputDecoration(
-            hintText: l10n.ankiDeckNameHint,
+            hint: ConstrainedInputHint(
+              l10n.ankiDeckNameHint,
+              statesController: hintStates,
+            ),
             border: OutlineInputBorder(),
           ),
         ),
@@ -211,7 +216,12 @@ class AnkiDroidPage extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        c.dispose();
+        hintStates.dispose();
+      });
+    });
   }
 
   void _showRenameDialog(
@@ -319,6 +329,7 @@ class AnkiDroidPage extends ConsumerWidget {
     final fc = TextEditingController();
     final bc = TextEditingController();
     final tc = TextEditingController();
+    final tagsHintStates = WidgetStatesController();
     int selectedModelId = 1;
 
     // Load models synchronously from the last known value.
@@ -415,6 +426,7 @@ class AnkiDroidPage extends ConsumerWidget {
                 const SizedBox(height: 12),
                 TextField(
                   controller: tc,
+                  statesController: tagsHintStates,
                   decoration: InputDecoration(
                     label: ConstrainedText(
                       AppLocalizations.of(ctx)!.ankiTagsLabel,
@@ -422,7 +434,10 @@ class AnkiDroidPage extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     border: OutlineInputBorder(),
-                    hintText: AppLocalizations.of(ctx)!.ankiTagsHint,
+                    hint: ConstrainedInputHint(
+                      AppLocalizations.of(ctx)!.ankiTagsHint,
+                      statesController: tagsHintStates,
+                    ),
                   ),
                 ),
               ],
@@ -459,7 +474,14 @@ class AnkiDroidPage extends ConsumerWidget {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        fc.dispose();
+        bc.dispose();
+        tc.dispose();
+        tagsHintStates.dispose();
+      });
+    });
   }
 }
 
