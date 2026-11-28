@@ -85,6 +85,20 @@ try:
             "discard_label": "Abandonner",
         },
         {
+            "name": "mcp-actions-fr-320x640-scale4-light-keyboard-inset-discard.png",
+            "width": 320,
+            "height": 640,
+            "locale": "fr-FR",
+            "scale": 4,
+            "theme": "light",
+            "save_label": "Enregistrer",
+            "discard_label": "Abandonner",
+            "view_inset_bottom": 260,
+            "top_screenshot": "mcp-actions-fr-320x640-scale4-light-keyboard-inset-save.png",
+            "visible_bottom": 380,
+            "scroll_for_discard": 228,
+        },
+        {
             "name": "mcp-actions-en-240x640-scale1-light.png",
             "width": 240,
             "height": 640,
@@ -120,13 +134,14 @@ try:
             )
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(
-                f"{base_url}?locale={case['locale']}&scale={case['scale']}&theme={case['theme']}",
+                f"{base_url}?locale={case['locale']}&scale={case['scale']}&theme={case['theme']}&inset={case.get('view_inset_bottom', 0)}",
                 wait_until="load",
                 timeout=120_000,
             )
             page.locator("canvas").wait_for(state="visible", timeout=30_000)
             page.wait_for_timeout(1_000)
-            page.mouse.click(case["width"] / 2, case["height"] / 2)
+            visible_bottom = case.get("visible_bottom", case["height"])
+            page.mouse.click(case["width"] / 2, visible_bottom / 2)
             page.wait_for_timeout(1_000)
             page.locator("flt-semantics-placeholder").evaluate(
                 '(element) => element.dispatchEvent(new MouseEvent("click", {bubbles: true}))'
@@ -137,7 +152,7 @@ try:
                 ("discard", case["discard_label"]),
             ]:
                 if action == "discard" and case.get("scroll_for_discard"):
-                    page.mouse.move(case["width"] / 2, case["height"] / 2)
+                    page.mouse.move(case["width"] / 2, visible_bottom / 2)
                     page.mouse.wheel(0, case["scroll_for_discard"])
                     page.wait_for_timeout(500)
                 button = page.get_by_role("button", name=label)
@@ -149,7 +164,8 @@ try:
                     bounds["x"] < 0
                     or bounds["y"] < 0
                     or bounds["x"] + bounds["width"] > case["width"]
-                    or bounds["y"] + bounds["height"] > case["height"]
+                    or bounds["y"] + bounds["height"]
+                    > case.get("visible_bottom", case["height"])
                 ):
                     raise RuntimeError(f"MCP {action} action is outside the viewport: {bounds}")
                 action_bounds[action] = bounds
@@ -167,7 +183,15 @@ try:
                             "locale": case["locale"],
                             "text_scale": case["scale"],
                             "theme": f"{case['theme']} Material 3",
-                            "state": "new MCP server configuration dialog with Save row visible",
+                            "view_inset_bottom": case.get("view_inset_bottom", 0),
+                            "state": (
+                                "new MCP server configuration dialog with "
+                                "simulated keyboard view inset and Save row "
+                                "visible"
+                                if case.get("view_inset_bottom", 0)
+                                else "new MCP server configuration dialog "
+                                "with Save row visible"
+                            ),
                             "action_bounds_logical_px": {"save": bounds},
                             "page_errors": errors,
                         }
@@ -186,7 +210,19 @@ try:
                     "locale": case["locale"],
                     "text_scale": case["scale"],
                     "theme": f"{case['theme']} Material 3",
-                    "state": "new MCP server configuration dialog",
+                    "view_inset_bottom": case.get("view_inset_bottom", 0),
+                    "state": (
+                        (
+                            "new MCP server configuration dialog with "
+                            "simulated keyboard view inset, action scrolled "
+                            "to Discard"
+                            if case.get("scroll_for_discard")
+                            else "new MCP server configuration dialog with "
+                            "simulated keyboard view inset"
+                        )
+                        if case.get("view_inset_bottom", 0)
+                        else "new MCP server configuration dialog"
+                    ),
                     "action_bounds_logical_px": action_bounds,
                     "page_errors": errors,
                 }

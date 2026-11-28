@@ -589,9 +589,33 @@ class _McpServerConfigDialogState
             ? _nameController.text
             : AppLocalizations.of(context)!.mcpEditServerTitle)
         : AppLocalizations.of(context)!.mcpCreateServerTitle;
-    final dialogHeight = MediaQuery.sizeOf(context).height * 0.85;
+    final screenSize = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final desiredDialogHeight = screenSize.height * 0.85;
+    final keyboardVisible = viewInsets.vertical > 0;
+    final dialogVerticalInsets = keyboardVisible ? 24.0 : 48.0;
+    final availableDialogHeight =
+        (screenSize.height - viewInsets.vertical - dialogVerticalInsets)
+            .clamp(0.0, double.infinity)
+            .toDouble();
+    final dialogHeight = desiredDialogHeight < availableDialogHeight
+        ? desiredDialogHeight
+        : availableDialogHeight;
+    final compactAppBarHeight = kToolbarHeight + _compactAppBarActionsHeight;
+    final tallCompactAppBar = compactAppBarHeight > kToolbarHeight + 120;
     final scrollWholeDialog = compactAppBar &&
-        kToolbarHeight + _compactAppBarActionsHeight + 120 > dialogHeight;
+        ((screenSize.height <= 480 && tallCompactAppBar) ||
+            (!keyboardVisible && compactAppBarHeight > dialogHeight));
+    var compactActionsViewportHeight = _compactAppBarActionsHeight;
+    if (keyboardVisible && !scrollWholeDialog) {
+      final availableActionHeight =
+          (dialogHeight - kToolbarHeight - 48).clamp(0.0, double.infinity);
+      if (availableActionHeight < compactActionsViewportHeight) {
+        compactActionsViewportHeight = availableActionHeight;
+      }
+    }
+    final scrollCompactActions =
+        compactActionsViewportHeight < _compactAppBarActionsHeight;
     return PopScope(
       canPop: !_isEditMode || !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, _) async {
@@ -638,9 +662,11 @@ class _McpServerConfigDialogState
         }
       },
       child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: 24,
+        insetPadding: EdgeInsets.only(
+          left: 24,
+          top: 24,
+          right: 24,
+          bottom: keyboardVisible ? 0 : 24,
         ),
         child: _McpDialogContentScroller(
           width: 560,
@@ -666,11 +692,21 @@ class _McpServerConfigDialogState
               bottom: compactAppBar
                   ? PreferredSize(
                       preferredSize: Size.fromHeight(
-                        _compactAppBarActionsHeight,
+                        compactActionsViewportHeight,
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: _buildCompactAppBarActions(),
+                      child: SizedBox(
+                        height: compactActionsViewportHeight,
+                        child: scrollCompactActions
+                            ? SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: _buildCompactAppBarActions(),
+                                ),
+                              )
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: _buildCompactAppBarActions(),
+                              ),
                       ),
                     )
                   : null,

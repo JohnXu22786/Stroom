@@ -10,13 +10,15 @@ void main() {
       ? const Locale('fr', 'FR')
       : const Locale('en', 'US');
   final textScale = double.tryParse(query['scale'] ?? '') ?? 1;
+  final viewInsetBottom = double.tryParse(query['inset'] ?? '') ?? 0;
   final dark = query['theme'] == 'dark';
 
   runApp(
     ProviderScope(
       overrides: [
-        providerEntriesProvider
-            .overrideWith((ref) => ProviderEntriesNotifier()),
+        providerEntriesProvider.overrideWith(
+          (ref) => ProviderEntriesNotifier(),
+        ),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -31,8 +33,10 @@ void main() {
           ),
         ),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            viewInsets: EdgeInsets.only(bottom: viewInsetBottom),
+          ),
           child: child!,
         ),
         home: Builder(
