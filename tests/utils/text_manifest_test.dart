@@ -241,6 +241,79 @@ void main() {
   });
 
   group('TextManifest hash-locked content changes', () {
+    test('cleans new content when the record update fails', () async {
+      const oldContent = 'existing text';
+      const newContent = 'edited text';
+      final original = _textRecordWithContent(
+        'update-save-failure',
+        oldContent,
+      );
+      final updated = _textRecordWithContent(
+        original.id,
+        newContent,
+        createdAt: DateTime.utc(2025),
+      );
+      await TextManifest.saveTextRecord(original, oldContent);
+      final failure = StateError('simulated manifest update failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.updateTextRecord(updated, newContent),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readFilePath(updated.storageFileName), isNull);
+      expect(
+        (await TextManifest.loadRecordsUncached()).single.hash,
+        original.hash,
+      );
+    });
+
+    test(
+      'preserves new content referenced by another record on update failure',
+      () async {
+        const oldContent = 'existing text';
+        const newContent = 'shared edited text';
+        final original = _textRecordWithContent(
+          'shared-update-failure',
+          oldContent,
+        );
+        final updated = _textRecordWithContent(
+          original.id,
+          newContent,
+          createdAt: DateTime.utc(2025),
+        );
+        final otherReference = _textRecordWithContent(
+          'other-update-reference',
+          newContent,
+        );
+        await TextManifest.saveTextRecord(original, oldContent);
+        await TextManifest.saveTextRecord(otherReference, newContent);
+        final failure = StateError('simulated manifest update failure');
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw failure;
+        };
+
+        await expectLater(
+          TextManifest.updateTextRecord(updated, newContent),
+          throwsA(same(failure)),
+        );
+
+        expect(
+          await TextManifest.readText(updated.storageFileName),
+          newContent,
+        );
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          containsAll([original.id, otherReference.id]),
+        );
+      },
+    );
+
     test('removes new content when manifest registration fails', () async {
       const content = 'unregistered external text';
       final record = _textRecordWithContent('external-save-failure', content);

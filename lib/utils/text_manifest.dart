@@ -455,7 +455,16 @@ class TextManifest {
     late String filePath;
     final updated = await withRecordSaveLocks(record.id, record.hash, () async {
       filePath = await writeText(record.storagePath, text);
-      await _ops.updateRecord(record);
+      try {
+        await _ops.updateRecord(record);
+      } catch (_) {
+        try {
+          await deleteFileIfUnreferenced(record.hash, record.storagePath);
+        } catch (_) {
+          // Preserve the original record update failure if cleanup also fails.
+        }
+        rethrow;
+      }
     });
     if (!updated) {
       throw StateError('The text record was deleted before saving.');
