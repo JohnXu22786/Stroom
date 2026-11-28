@@ -15,7 +15,8 @@ void main() {
   runApp(
     ProviderScope(
       overrides: [
-        providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
+        providerEntriesProvider
+            .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

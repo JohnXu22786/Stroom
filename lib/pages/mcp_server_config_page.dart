@@ -1078,9 +1078,8 @@ class _McpServerConfigDialogState
       textScaler: MediaQuery.textScalerOf(context),
       locale: Localizations.localeOf(context),
     )..layout(maxWidth: labelWidth);
-    final contentHeight = painter.height > iconHeight
-        ? painter.height
-        : iconHeight;
+    final contentHeight =
+        painter.height > iconHeight ? painter.height : iconHeight;
     return contentHeight > 48 ? contentHeight : 48;
   }
 
