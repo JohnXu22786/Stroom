@@ -27,6 +27,10 @@ void main() {
     );
   });
 
+  test('URI autolinks reject an unescaped less-than sign in the URI', () {
+    expect(markdown.markdownToHtml('<http://a<b>'), '<p>&lt;http://a<b></p>\n');
+  });
+
   test('unmatched contiguous backtick runs remain literal', () {
     expect(
       markdown.markdownToHtml('before `` after'),
