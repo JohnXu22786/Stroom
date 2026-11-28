@@ -23,6 +23,7 @@ class _TaskEntry {
   final TextEditingController hourController;
   final TextEditingController minuteController;
   final TextEditingController secondController;
+  final MaterialStatesController urlHintStates = MaterialStatesController();
 
   _TaskEntry({String? initialUrl, int? initialDurationSec})
       : urlController = TextEditingController(text: initialUrl ?? ''),
@@ -44,6 +45,7 @@ class _TaskEntry {
     hourController.dispose();
     minuteController.dispose();
     secondController.dispose();
+    urlHintStates.dispose();
   }
 }
 
@@ -413,24 +415,33 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: task.urlController,
-                      decoration: InputDecoration(
-                        hintText: _l10n.catCatchUrlHint,
-                        prefixIcon: const Icon(Icons.link, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    child: Semantics(
+                      hint: _l10n.catCatchUrlHint,
+                      child: TextFormField(
+                        controller: task.urlController,
+                        statesController: task.urlHintStates,
+                        decoration: InputDecoration(
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              _l10n.catCatchUrlHint,
+                              statesController: task.urlHintStates,
+                            ),
+                          ),
+                          prefixIcon: const Icon(Icons.link, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.surface,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: colorScheme.surface,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
+                        keyboardType: TextInputType.url,
+                        textInputAction: TextInputAction.next,
+                        onChanged: (_) => setState(() {}),
                       ),
-                      keyboardType: TextInputType.url,
-                      textInputAction: TextInputAction.next,
-                      onChanged: (_) => setState(() {}),
                     ),
                   ),
                   const SizedBox(width: 4),

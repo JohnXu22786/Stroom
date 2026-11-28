@@ -120,12 +120,14 @@ class MessageSearchPage extends ConsumerStatefulWidget {
 
 class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   final TextEditingController _searchController = TextEditingController();
+  final MaterialStatesController _searchHintStates = MaterialStatesController();
   List<SearchResult> _results = [];
   String _query = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchHintStates.dispose();
     super.dispose();
   }
 
@@ -170,29 +172,38 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
               ),
             ),
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: localizations.messageSearchHint,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+            child: Semantics(
+              hint: localizations.messageSearchHint,
+              child: TextField(
+                controller: _searchController,
+                statesController: _searchHintStates,
+                autofocus: true,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hint: ExcludeSemantics(
+                    child: ConstrainedInputHint(
+                      localizations.messageSearchHint,
+                      statesController: _searchHintStates,
+                    ),
+                  ),
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            _onSearchChanged('');
+                          },
+                        )
+                      : null,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ),

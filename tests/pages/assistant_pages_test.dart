@@ -15,6 +15,7 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/utils/emojis.dart'
     show EmojiCategories, EmojiCategoryType;
 import 'package:stroom/widgets/constrained_text.dart';
+import '../qa/round11_hint_measurement.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -312,6 +313,11 @@ void main() {
         locale: const Locale('de'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
         home: Scaffold(
           body: Padding(
             padding: const EdgeInsets.all(16),
@@ -321,6 +327,9 @@ void main() {
               promptController: promptController,
               selectedEmoji: '🤖',
               onEmojiSelected: (_) {},
+              nameHint: 'An example assistant name that needs a narrow slot',
+              descriptionHint:
+                  'A much longer assistant description that exceeds its two-line field slot at this text scale.',
             ),
           ),
         ),
@@ -340,6 +349,25 @@ void main() {
     );
 
     final nameField = find.byType(TextField).first;
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedInputHint &&
+            widget.data == 'An example assistant name that needs a narrow slot',
+      ),
+      findsOneWidget,
+    );
+    expectHintMeasurement(
+      tester,
+      hint: 'An example assistant name that needs a narrow slot',
+      clipped: true,
+    );
+    expectHintMeasurement(
+      tester,
+      hint:
+          'A much longer assistant description that exceeds its two-line field slot at this text scale.',
+      clipped: true,
+    );
     await tester.tap(nameField);
     await tester.enterText(nameField, 'Mein Assistent');
     await tester.pump();

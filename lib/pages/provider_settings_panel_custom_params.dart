@@ -47,11 +47,12 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     AppLocalizations.of(context)!
                         .providerOptionIndexLabel((j + 1).toString()),
                   ),
-                  hintText: AppLocalizations.of(context)!
-                      .providerOptionExampleHint('low, enabled, true, max'),
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
+                constrainedHint: true,
+                hintText: AppLocalizations.of(context)!
+                    .providerOptionExampleHint('low, enabled, true, max'),
                 onChanged: (v) {
                   param.options[j] = v;
                   setState(() {});

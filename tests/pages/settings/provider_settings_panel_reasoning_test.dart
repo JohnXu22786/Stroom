@@ -8,19 +8,29 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/llm_model_config_shared.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import '../../qa/round11_hint_measurement.dart';
 
 /// 打开供应商设置面板并返回保存结果（null 表示未保存成功）。
 Future<ProviderConfigItem?> _openAndSave(
   WidgetTester tester, {
   required ProviderConfigItem config,
   bool tapSave = true,
+  double textScale = 1,
+  Locale locale = const Locale('zh', 'CN'),
+  bool selectParameterTabProgrammatically = false,
 }) async {
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -45,8 +55,21 @@ Future<ProviderConfigItem?> _openAndSave(
   await tester.pumpAndSettle();
 
   // 切到「参数设置」Tab
-  await tester.tap(find.text('参数设置'));
-  await tester.pumpAndSettle();
+  if (selectParameterTabProgrammatically) {
+    DefaultTabController.of(tester.element(find.byType(TabBar))).animateTo(
+      1,
+      duration: Duration.zero,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  } else {
+    final parameterTab = AppLocalizations.of(
+      tester.element(find.byType(Dialog)),
+    )!
+        .providerParameterSettingsTab;
+    await tester.tap(find.text(parameterTab));
+    await tester.pumpAndSettle();
+  }
 
   if (tapSave) {
     await tester.tap(find.text('保存'));
@@ -92,6 +115,244 @@ void main() {
   });
 
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets(
+      'reasoning parameter names and JSON examples keep native fields',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _openAndSave(
+          tester,
+          tapSave: false,
+          textScale: 2,
+          locale: const Locale('de', 'DE'),
+          selectParameterTabProgrammatically: true,
+          config: ProviderConfigItem(
+            providerName: 'Test Provider',
+            host: 'https://api.example.com/v1',
+            reasoningParams: [
+              ReasoningParam(
+                paramName: '',
+                isReasoningToggle: true,
+                onValue: '',
+                offValue: '',
+              ),
+              ReasoningParam(
+                paramName: '',
+                isEffortParam: true,
+                type: 'json',
+                options: [''],
+              ),
+              ReasoningParam(paramName: '', type: 'json', options: ['']),
+            ],
+          ),
+        );
+
+        final strings =
+            AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+        final parameterNameHints = [
+          strings.providerParamNameHint('thinking.type, reasoning'),
+          strings.providerParamNameHint('reasoning_effort'),
+          strings.providerParamNameHint('thinking.type, budget_tokens'),
+        ];
+        for (final hint in parameterNameHints) {
+          final finder = find.byWidgetPredicate(
+            (widget) => widget is ConstrainedInputHint && widget.data == hint,
+          );
+          await tester.ensureVisible(finder);
+          expectHintMeasurement(tester, hint: hint, clipped: true);
+        }
+
+        final jsonHint = strings.providerOptionExampleHint(
+          '{"thinking": {"budget": 1024}}',
+        );
+        final jsonHintFinder = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+        );
+        expect(jsonHintFinder, findsNWidgets(2));
+        for (var occurrence = 0; occurrence < 2; occurrence++) {
+          final field = find.ancestor(
+            of: jsonHintFinder.at(occurrence),
+            matching: find.byType(TextFormField),
+          );
+          await tester.ensureVisible(field);
+          await tester.pump();
+          expect(
+              tester
+                  .widget<ConstrainedInputHint>(jsonHintFinder.at(occurrence))
+                  .maxLines,
+              5);
+          expect(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+              findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('removing a reasoning parameter disposes hint controllers', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        selectParameterTabProgrammatically: true,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              type: 'json',
+              options: [''],
+            ),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      final nameHint = strings.providerParamNameHint('reasoning_effort');
+      final jsonHint = strings.providerOptionExampleHint(
+        '{"thinking": {"budget": 1024}}',
+      );
+      final nameHintWidget = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == nameHint,
+      );
+      final jsonHintWidget = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+      );
+      final nameStates =
+          tester.widget<ConstrainedInputHint>(nameHintWidget).statesController;
+      final jsonStates =
+          tester.widget<ConstrainedInputHint>(jsonHintWidget).statesController;
+
+      final removeButton = tester.widget<IconButton>(find.ancestor(
+        of: find.byIcon(Icons.delete),
+        matching: find.byType(IconButton),
+      ));
+      removeButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(() => nameStates.addListener(() {}), throwsFlutterError);
+      expect(() => jsonStates.addListener(() {}), throwsFlutterError);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reasoning option values use measured native-field hints', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        textScale: 2,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: [''],
+            ),
+            ReasoningParam(paramName: 'thinking.style', options: ['']),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      final hint = strings.providerOptionExampleHint('low, medium, high');
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ConstrainedInputHint && widget.data == hint,
+        ),
+        findsNWidgets(2),
+      );
+      expectHintMeasurement(tester, hint: hint, clipped: true);
+      expectHintMeasurement(
+        tester,
+        hint: hint,
+        clipped: true,
+        occurrence: 1,
+      );
+
+      final firstField = find.ancestor(
+        of: find
+            .byWidgetPredicate(
+              (widget) => widget is ConstrainedInputHint && widget.data == hint,
+            )
+            .first,
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(firstField);
+      await tester.enterText(firstField, 'medium');
+      expect(
+          tester.widget<TextFormField>(firstField).controller!.text, 'medium');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('toggle value examples use measured native-field hints', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(430, 820);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _openAndSave(
+        tester,
+        tapSave: false,
+        textScale: 2,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.mode',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        ),
+      );
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      for (final hint in [
+        strings.providerParamNameHint('enabled, true'),
+        strings.providerParamNameHint('disabled, false'),
+      ]) {
+        expect(
+          find.byWidgetPredicate(
+            (widget) => widget is ConstrainedInputHint && widget.data == hint,
+          ),
+          findsOneWidget,
+        );
+      }
+      expectHintMeasurement(
+        tester,
+        hint: strings.providerParamNameHint('enabled, true'),
+        clipped: true,
+      );
+      expectHintMeasurement(
+        tester,
+        hint: strings.providerParamNameHint('disabled, false'),
+        clipped: true,
+      );
+      expect(find.byType(TextFormField), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('trims surrounding whitespace from saved custom-param names', (
       tester,
     ) async {

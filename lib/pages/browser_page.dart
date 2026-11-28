@@ -468,6 +468,7 @@ class BrowserRecoveryResult {
 class _BrowserPageState extends State<BrowserPage> {
   InAppWebViewController? _webViewController;
   final _urlController = TextEditingController();
+  final _urlHintStates = MaterialStatesController();
   bool _isLoading = false;
   double _progress = 0;
   Timer? _mainFrameErrorTimer;
@@ -575,6 +576,7 @@ class _BrowserPageState extends State<BrowserPage> {
     _recoveryTimeoutTimer?.cancel();
     _recoveryNavigationFallbackTimer?.cancel();
     _urlController.dispose();
+    _urlHintStates.dispose();
     _scriptRuntimeErrors.dispose();
 
     unawaited(BrowserCookieService.handleBrowserClose());
@@ -1064,31 +1066,40 @@ class _BrowserPageState extends State<BrowserPage> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 4,
-        title: TextField(
-          controller: _urlController,
-          onChanged: (_) => _pauseRecoveryRetriesForUserAction(),
-          style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: l10n.browserAddressHint,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20),
-              borderSide: BorderSide.none,
+        title: Semantics(
+          hint: l10n.browserAddressHint,
+          child: TextField(
+            controller: _urlController,
+            statesController: _urlHintStates,
+            onChanged: (_) => _pauseRecoveryRetriesForUserAction(),
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hint: ExcludeSemantics(
+                child: ConstrainedInputHint(
+                  l10n.browserAddressHint,
+                  statesController: _urlHintStates,
+                ),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(20),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.5,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                onPressed: () => _goToUrl(_urlController.text),
+              ),
             ),
-            filled: true,
-            fillColor: colorScheme.surfaceContainerHighest.withValues(
-              alpha: 0.5,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.arrow_forward, size: 18),
-              onPressed: () => _goToUrl(_urlController.text),
-            ),
+            textInputAction: TextInputAction.go,
+            onSubmitted: _goToUrl,
           ),
-          textInputAction: TextInputAction.go,
-          onSubmitted: _goToUrl,
         ),
         actions: [
           if (widget.recoveryMode &&
@@ -1980,6 +1991,7 @@ class _ScriptImportDialog extends StatefulWidget {
 
 class _ScriptImportDialogState extends State<_ScriptImportDialog> {
   final _urlCtrl = TextEditingController();
+  final _urlHintStates = MaterialStatesController();
   String? _source;
   String? _error;
   bool _loading = false;
@@ -1996,6 +2008,7 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
   @override
   void dispose() {
     _urlCtrl.dispose();
+    _urlHintStates.dispose();
     super.dispose();
   }
 
@@ -2055,23 +2068,32 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _urlCtrl,
-                keyboardType: TextInputType.url,
-                readOnly: _loading,
-                decoration: InputDecoration(
-                  label: ConstrainedText(
-                    l10n.browserScriptImportUrl,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              Semantics(
+                hint: 'https://greasyfork.org/scripts/…/script.user.js',
+                child: TextField(
+                  controller: _urlCtrl,
+                  statesController: _urlHintStates,
+                  keyboardType: TextInputType.url,
+                  readOnly: _loading,
+                  decoration: InputDecoration(
+                    label: ConstrainedText(
+                      l10n.browserScriptImportUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    hint: ExcludeSemantics(
+                      child: ConstrainedInputHint(
+                        'https://greasyfork.org/scripts/…/script.user.js',
+                        statesController: _urlHintStates,
+                      ),
+                    ),
+                    border: const OutlineInputBorder(),
                   ),
-                  hintText: 'https://greasyfork.org/scripts/…/script.user.js',
-                  border: const OutlineInputBorder(),
+                  onChanged: (_) => setState(() {
+                    _source = null;
+                    _error = null;
+                  }),
                 ),
-                onChanged: (_) => setState(() {
-                  _source = null;
-                  _error = null;
-                }),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
