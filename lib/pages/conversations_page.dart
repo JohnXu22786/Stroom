@@ -24,13 +24,17 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _renameController = TextEditingController();
   final _searchHintStates = WidgetStatesController();
+  final _renameHintStates = WidgetStatesController();
   String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _renameController.dispose();
     _searchHintStates.dispose();
+    _renameHintStates.dispose();
     super.dispose();
   }
 
@@ -334,70 +338,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       ];
 
   void _renameConversation(String id, String currentTitle) {
-    final controller = TextEditingController(text: currentTitle);
-    final hintStates = WidgetStatesController();
+    _renameController.text = currentTitle;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: ConstrainedText(
-          AppLocalizations.of(context)!.conversationRename,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: TextField(
-          controller: controller,
-          statesController: hintStates,
-          autofocus: true,
-          decoration: InputDecoration(
-            hint: ConstrainedInputHint(
-              AppLocalizations.of(context)!.conversationRenameHint,
-              statesController: hintStates,
-            ),
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              ref
-                  .read(conversationsProvider.notifier)
-                  .renameConversation(id, value.trim());
-            }
-            controller.dispose();
-            hintStates.dispose();
-            Navigator.of(ctx).pop();
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.dispose();
-              hintStates.dispose();
-              Navigator.of(ctx).pop();
-            },
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.actionCancel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) {
-                ref
-                    .read(conversationsProvider.notifier)
-                    .renameConversation(id, value);
-              }
-              controller.dispose();
-              hintStates.dispose();
-              Navigator.of(ctx).pop();
-            },
-            child: ConstrainedText(
-              AppLocalizations.of(context)!.actionConfirm,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (_) => _ConversationRenameDialog(
+        controller: _renameController,
+        hintStates: _renameHintStates,
+        onRename: (value) => ref
+            .read(conversationsProvider.notifier)
+            .renameConversation(id, value),
       ),
     );
   }
@@ -840,6 +789,67 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ConversationRenameDialog extends StatelessWidget {
+  const _ConversationRenameDialog({
+    required this.controller,
+    required this.hintStates,
+    required this.onRename,
+  });
+
+  final TextEditingController controller;
+  final WidgetStatesController hintStates;
+  final ValueChanged<String> onRename;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    void submit(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isNotEmpty) onRename(trimmed);
+      Navigator.of(context).pop();
+    }
+
+    return AlertDialog(
+      title: ConstrainedText(
+        l10n.conversationRename,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: TextField(
+        controller: controller,
+        statesController: hintStates,
+        autofocus: true,
+        decoration: InputDecoration(
+          hint: ConstrainedInputHint(
+            l10n.conversationRenameHint,
+            statesController: hintStates,
+          ),
+          border: OutlineInputBorder(),
+        ),
+        onSubmitted: submit,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: ConstrainedText(
+            l10n.actionCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton(
+          onPressed: () => submit(controller.text),
+          child: ConstrainedText(
+            l10n.actionConfirm,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
