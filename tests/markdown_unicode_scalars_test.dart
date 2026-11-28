@@ -23,6 +23,28 @@ void main() {
     );
   });
 
+  test('Unicode footnotes follow first-reference order', () {
+    final html = markdown.markdownToHtml(
+      '[^café] and [^äther]\n\n'
+      '[^Äther]: Äther note\n\n'
+      '[^café]: café note',
+      extensionSet: markdown.ExtensionSet.gitHubFlavored,
+    );
+
+    expect(_footnoteIds(html), ['fn-caf%C3%A9', 'fn-%C3%84ther']);
+  });
+
+  test('ASCII footnotes follow first-reference order', () {
+    final html = markdown.markdownToHtml(
+      '[^second] and [^first]\n\n'
+      '[^first]: first note\n\n'
+      '[^second]: second note',
+      extensionSet: markdown.ExtensionSet.gitHubFlavored,
+    );
+
+    expect(_footnoteIds(html), ['fn-second', 'fn-first']);
+  });
+
   test('numeric references replace surrogate code points only', () {
     expect(
       markdown.markdownToHtml('&#55296; &#xDFFF; &#1; &#128512; &#x1F600;'),
@@ -137,3 +159,9 @@ void main() {
     );
   });
 }
+
+List<String> _footnoteIds(String html) =>
+    RegExp(r'<li id="(fn-[^"]+)">')
+        .allMatches(html)
+        .map((match) => match.group(1)!)
+        .toList();
