@@ -82,6 +82,7 @@ void main() {
                           label: strings.modelNameLabel,
                           controller: nameController,
                           hintText: strings.modelNameHint,
+                          constrainedHint: true,
                         ),
                         const SizedBox(height: 16),
                         LlmToggleTextField(
@@ -91,6 +92,7 @@ void main() {
                           onToggle: (_) {},
                           hintText: strings.llmMaxTokensHint,
                           keyboardType: TextInputType.number,
+                          constrainedHint: true,
                         ),
                         LlmToggleTextField(
                           label: strings.llmSeedLabel,
@@ -99,6 +101,7 @@ void main() {
                           onToggle: (_) {},
                           hintText: strings.llmSeedHint,
                           keyboardType: TextInputType.number,
+                          constrainedHint: true,
                         ),
                       ],
                     );
@@ -231,6 +234,7 @@ void main() {
                       onToggle: (_) {},
                       hintText: strings.llmSeedHint,
                       keyboardType: TextInputType.number,
+                      constrainedHint: true,
                     );
                   },
                 ),

@@ -32,7 +32,7 @@ class LabeledTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.maxLines,
     this.suggestions,
-    this.constrainedHint = true,
+    this.constrainedHint = false,
     this.hintStatesController,
   });
 
@@ -521,7 +521,7 @@ class LlmToggleTextField extends StatefulWidget {
     this.hintText,
     this.required = false,
     this.keyboardType = TextInputType.text,
-    this.constrainedHint = true,
+    this.constrainedHint = false,
     this.hintStatesController,
   });
 
