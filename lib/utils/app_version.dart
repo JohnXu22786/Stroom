@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:archive/archive.dart';
 
 /// 应用版本号（CD 构建时通过 --dart-define=APP_VERSION=... 注入，
-/// 即发布时的 release 版本号）。
+/// 本地构建时默认使用 pubspec.yaml 中声明的版本。
 const String appVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '0.2.13',
+  defaultValue: '0.5.5',
 );
 
 /// CD 构建的发布时间（ISO 8601 UTC，如 `2026-08-08T09:30:00Z`），

@@ -1,10 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/app_version.dart';
+import 'package:yaml/yaml.dart';
 
 void main() {
+  test('default app version matches the package version', () {
+    final pubspec =
+        loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+
+    expect(appVersion, pubspec['version']);
+  });
+
   group('decodeReleaseNotes', () {
     test('decodes UTF-8 base64 encoded release notes', () {
       const notes = '修复了若干问题\n新增深色模式';
