@@ -423,6 +423,65 @@ void main() {
       expect(pids.audioPid, equals(audioPid));
     });
 
+    test('assembles and parses a PMT with section_length 0x01FD', () {
+      const videoPid = 0x101;
+      const audioPid = 0x102;
+      const pmtPid = 0x100;
+      const sectionLength = 0x1FD;
+      const programInfoLength = 486;
+
+      // The descriptors make the PMT span several TS packets, with both
+      // stream entries after byte 256 where the old length calculation cut it.
+      final section = Uint8List(sectionLength + 3);
+      section[0] = 0x02; // table_id = PMT
+      section[1] = 0xB0 | ((sectionLength >> 8) & 0x0F);
+      section[2] = sectionLength & 0xFF;
+      section[5] = 0xC1; // version/current
+      section[8] = 0xE0 | ((videoPid >> 8) & 0x1F); // PCR_PID
+      section[9] = videoPid & 0xFF;
+      section[10] = 0xF0 | ((programInfoLength >> 8) & 0x0F);
+      section[11] = programInfoLength & 0xFF;
+
+      var offset = 12 + programInfoLength;
+      section[offset++] = 0x1B; // H.264 video
+      section[offset++] = 0xE0 | ((videoPid >> 8) & 0x1F);
+      section[offset++] = videoPid & 0xFF;
+      section[offset++] = 0xF0;
+      section[offset++] = 0x00; // no ES descriptors
+      section[offset++] = 0x0F; // AAC audio
+      section[offset++] = 0xE0 | ((audioPid >> 8) & 0x1F);
+      section[offset++] = audioPid & 0xFF;
+      section[offset++] = 0xF0;
+      section[offset++] = 0x00; // no ES descriptors
+
+      final packets = <TsPacket>[
+        TsPacket(
+            pid: 0x0000, payload: _buildPat(pmtPid), payloadUnitStart: true),
+      ];
+      var sectionOffset = 0;
+      while (sectionOffset < section.length) {
+        final isStart = sectionOffset == 0;
+        final prefixLength = isStart ? 1 : 0;
+        final sectionChunkLength =
+            section.length - sectionOffset < 184 - prefixLength
+                ? section.length - sectionOffset
+                : 184 - prefixLength;
+        final payload = Uint8List(prefixLength + sectionChunkLength);
+        if (isStart) payload[0] = 0; // pointer_field
+        payload.setRange(prefixLength, payload.length, section, sectionOffset);
+        packets.add(
+          TsPacket(pid: pmtPid, payload: payload, payloadUnitStart: isStart),
+        );
+        sectionOffset += sectionChunkLength;
+      }
+
+      final pids = TsDemuxer.findProgramMap(packets);
+
+      expect(pids, isNotNull);
+      expect(pids!.videoPid, equals(videoPid));
+      expect(pids.audioPid, equals(audioPid));
+    });
+
     test('returns null when PAT is missing', () {
       final packets = <TsPacket>[
         TsPacket(pid: 0x0100, payload: Uint8List(10), payloadUnitStart: true),
