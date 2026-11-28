@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -29,144 +31,152 @@ void showChatAttachmentPanel({
       final cs = Theme.of(ctx).colorScheme;
 
       return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Drag handle ──
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[350],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // ── Title ──
-              Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.min(640.0, MediaQuery.sizeOf(ctx).height * 0.8),
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.attach_file_outlined,
-                      size: 18,
-                      color: cs.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ConstrainedText(
-                      AppLocalizations.of(context)!.chatAttachmentFile,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
+                  // ── Drag handle ──
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[350],
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
+                  // ── Title ──
+                  Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.attach_file_outlined,
+                          size: 18,
+                          color: cs.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatAttachmentFile,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ══════════════════════════════════════════════════
+                  // File action buttons
+                  // ══════════════════════════════════════════════════
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final actions = [
+                        _FileActionButton(
+                          icon: Icons.camera_alt_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentCamera,
+                          color: Colors.orange,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromCamera();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.photo_library_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentDeviceGallery,
+                          color: Colors.blue,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromGallery();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.insert_drive_file_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentDeviceFiles,
+                          color: Colors.green,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromFilePicker();
+                          },
+                        ),
+                        _FileActionButton(
+                          icon: Icons.folder_outlined,
+                          label: AppLocalizations.of(context)!
+                              .chatAttachmentAppFiles,
+                          color: Colors.purple,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPickFromAppFiles();
+                          },
+                        ),
+                      ];
+
+                      if (constraints.maxWidth < 320) {
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                for (final action in actions.take(2))
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: action.withWidth(double.infinity),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                for (final action in actions.skip(2))
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: action.withWidth(double.infinity),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: actions,
+                      );
+                    },
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-
-              // ══════════════════════════════════════════════════
-              // File action buttons
-              // ══════════════════════════════════════════════════
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final actions = [
-                    _FileActionButton(
-                      icon: Icons.camera_alt_outlined,
-                      label: AppLocalizations.of(context)!.chatAttachmentCamera,
-                      color: Colors.orange,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromCamera();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.photo_library_outlined,
-                      label: AppLocalizations.of(context)!
-                          .chatAttachmentDeviceGallery,
-                      color: Colors.blue,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromGallery();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.insert_drive_file_outlined,
-                      label: AppLocalizations.of(context)!
-                          .chatAttachmentDeviceFiles,
-                      color: Colors.green,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromFilePicker();
-                      },
-                    ),
-                    _FileActionButton(
-                      icon: Icons.folder_outlined,
-                      label:
-                          AppLocalizations.of(context)!.chatAttachmentAppFiles,
-                      color: Colors.purple,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPickFromAppFiles();
-                      },
-                    ),
-                  ];
-
-                  if (constraints.maxWidth < 320) {
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            for (final action in actions.take(2))
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  child: action.withWidth(double.infinity),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            for (final action in actions.skip(2))
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  child: action.withWidth(double.infinity),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: actions,
-                  );
-                },
-              ),
-            ],
+            ),
           ),
         ),
       );
@@ -191,12 +201,12 @@ class _FileActionButton extends StatelessWidget {
   });
 
   Widget withWidth(double width) => _FileActionButton(
-        icon: icon,
-        label: label,
-        color: color,
-        onTap: onTap,
-        width: width,
-      );
+    icon: icon,
+    label: label,
+    color: color,
+    onTap: onTap,
+    width: width,
+  );
 
   @override
   Widget build(BuildContext context) {
