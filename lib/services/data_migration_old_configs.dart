@@ -119,6 +119,12 @@ class DataMigrationOldConfigs {
     try {
       final prepared = await _prepareLegacyChatConfigs(oldJson);
       final status = prepared['status'];
+      final malformedEntryCount = prepared['malformedEntryCount'];
+      if ((status == 'ready' || status == 'empty') &&
+          malformedEntryCount is int &&
+          malformedEntryCount > 0) {
+        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
+      }
       if (status == 'parseError') {
         debugPrint('[DataMigrationService] Failed to migrate old chat configs: '
             '${prepared['error']}');
@@ -311,7 +317,13 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
   if (decoded is! List) return {'status': 'notList'};
 
   final oldList = decoded.whereType<Map<String, dynamic>>().toList();
-  if (oldList.isEmpty) return {'status': 'empty'};
+  final malformedEntryCount = decoded.length - oldList.length;
+  if (oldList.isEmpty) {
+    return {
+      'status': 'empty',
+      'malformedEntryCount': malformedEntryCount,
+    };
+  }
 
   final migratedConfigs = <Map<String, dynamic>>[];
   for (final oldItem in oldList) {
@@ -349,6 +361,7 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
   return {
     'status': 'ready',
     'legacyConfigCount': oldList.length,
+    'malformedEntryCount': malformedEntryCount,
     'payload': jsonEncode(migratedConfigs),
   };
 }

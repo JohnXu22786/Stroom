@@ -79,6 +79,74 @@ void main() {
   });
 
   group('DataMigrationOldConfigs.migrateOldChatConfigs', () {
+    test('quarantines malformed mixed entries before migrating valid configs',
+        () async {
+      final legacyConfigs = [
+        {
+          'providerName': 'Recoverable provider',
+          'host': 'https://legacy.example.com',
+          'key': 'legacy-key',
+          'models': [
+            {'modelId': 'legacy-model'},
+          ],
+        },
+        null,
+        'malformed entry',
+      ];
+      final rawLegacyConfigs = jsonEncode(legacyConfigs);
+      SharedPreferences.setMockInitialValues({
+        'chat_configs': rawLegacyConfigs,
+        'chat_selected_config_id': 'legacy-selection',
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final quarantinedKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('chat_configs_corrupt_'))
+          .toList();
+      expect(quarantinedKeys, hasLength(1));
+      expect(prefs.getString(quarantinedKeys.single), rawLegacyConfigs);
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final migratedConfig =
+          ((entries.single as Map<String, dynamic>)['configs'] as List).single
+              as Map<String, dynamic>;
+      expect(migratedConfig['providerName'], 'Recoverable provider');
+      expect(prefs.getString('chat_configs'), isNull);
+      expect(prefs.getString('chat_selected_config_id'), isNull);
+    });
+
+    test('valid legacy config migration does not create a corruption backup',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Valid provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model'},
+            ],
+          },
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      expect(
+        prefs.getKeys().where((key) => key.startsWith('chat_configs_corrupt_')),
+        isEmpty,
+      );
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final migratedConfig =
+          ((entries.single as Map<String, dynamic>)['configs'] as List).single
+              as Map<String, dynamic>;
+      expect(migratedConfig['providerName'], 'Valid provider');
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test('non-array chat_configs is dropped without crashing', () async {
       SharedPreferences.setMockInitialValues({
         'chat_configs': '{"not": "an array"}',
