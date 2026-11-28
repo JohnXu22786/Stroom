@@ -334,6 +334,7 @@ extension _ChatServiceParamsExt on ChatService {
     // 点号参数名同样展开为嵌套 JSON。
     if (_assistantCustomParams != null) {
       for (final cp in _assistantCustomParams!) {
+        if (cp.name.trim().isEmpty) continue;
         setNestedParam(
           result,
           cp.name,
@@ -414,6 +415,8 @@ extension _ChatServiceParamsExt on ChatService {
       ...customParams.where((param) => !isJsonParent(param)),
     ];
     for (final cp in orderedParams) {
+      if (cp.paramName.trim().isEmpty) continue;
+
       // A null map preserves the historic config-default behavior. Once the
       // user changes a custom parameter in the composer, the map becomes the
       // complete enabled/value set and absent names are intentionally off.
