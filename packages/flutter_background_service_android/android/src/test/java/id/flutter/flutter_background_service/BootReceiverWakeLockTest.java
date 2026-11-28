@@ -30,7 +30,7 @@ public class BootReceiverWakeLockTest {
 
         new BootReceiver().onReceive(context, new Intent(Intent.ACTION_BOOT_COMPLETED));
 
-        Intent startedService = shadowOf(context).getNextStartedService();
+        Intent startedService = shadowOf(RuntimeEnvironment.getApplication()).getNextStartedService();
         assertNotNull("boot should start the background service", startedService);
         PowerManager.WakeLock bootWakeLock = BackgroundService.getLock(context);
         assertTrue("receiver should hold the wake lock until service startup", bootWakeLock.isHeld());
