@@ -2,6 +2,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
 void main() {
+  test('only recognizes documented GitHub alert markers', () {
+    for (final type in ['NOTE', 'TIP', 'IMPORTANT', 'CAUTION', 'WARNING']) {
+      expect(
+        markdown.markdownToHtml(
+          '> [!$type]',
+          extensionSet: markdown.ExtensionSet.gitHubWeb,
+        ),
+        contains('class="markdown-alert markdown-alert-${type.toLowerCase()}"'),
+      );
+    }
+
+    for (final source in [
+      r'> \[!NOTE\]',
+      '>   [!NOTE]',
+      '> [!NOTE] ',
+      '\t> [!NOTE]',
+    ]) {
+      final html = markdown.markdownToHtml(
+        source,
+        extensionSet: markdown.ExtensionSet.gitHubWeb,
+      );
+
+      expect(html, isNot(contains('markdown-alert')), reason: source);
+      if (!source.startsWith('\t')) {
+        expect(html, contains('<blockquote>'), reason: source);
+      }
+    }
+  });
+
   test('preserves indented code inside GitHub alert blockquotes', () {
     const source = '> [!NOTE]\n>     code';
     final alert = markdown.Document(
