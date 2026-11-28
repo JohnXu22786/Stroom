@@ -403,25 +403,42 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ],
             ),
             const SizedBox(height: 8),
-            TextFormField(
-              initialValue: toggle.paramName,
-              decoration: InputDecoration(
-                label: _buildProviderInputLabel(
-                  AppLocalizations.of(context)!.providerParamNameLabel,
-                ),
-                hintText: AppLocalizations.of(context)!
-                    .providerParamNameHint('thinking.type, reasoning'),
-                border: const OutlineInputBorder(),
-                isDense: true,
-                errorText: isDuplicate
-                    ? AppLocalizations.of(context)!
-                        .providerParamAlreadyExists(toggle.paramName.trim())
-                    : null,
-                errorStyle: const TextStyle(fontSize: 11),
-              ),
-              onChanged: (v) {
-                toggle.paramName = v;
-                setState(() {});
+            Builder(
+              builder: (context) {
+                final strings = AppLocalizations.of(context)!;
+                final hint =
+                    strings.providerParamNameHint('thinking.type, reasoning');
+                final hintStates = _reasoningNameHintState(toggle);
+                return Semantics(
+                  hint: hint,
+                  child: TextFormField(
+                    initialValue: toggle.paramName,
+                    statesController: hintStates,
+                    decoration: InputDecoration(
+                      label: _buildProviderInputLabel(
+                        strings.providerParamNameLabel,
+                      ),
+                      hint: ExcludeSemantics(
+                        child: ConstrainedInputHint(
+                          hint,
+                          statesController: hintStates,
+                        ),
+                      ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      errorText: isDuplicate
+                          ? strings.providerParamAlreadyExists(
+                              toggle.paramName.trim(),
+                            )
+                          : null,
+                      errorStyle: const TextStyle(fontSize: 11),
+                    ),
+                    onChanged: (v) {
+                      toggle.paramName = v;
+                      setState(() {});
+                    },
+                  ),
+                );
               },
             ),
             const SizedBox(height: 8),
@@ -588,26 +605,42 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ],
             ),
             const SizedBox(height: 8),
-            TextFormField(
-              initialValue: effort.paramName,
-              readOnly: false,
-              decoration: InputDecoration(
-                label: _buildProviderInputLabel(
-                  AppLocalizations.of(context)!.providerParamNameLabel,
-                ),
-                hintText: AppLocalizations.of(context)!
-                    .providerParamNameHint('reasoning_effort'),
-                border: const OutlineInputBorder(),
-                isDense: true,
-                errorText: isDuplicate
-                    ? AppLocalizations.of(context)!
-                        .providerParamAlreadyExists(effort.paramName.trim())
-                    : null,
-                errorStyle: const TextStyle(fontSize: 11),
-              ),
-              onChanged: (v) {
-                effort.paramName = v;
-                setState(() {});
+            Builder(
+              builder: (context) {
+                final strings = AppLocalizations.of(context)!;
+                final hint = strings.providerParamNameHint('reasoning_effort');
+                final hintStates = _reasoningNameHintState(effort);
+                return Semantics(
+                  hint: hint,
+                  child: TextFormField(
+                    initialValue: effort.paramName,
+                    readOnly: false,
+                    statesController: hintStates,
+                    decoration: InputDecoration(
+                      label: _buildProviderInputLabel(
+                        strings.providerParamNameLabel,
+                      ),
+                      hint: ExcludeSemantics(
+                        child: ConstrainedInputHint(
+                          hint,
+                          statesController: hintStates,
+                        ),
+                      ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      errorText: isDuplicate
+                          ? strings.providerParamAlreadyExists(
+                              effort.paramName.trim(),
+                            )
+                          : null,
+                      errorStyle: const TextStyle(fontSize: 11),
+                    ),
+                    onChanged: (v) {
+                      effort.paramName = v;
+                      setState(() {});
+                    },
+                  ),
+                );
               },
             ),
             const SizedBox(height: 8),
@@ -622,34 +655,50 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 ),
               )
             else if (effort.type == 'json')
-              TextFormField(
-                initialValue:
-                    effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: false,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  label: _buildProviderInputLabel(
-                    AppLocalizations.of(context)!.providerJsonValueLabel,
-                  ),
-                  hintText:
-                      AppLocalizations.of(context)!.providerOptionExampleHint(
+              Builder(
+                builder: (context) {
+                  final strings = AppLocalizations.of(context)!;
+                  final hint = strings.providerOptionExampleHint(
                     '{"thinking": {"budget": 1024}}',
-                  ),
-                  border: const OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    effort.options.isNotEmpty ? effort.options.first : '',
-                  )
-                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
-                      : null,
-                  errorStyle: const TextStyle(fontSize: 11),
-                ),
-                onChanged: (v) {
-                  final text = v.trim();
-                  effort.options
-                    ..clear()
-                    ..addAll(text.isNotEmpty ? [text] : []);
-                  setState(() {});
+                  );
+                  final hintStates = _reasoningJsonHintState(effort);
+                  return Semantics(
+                    hint: hint,
+                    child: TextFormField(
+                      initialValue:
+                          effort.options.isNotEmpty ? effort.options.first : '',
+                      readOnly: false,
+                      maxLines: 5,
+                      statesController: hintStates,
+                      decoration: InputDecoration(
+                        label: _buildProviderInputLabel(
+                          strings.providerJsonValueLabel,
+                        ),
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            hint,
+                            statesController: hintStates,
+                            maxLines: 5,
+                          ),
+                        ),
+                        border: const OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                        errorText: _jsonValueError(
+                          effort.options.isNotEmpty ? effort.options.first : '',
+                        )
+                            ? strings.codeEditorInvalidFormat
+                            : null,
+                        errorStyle: const TextStyle(fontSize: 11),
+                      ),
+                      onChanged: (v) {
+                        final text = v.trim();
+                        effort.options
+                          ..clear()
+                          ..addAll(text.isNotEmpty ? [text] : []);
+                        setState(() {});
+                      },
+                    ),
+                  );
                 },
               )
             else ...[
@@ -751,29 +800,40 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
-                final nameField = TextFormField(
-                  initialValue: param.paramName,
-                  decoration: InputDecoration(
-                    label: _buildProviderInputLabel(
-                      AppLocalizations.of(context)!
-                          .providerParamNameNestedLabel,
+                final strings = AppLocalizations.of(context)!;
+                final hint = strings.providerParamNameHint(
+                  'thinking.type, budget_tokens',
+                );
+                final hintStates = _reasoningNameHintState(param);
+                final nameField = Semantics(
+                  hint: hint,
+                  child: TextFormField(
+                    initialValue: param.paramName,
+                    statesController: hintStates,
+                    decoration: InputDecoration(
+                      label: _buildProviderInputLabel(
+                        strings.providerParamNameNestedLabel,
+                      ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      hint: ExcludeSemantics(
+                        child: ConstrainedInputHint(
+                          hint,
+                          statesController: hintStates,
+                        ),
+                      ),
+                      errorText: isDuplicate
+                          ? strings.providerParamAlreadyExists(
+                              param.paramName.trim(),
+                            )
+                          : null,
+                      errorStyle: const TextStyle(fontSize: 11),
                     ),
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    hintText:
-                        AppLocalizations.of(context)!.providerParamNameHint(
-                      'thinking.type, budget_tokens',
-                    ),
-                    errorText: isDuplicate
-                        ? AppLocalizations.of(context)!
-                            .providerParamAlreadyExists(param.paramName.trim())
-                        : null,
-                    errorStyle: const TextStyle(fontSize: 11),
+                    onChanged: (v) {
+                      param.paramName = v;
+                      setState(() {});
+                    },
                   ),
-                  onChanged: (v) {
-                    param.paramName = v;
-                    setState(() {});
-                  },
                 );
                 final controls = Wrap(
                   spacing: 4,
@@ -837,33 +897,49 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 ),
               )
             else if (param.type == 'json')
-              TextFormField(
-                initialValue:
-                    param.options.isNotEmpty ? param.options.first : '',
-                maxLines: 5,
-                decoration: InputDecoration(
-                  label: _buildProviderInputLabel(
-                    AppLocalizations.of(context)!.providerJsonValueLabel,
-                  ),
-                  hintText:
-                      AppLocalizations.of(context)!.providerOptionExampleHint(
+              Builder(
+                builder: (context) {
+                  final strings = AppLocalizations.of(context)!;
+                  final hint = strings.providerOptionExampleHint(
                     '{"thinking": {"budget": 1024}}',
-                  ),
-                  border: const OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    param.options.isNotEmpty ? param.options.first : '',
-                  )
-                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
-                      : null,
-                  errorStyle: const TextStyle(fontSize: 11),
-                ),
-                onChanged: (v) {
-                  final text = v.trim();
-                  param.options
-                    ..clear()
-                    ..addAll(text.isNotEmpty ? [text] : []);
-                  setState(() {});
+                  );
+                  final hintStates = _reasoningJsonHintState(param);
+                  return Semantics(
+                    hint: hint,
+                    child: TextFormField(
+                      initialValue:
+                          param.options.isNotEmpty ? param.options.first : '',
+                      maxLines: 5,
+                      statesController: hintStates,
+                      decoration: InputDecoration(
+                        label: _buildProviderInputLabel(
+                          strings.providerJsonValueLabel,
+                        ),
+                        hint: ExcludeSemantics(
+                          child: ConstrainedInputHint(
+                            hint,
+                            statesController: hintStates,
+                            maxLines: 5,
+                          ),
+                        ),
+                        border: const OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                        errorText: _jsonValueError(
+                          param.options.isNotEmpty ? param.options.first : '',
+                        )
+                            ? strings.codeEditorInvalidFormat
+                            : null,
+                        errorStyle: const TextStyle(fontSize: 11),
+                      ),
+                      onChanged: (v) {
+                        final text = v.trim();
+                        param.options
+                          ..clear()
+                          ..addAll(text.isNotEmpty ? [text] : []);
+                        setState(() {});
+                      },
+                    ),
+                  );
                 },
               )
             else ...[

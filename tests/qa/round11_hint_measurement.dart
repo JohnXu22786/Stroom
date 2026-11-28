@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
@@ -33,5 +34,27 @@ void expectHintMeasurement(
     painter.didExceedMaxLines,
     clipped,
     reason: 'Expected "$hint" to ${clipped ? 'exceed' : 'fit'} in $slot.',
+  );
+}
+
+void expectNativeHintMeasurement(
+  WidgetTester tester, {
+  required String hint,
+  required bool clipped,
+  int occurrence = 0,
+}) {
+  final hintFinder = find.text(hint).at(occurrence);
+  final text = tester.widget<Text>(hintFinder);
+  final paragraph = tester.renderObject<RenderParagraph>(hintFinder);
+  debugPrint(
+    'Round 11 native hint=$hint slot=${paragraph.size} '
+    'maxLines=${text.maxLines} '
+    'didExceedMaxLines=${paragraph.didExceedMaxLines}',
+  );
+  expect(text.maxLines, 5);
+  expect(
+    paragraph.didExceedMaxLines,
+    clipped,
+    reason: 'Expected "$hint" to ${clipped ? 'exceed' : 'fit'} natively.',
   );
 }

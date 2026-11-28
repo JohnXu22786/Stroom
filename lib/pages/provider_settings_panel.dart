@@ -167,6 +167,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   final Map<ReasoningParam,
           (MaterialStatesController, MaterialStatesController)>
       _reasoningValueHintStates = {};
+  final Map<ReasoningParam, MaterialStatesController> _reasoningNameHintStates =
+      {};
+  final Map<ReasoningParam, MaterialStatesController> _reasoningJsonHintStates =
+      {};
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
 
@@ -322,6 +326,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       states.$1.dispose();
       states.$2.dispose();
     }
+    for (final states in _reasoningNameHintStates.values) {
+      states.dispose();
+    }
+    for (final states in _reasoningJsonHintStates.values) {
+      states.dispose();
+    }
     super.dispose();
   }
 
@@ -335,6 +345,18 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     );
     return onValue ? states.$1 : states.$2;
   }
+
+  MaterialStatesController _reasoningNameHintState(ReasoningParam param) =>
+      _reasoningNameHintStates.putIfAbsent(
+        param,
+        () => MaterialStatesController(),
+      );
+
+  MaterialStatesController _reasoningJsonHintState(ReasoningParam param) =>
+      _reasoningJsonHintStates.putIfAbsent(
+        param,
+        () => MaterialStatesController(),
+      );
 
   @override
   Widget build(BuildContext context) {

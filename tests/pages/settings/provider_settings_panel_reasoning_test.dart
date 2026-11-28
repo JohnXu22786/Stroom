@@ -17,11 +17,13 @@ Future<ProviderConfigItem?> _openAndSave(
   required ProviderConfigItem config,
   bool tapSave = true,
   double textScale = 1,
+  Locale locale = const Locale('zh', 'CN'),
+  bool selectParameterTabProgrammatically = false,
 }) async {
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       builder: (context, child) => MediaQuery(
@@ -53,8 +55,21 @@ Future<ProviderConfigItem?> _openAndSave(
   await tester.pumpAndSettle();
 
   // 切到「参数设置」Tab
-  await tester.tap(find.text('参数设置'));
-  await tester.pumpAndSettle();
+  if (selectParameterTabProgrammatically) {
+    DefaultTabController.of(tester.element(find.byType(TabBar))).animateTo(
+      1,
+      duration: Duration.zero,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  } else {
+    final parameterTab = AppLocalizations.of(
+      tester.element(find.byType(Dialog)),
+    )!
+        .providerParameterSettingsTab;
+    await tester.tap(find.text(parameterTab));
+    await tester.pumpAndSettle();
+  }
 
   if (tapSave) {
     await tester.tap(find.text('保存'));
@@ -100,6 +115,83 @@ void main() {
   });
 
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets(
+      'reasoning parameter names and JSON examples keep native fields',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _openAndSave(
+          tester,
+          tapSave: false,
+          textScale: 2,
+          locale: const Locale('de', 'DE'),
+          selectParameterTabProgrammatically: true,
+          config: ProviderConfigItem(
+            providerName: 'Test Provider',
+            host: 'https://api.example.com/v1',
+            reasoningParams: [
+              ReasoningParam(
+                paramName: '',
+                isReasoningToggle: true,
+                onValue: '',
+                offValue: '',
+              ),
+              ReasoningParam(
+                paramName: '',
+                isEffortParam: true,
+                type: 'json',
+                options: [''],
+              ),
+              ReasoningParam(paramName: '', type: 'json', options: ['']),
+            ],
+          ),
+        );
+
+        final strings =
+            AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+        final parameterNameHints = [
+          strings.providerParamNameHint('thinking.type, reasoning'),
+          strings.providerParamNameHint('reasoning_effort'),
+          strings.providerParamNameHint('thinking.type, budget_tokens'),
+        ];
+        for (final hint in parameterNameHints) {
+          final finder = find.byWidgetPredicate(
+            (widget) => widget is ConstrainedInputHint && widget.data == hint,
+          );
+          await tester.ensureVisible(finder);
+          expectHintMeasurement(tester, hint: hint, clipped: true);
+        }
+
+        final jsonHint = strings.providerOptionExampleHint(
+          '{"thinking": {"budget": 1024}}',
+        );
+        final jsonHintFinder = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+        );
+        expect(jsonHintFinder, findsNWidgets(2));
+        for (var occurrence = 0; occurrence < 2; occurrence++) {
+          final field = find.ancestor(
+            of: jsonHintFinder.at(occurrence),
+            matching: find.byType(TextFormField),
+          );
+          await tester.ensureVisible(field);
+          await tester.pump();
+          expect(
+              tester
+                  .widget<ConstrainedInputHint>(jsonHintFinder.at(occurrence))
+                  .maxLines,
+              5);
+          expect(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+              findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('reasoning option values use measured native-field hints', (
       tester,
     ) async {

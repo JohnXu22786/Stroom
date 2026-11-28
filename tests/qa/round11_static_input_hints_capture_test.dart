@@ -329,4 +329,157 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('captures clipped provider reasoning name and JSON hints', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _captureKey,
+        child: MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData.light(useMaterial3: true).copyWith(
+            dialogTheme: const DialogThemeData(
+              constraints: BoxConstraints(maxWidth: 340),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showProviderSettingsPanel(
+                  context: context,
+                  providerType: 'llm',
+                  config: ProviderConfigItem(
+                    providerName: 'Provider',
+                    host: 'https://example.test',
+                    reasoningParams: [
+                      ReasoningParam(
+                        paramName: '',
+                        isReasoningToggle: true,
+                        onValue: '',
+                        offValue: '',
+                      ),
+                      ReasoningParam(
+                        paramName: '',
+                        isEffortParam: true,
+                        type: 'json',
+                        options: [''],
+                      ),
+                      ReasoningParam(
+                        paramName: '',
+                        type: 'json',
+                        options: [''],
+                      ),
+                    ],
+                  ),
+                ),
+                child: const Text('Open settings'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    DefaultTabController.of(tester.element(find.byType(TabBar))).animateTo(
+      1,
+      duration: Duration.zero,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+    final nameHints = [
+      strings.providerParamNameHint('thinking.type, reasoning'),
+      strings.providerParamNameHint('reasoning_effort'),
+      strings.providerParamNameHint('thinking.type, budget_tokens'),
+    ];
+    for (final hint in nameHints) {
+      final finder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedInputHint && widget.data == hint,
+      );
+      await tester.ensureVisible(finder);
+      verifyHintMeasurement(tester, clipped: true, expectedHint: hint);
+    }
+    final nameFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedInputHint && widget.data == nameHints.first,
+    );
+    await tester.ensureVisible(nameFinder);
+    final nameField = find.ancestor(
+      of: nameFinder,
+      matching: find.byType(TextFormField),
+    );
+    tester
+        .widget<EditableText>(find.descendant(
+          of: nameField,
+          matching: find.byType(EditableText),
+        ))
+        .focusNode
+        .requestFocus();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 400));
+    verifyHintMeasurement(
+      tester,
+      clipped: true,
+      expectedHint: nameHints.first,
+    );
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round11-static-input-hints/provider-reasoning-name-de-320x640-scale2-light.png',
+      ),
+    );
+
+    final jsonHint = strings.providerOptionExampleHint(
+      '{"thinking": {"budget": 1024}}',
+    );
+    final jsonFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == jsonHint,
+    );
+    expect(jsonFinder, findsNWidgets(2));
+    for (var occurrence = 0; occurrence < 2; occurrence++) {
+      await tester.ensureVisible(jsonFinder.at(occurrence));
+      expect(
+        tester.widget<ConstrainedInputHint>(jsonFinder.at(occurrence)).maxLines,
+        5,
+      );
+    }
+    final jsonField = find.ancestor(
+      of: jsonFinder.first,
+      matching: find.byType(TextFormField),
+    );
+    tester
+        .widget<EditableText>(find.descendant(
+          of: jsonField,
+          matching: find.byType(EditableText),
+        ))
+        .focusNode
+        .requestFocus();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 400));
+    await expectLater(
+      find.byKey(_captureKey),
+      matchesGoldenFile(
+        '../../docs/ui-constrained-text-qa/round11-static-input-hints/provider-reasoning-json-de-320x640-scale2-light.png',
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
