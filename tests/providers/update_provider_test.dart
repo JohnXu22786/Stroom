@@ -267,6 +267,15 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 }
 
 void main() {
+  setUp(() {
+    // These historical release fixtures model an installed 0.2.13 build.
+    UpdateNotifier.debugAppVersionOverride = '0.2.13';
+  });
+
+  tearDown(() {
+    UpdateNotifier.debugAppVersionOverride = null;
+  });
+
   group('UpdateState', () {
     test('copyWith preserves an omitted error and explicitly clears it', () {
       const state = UpdateState(error: 'previous check failed');

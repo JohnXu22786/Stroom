@@ -153,6 +153,11 @@ void main() {
     resetPostStartupTasksFlag();
     startupReadyNotifier.value = false;
     setPendingRestartInMemory(false);
+    UpdateNotifier.debugAppVersionOverride = '0.2.13';
+  });
+
+  tearDown(() {
+    UpdateNotifier.debugAppVersionOverride = null;
   });
 
   group('Application - Startup Update Check', () {
@@ -228,7 +233,7 @@ void main() {
         'shows no dialog on startup when current version matches latest',
         (tester) async {
       final dio = _createMockDio(
-        _githubRelease('v0.2.13'), // Same as appVersion
+        _githubRelease('v0.2.13'), // Same as the installed test version.
       );
 
       await _pumpThroughStartup(tester, dio: dio);
