@@ -265,12 +265,8 @@ class WebFileStore {
     final db = await _database;
     final Object? value;
     if (_isAttachmentKey(key)) {
-      final txn = db.transaction('files', idbModeReadWrite);
-      value = (await blob_store.migrateStoredValueToBlob(
-        txn.objectStore('files'),
-        key,
-      ))
-          .value;
+      final txn = db.transaction('files', idbModeReadOnly);
+      value = await txn.objectStore('files').getObject(key);
       await txn.completed;
     } else {
       final txn = db.transaction('files', idbModeReadOnly);
@@ -325,6 +321,16 @@ class WebFileStore {
     }
     final db = await _database;
     if (_isAttachmentKey(key)) {
+      if (maxBytes != null) {
+        final txn = db.transaction('files', idbModeReadOnly);
+        final value = await txn.objectStore('files').getObject(key);
+        await txn.completed;
+        if (value == null) return null;
+        await _checkReadLimit(value, maxBytes);
+        final blobBytes = await _readBlob(value);
+        if (blobBytes != null) return blobBytes;
+        return _toUint8List(value, key);
+      }
       final txn = db.transaction('files', idbModeReadWrite);
       final result = await blob_store.migrateStoredValueToBlob(
         txn.objectStore('files'),

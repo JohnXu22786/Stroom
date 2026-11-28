@@ -6,6 +6,7 @@ import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:idb_shim/idb_shim.dart' show IdbNativeValue;
+import 'package:idb_shim/idb_shim.dart' show idbModeReadOnly;
 import 'package:idb_shim/idb_shim.dart' show idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
 import 'package:web/web.dart' as web;
@@ -91,17 +92,38 @@ void main() {
 
         // Simulate a still-open older tab writing a legacy Uint8Array after
         // startup migration has already set the format marker.
-        final latePayload = Uint8List.fromList(payload.take(16).toList());
+        final latePayload = payload;
         final lateTxn = db.transaction('files', idbModeReadWrite);
         await lateTxn.objectStore('files').put(latePayload, lateAttachmentKey);
         await lateTxn.completed;
-        await expectLater(
-          WebFileStore.read(lateAttachmentKey, maxBytes: 8),
-          throwsA(isA<WebFileStoreReadLimitExceededException>()),
-        );
         expect(
-          await WebFileStore.read(lateAttachmentKey,
-              maxBytes: latePayload.length),
+          await WebFileStore.readPrefix(lateAttachmentKey, maxBytes: 32),
+          orderedEquals(latePayload.take(32)),
+        );
+        await expectLater(
+          WebFileStore.read(
+            lateAttachmentKey,
+            maxBytes: maxAttachmentBytes,
+          ),
+          throwsA(
+            isA<WebFileStoreReadLimitExceededException>().having(
+              (error) => error.headerBytes,
+              'bounded header bytes',
+              orderedEquals(latePayload.take(32)),
+            ),
+          ),
+        );
+        final verifyLegacyTxn = db.transaction('files', idbModeReadOnly);
+        final stillLegacy = await verifyLegacyTxn
+            .objectStore('files')
+            .getObject(lateAttachmentKey);
+        await verifyLegacyTxn.completed;
+        expect(blob_store.isBlob(stillLegacy), isFalse);
+        expect(
+          await WebFileStore.read(
+            lateAttachmentKey,
+            maxBytes: latePayload.length,
+          ),
           orderedEquals(latePayload),
         );
 
