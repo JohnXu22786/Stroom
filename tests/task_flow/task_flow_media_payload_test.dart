@@ -330,7 +330,8 @@ void main() {
             .having((e) => e.message, 'image size', contains('20 MB'))));
   });
 
-  test('web chat attachment read bounds oversized payloads and preserves errors',
+  test(
+      'web chat attachment read bounds oversized payloads and preserves errors',
       () async {
     final bytes = Uint8List(maxFlowImageInputBytes + 1)
       ..setRange(0, 8, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -365,8 +366,8 @@ void main() {
     await WebFileStore.write(audioReference, audioBytes);
     await expectLater(
         readFlowChatWebAttachment(audioReference),
-        throwsA(isA<FormatException>()
-            .having((error) => error.message, 'audio size', contains('10 MB'))));
+        throwsA(isA<FormatException>().having(
+            (error) => error.message, 'audio size', contains('10 MB'))));
     await WebFileStore.delete(audioReference);
   });
 

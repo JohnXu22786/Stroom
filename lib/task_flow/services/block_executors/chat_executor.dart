@@ -209,7 +209,8 @@ Future<Uint8List?> readFlowChatWebAttachment(
 }) async {
   bool isImage(List<int>? headerBytes) =>
       flowMimeType(
-        flowFileMimeType(reference, headerBytes: headerBytes, mimeType: mimeType),
+        flowFileMimeType(reference,
+            headerBytes: headerBytes, mimeType: mimeType),
       ) ==
       IOType.image;
 
@@ -217,9 +218,8 @@ Future<Uint8List?> readFlowChatWebAttachment(
   try {
     return await WebFileStore.read(
       reference,
-      maxBytes: isImage(headerBytes)
-          ? maxFlowImageInputBytes
-          : maxAttachmentBytes,
+      maxBytes:
+          isImage(headerBytes) ? maxFlowImageInputBytes : maxAttachmentBytes,
     );
   } on WebFileStoreReadLimitExceededException catch (error) {
     if (isImage(error.headerBytes ?? headerBytes)) {

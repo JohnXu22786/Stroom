@@ -231,7 +231,8 @@ class WebFileStore {
   static int _prefixLength(int length, int maxBytes) =>
       length < maxBytes ? length : maxBytes;
 
-  static Uint8List? _prefixBytes(dynamic value, int maxBytes) => switch (value) {
+  static Uint8List? _prefixBytes(dynamic value, int maxBytes) =>
+      switch (value) {
         Uint8List bytes => Uint8List.fromList(Uint8List.sublistView(
             bytes,
             0,
@@ -268,7 +269,8 @@ class WebFileStore {
       value = (await blob_store.migrateStoredValueToBlob(
         txn.objectStore('files'),
         key,
-      )).value;
+      ))
+          .value;
       await txn.completed;
     } else {
       final txn = db.transaction('files', idbModeReadOnly);
@@ -290,8 +292,8 @@ class WebFileStore {
       _ => null,
     };
     if (byteLength != null && byteLength > maxBytes) {
-      final headerBytes = await blob_store.readBlobPrefix(value, 32) ??
-          _prefixBytes(value, 32);
+      final headerBytes =
+          await blob_store.readBlobPrefix(value, 32) ?? _prefixBytes(value, 32);
       throw WebFileStoreReadLimitExceededException(
         maxBytes,
         headerBytes: headerBytes,
