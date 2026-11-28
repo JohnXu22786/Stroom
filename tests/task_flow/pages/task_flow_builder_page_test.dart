@@ -52,8 +52,8 @@ void main() {
   // ignore: invalid_use_of_visible_for_testing_member
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets(
-      'CatCatch run input accepts only HTTP and HTTPS URLs', (tester) async {
+  testWidgets('CatCatch run input accepts only HTTP and HTTPS URLs',
+      (tester) async {
     final flows = _Flows();
     final flow = TaskFlowDefinition(name: 'URL input', blocks: [
       TaskFlowBlock(typeKey: BlockType.catcatch),
@@ -98,8 +98,8 @@ void main() {
 
     await tester.enterText(urlField, 'http://example.com');
     await tester.pump();
-    await tester.ensureVisible(
-        find.byKey(const Key('taskflow_add_catcatch_input')));
+    await tester
+        .ensureVisible(find.byKey(const Key('taskflow_add_catcatch_input')));
     await tester.tap(find.byKey(const Key('taskflow_add_catcatch_input')));
     await tester.pump();
     final urlFields = find.byType(TextField);
