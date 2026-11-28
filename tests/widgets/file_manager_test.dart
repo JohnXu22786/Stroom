@@ -4,9 +4,10 @@
 //   - file_preview_test.dart
 //   - file_preview_chip_test.dart
 
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -156,9 +157,17 @@ Widget _buildTestApp(
   Widget body, {
   Locale locale = const Locale('zh', 'CN'),
   ThemeData? theme,
+  double textScale = 1,
+  Key? captureKey,
 }) {
   return MaterialApp(
-    builder: _disableTestAnimations,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        disableAnimations: true,
+        textScaler: TextScaler.linear(textScale),
+      ),
+      child: RepaintBoundary(key: captureKey, child: child!),
+    ),
     locale: locale,
     theme: theme,
     supportedLocales: AppLocalizations.supportedLocales,
@@ -270,6 +279,21 @@ class _HomeStylePopScopeWrapper extends ConsumerWidget {
 }
 
 void main() {
+  setUpAll(() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  });
+
   testWidgets(
       'grid tile grows for scaled folder labels without breaking file taps',
       (tester) async {
@@ -2693,6 +2717,56 @@ void main() {
             find.descendant(of: field, matching: find.byType(EditableText)),
           ).controller.value.selection.baseOffset,
           'new file name'.length,
+        );
+      });
+
+      testWidgets('captures the localized file rename input hint', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {},
+            ),
+            locale: const Locale('de', 'DE'),
+            textScale: 2,
+            theme: ThemeData.light(useMaterial3: true),
+            captureKey: const ValueKey('file-rename-hint-capture'),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        final strings = AppLocalizations.of(
+          tester.element(find.byKey(const Key('fm_file_popup_f1'))),
+        )!;
+        await tester.tap(find.text(strings.fileManagerRename));
+        await tester.pumpAndSettle();
+        final renameField = find.byKey(const Key('fm_rename_file_input'));
+        await tester.tap(renameField);
+        await tester.enterText(renameField, '');
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedInputHint &&
+                widget.data == strings.fileManagerNewNameHint,
+          ),
+          findsOneWidget,
+        );
+        await expectLater(
+          find.byKey(const ValueKey('file-rename-hint-capture')),
+          matchesGoldenFile(
+            '../../docs/ui-constrained-text-qa/round13-form-hints-b/file-rename-hint-de-320x640-scale2-light.png',
+          ),
         );
       });
 
