@@ -296,6 +296,7 @@ class Card {
     int graduatingIvl = 1,
   }) {
     if (queue != CardQueue.learn) return;
+    reps++;
     final nowSec = nowMs ~/ 1000;
     final stepIdx = remaining_steps >> 8; // high byte
 
@@ -317,7 +318,6 @@ class Card {
       ctype = CardType.review;
       interval = (graduatingIvl * 1.3).round();
       due = dayOrdinal + interval;
-      reps = 1;
       remaining_steps = 0;
       return;
     }
@@ -329,7 +329,6 @@ class Card {
       ctype = CardType.review;
       interval = graduatingIvl;
       due = dayOrdinal + interval;
-      reps = 1;
       remaining_steps = 0;
     } else {
       remaining_steps = (next << 8) | (steps.length - next);

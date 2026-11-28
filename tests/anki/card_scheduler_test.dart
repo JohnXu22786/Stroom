@@ -104,6 +104,7 @@ void main() {
           dayOrdinal: 10, steps: [1, 10], answerIdx: 0); // Again
       expect(c.remaining_steps, equals(2)); // back to full steps
       expect(c.due, equals(1 * 60));
+      expect(c.reps, equals(1));
     });
 
     test('answerLearning Good graduates after last step', () {
@@ -120,7 +121,7 @@ void main() {
       expect(c.ctype, equals(CardType.review));
       expect(c.interval, equals(1)); // graduating interval
       expect(c.due, equals(11)); // review due is a day ordinal
-      expect(c.reps, equals(1));
+      expect(c.reps, equals(2));
       expect(c.remaining_steps, equals(0));
     });
 
@@ -134,6 +135,7 @@ void main() {
       expect(c.due, equals(t ~/ 1000 + 1 * 60));
       // Same as startLearning's due (same step)
       expect(c.due, equals(dueBefore));
+      expect(c.reps, equals(1));
     });
 
     test('answerLearning Easy graduates immediately with bonus', () {
