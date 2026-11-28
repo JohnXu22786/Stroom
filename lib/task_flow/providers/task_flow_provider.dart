@@ -41,7 +41,8 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
           TaskFlowDefinition.fromMap(Map<String, dynamic>.from(item as Map)),
         );
       } catch (e) {
-        debugPrint('WARNING: Skipping corrupt TaskFlowDefinition: $e');
+        debugPrint('WARNING: Corrupt TaskFlowDefinition: $e');
+        rethrow;
       }
     }
     return result;

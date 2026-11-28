@@ -98,6 +98,23 @@ void main() {
     expect(await persistenceFile.readAsString(), malformedContents);
   });
 
+  test('corrupt flow records do not overwrite the persisted flow list',
+      () async {
+    final taskFlowsDir = Directory('${tempDir.path}/task_flows');
+    await taskFlowsDir.create();
+    final persistenceFile = File('${taskFlowsDir.path}/flows.json');
+    const contents =
+        '[{"id":"recoverable","name":"Valid flow"},{"id":12}]';
+    await persistenceFile.writeAsString(contents);
+
+    final notifier = TaskFlowNotifier();
+    addTearDown(notifier.dispose);
+    await notifier.restoreFromPersistence();
+
+    expect(notifier.state, isEmpty);
+    expect(await persistenceFile.readAsString(), contents);
+  });
+
   test('execution persistence reports failure and retries the latest state',
       () async {
     final obstruction = File('${tempDir.path}/task_flows');
