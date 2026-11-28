@@ -603,13 +603,14 @@ class _McpServerConfigDialogState
         : availableDialogHeight;
     final compactAppBarHeight = kToolbarHeight + _compactAppBarActionsHeight;
     final tallCompactAppBar = compactAppBarHeight > kToolbarHeight + 120;
-    final scrollWholeDialog = compactAppBar &&
-        ((screenSize.height <= 480 && tallCompactAppBar) ||
-            compactAppBarHeight + 120 > desiredDialogHeight);
+    final scrollWholeDialog =
+        compactAppBar && screenSize.height <= 480 && tallCompactAppBar;
     var compactActionsViewportHeight = _compactAppBarActionsHeight;
-    if (keyboardVisible && !scrollWholeDialog) {
+    if (!scrollWholeDialog) {
+      final formReserve = keyboardVisible ? 140.0 : 0.0;
       final availableActionHeight =
-          (dialogHeight - kToolbarHeight - 140).clamp(0.0, double.infinity);
+          (dialogHeight - kToolbarHeight - formReserve)
+              .clamp(0.0, double.infinity);
       if (availableActionHeight < compactActionsViewportHeight) {
         compactActionsViewportHeight = availableActionHeight;
       }

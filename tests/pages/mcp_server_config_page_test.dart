@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -9,6 +12,23 @@ import 'package:stroom/widgets/constrained_text.dart';
 // Unit owner: vertical_mcp_arguments_hint.
 // Functional suite mapping: feature-ui.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<void> loadProductionFonts() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  }
+
   Future<void> openStdioConfig(
     WidgetTester tester, {
     double textScale = 1,
@@ -216,57 +236,6 @@ void main() {
     expect(outerScroll.position.pixels, lessThan(afterFormScroll));
     await tester.ensureVisible(find.text('Abandonner'));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('Abandonner'));
-    await tester.pumpAndSettle();
-    expect(find.text('Abandonner'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('French compact AppBar actions remain reachable with keyboard', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetViewInsets);
-    await openStdioConfig(
-      tester,
-      textScale: 4,
-      locale: const Locale('fr', 'FR'),
-      stdio: false,
-    );
-
-    final nameField = find.byType(TextField).first;
-    expect(nameField, findsOneWidget);
-    await tester.ensureVisible(nameField);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(nameField);
-    await tester.pump();
-    expect(tester.testTextInput.isVisible, isTrue);
-
-    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
-    final visibleArea = const Rect.fromLTWH(0, 0, 320, 380);
-    await tester.ensureVisible(nameField);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(visibleArea.contains(tester.getRect(nameField).topLeft), isTrue);
-    expect(visibleArea.contains(tester.getRect(nameField).bottomRight), isTrue);
-    for (final label in [find.text('Enregistrer'), find.text('Abandonner')]) {
-      final button =
-          find.ancestor(of: label, matching: find.byType(TextButton)).first;
-      await tester.ensureVisible(button);
-      await tester.pump(const Duration(milliseconds: 300));
-      final buttonRect = tester.getRect(button);
-      final labelRect = tester.getRect(label);
-      expect(visibleArea.contains(buttonRect.topLeft), isTrue);
-      expect(visibleArea.contains(buttonRect.bottomRight), isTrue);
-      expect(buttonRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
-      expect(buttonRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
-    }
-
     await tester.tap(find.text('Abandonner'));
     await tester.pumpAndSettle();
     expect(find.text('Abandonner'), findsNothing);
@@ -542,5 +511,74 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+  testWidgets('French compact AppBar actions remain reachable with keyboard', (
+    tester,
+  ) async {
+    await loadProductionFonts();
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final form = find.byType(ListView).last;
+    final preKeyboardAppBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(preKeyboardAppBar.primary, isTrue);
+    expect(preKeyboardAppBar.bottom!.preferredSize.height, 320);
+    expect(tester.getSize(form).height, 168);
+    final formScrollable = tester.state<ScrollableState>(
+      find.descendant(of: form, matching: find.byType(Scrollable)),
+    );
+    var scrollAttempts = 0;
+    while (find.byType(TextField).evaluate().isEmpty && scrollAttempts < 25) {
+      formScrollable.position.jumpTo(formScrollable.position.pixels + 240);
+      await tester.pump(const Duration(milliseconds: 100));
+      scrollAttempts++;
+    }
+    final nameField = find.byType(TextField).first;
+    expect(nameField, findsOneWidget);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(nameField);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final appBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(appBar.primary, isTrue);
+    expect(appBar.bottom!.preferredSize.height, 160);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(tester.getSize(form).height, 140);
+    final visibleArea = const Rect.fromLTWH(0, 0, 320, 380);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(visibleArea.contains(tester.getRect(nameField).topLeft), isTrue);
+    expect(visibleArea.contains(tester.getRect(nameField).bottomRight), isTrue);
+    for (final label in [find.text('Enregistrer'), find.text('Abandonner')]) {
+      final button =
+          find.ancestor(of: label, matching: find.byType(TextButton)).first;
+      await tester.ensureVisible(button);
+      await tester.pump(const Duration(milliseconds: 300));
+      final buttonRect = tester.getRect(button);
+      final labelRect = tester.getRect(label);
+      expect(visibleArea.contains(buttonRect.topLeft), isTrue);
+      expect(visibleArea.contains(buttonRect.bottomRight), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    }
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
