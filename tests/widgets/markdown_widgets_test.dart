@@ -575,9 +575,9 @@ void main() {
 
         final section = _findElement(nodes, 'section');
         expect(section, isNotNull);
-        final footnote =
-            (section!.children!.single as m.Element).children!.single
-                as m.Element;
+        final footnote = (section!.children!.single as m.Element)
+            .children!
+            .single as m.Element;
         final children = footnote.children!;
         expect(children, hasLength(2));
 
