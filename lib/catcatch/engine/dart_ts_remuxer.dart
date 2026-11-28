@@ -1156,7 +1156,7 @@ class _PsiAssembler {
     }
     if (_prefix.length >= 3) {
       // section_length 字段 = 其后字节数（不含 table_id 和 section_length 自身）
-      _sectionLen = ((_prefix[1] & 0x0F) << 8) | _prefix[2] + 3;
+      _sectionLen = (((_prefix[1] & 0x0F) << 8) | _prefix[2]) + 3;
       _inSection = true;
     }
   }

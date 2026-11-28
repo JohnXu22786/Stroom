@@ -206,7 +206,9 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
   bool _isValidUrl(String trimmed) {
     final uri = Uri.tryParse(trimmed);
-    return uri != null && uri.hasScheme && uri.hasAuthority;
+    return uri != null &&
+        uri.hasAuthority &&
+        const {'http', 'https'}.contains(uri.scheme.toLowerCase());
   }
 
   // ====================================================================

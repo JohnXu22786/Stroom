@@ -99,6 +99,92 @@ void main() {
     },
   );
 
+  test(
+    'returns before waiting for a semaphore when already cancelled',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      var requests = 0;
+      final serverDone = server.listen((request) async {
+        requests++;
+        await request.response.close();
+      });
+      final directory = await Directory.systemTemp.createTemp(
+        'cancelled-segment-queued-',
+      );
+      final semaphore = Semaphore(1);
+      await semaphore.acquire();
+      final cancelToken = CancelToken()..cancel('cancel before queueing');
+      try {
+        await downloadSingleSegment(
+          index: 0,
+          url: 'http://${server.address.address}:${server.port}/segment',
+          tempDir: directory.path,
+          partFiles: [null],
+          semaphore: semaphore,
+          cancelToken: cancelToken,
+          errors: {},
+          onSegmentComplete: (_) async {},
+        ).timeout(const Duration(milliseconds: 300));
+
+        expect(requests, 0);
+      } finally {
+        semaphore.release();
+        await serverDone.cancel();
+        await server.close(force: true);
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test('cancellation stops queued segment requests promptly', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final firstRequestStarted = Completer<void>();
+    final allowResponse = Completer<void>();
+    var requests = 0;
+    final serverDone = server.listen((request) async {
+      requests++;
+      if (requests == 1) {
+        firstRequestStarted.complete();
+        await allowResponse.future;
+      }
+      request.response.write('segment');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp(
+      'cancelled-segment-group-',
+    );
+    final cancelToken = CancelToken();
+    final semaphore = Semaphore(1);
+    final partFiles = List<String?>.filled(5, null);
+    final errors = <int, String>{};
+    final futures = List.generate(
+      5,
+      (index) => downloadSingleSegment(
+        index: index,
+        url: 'http://${server.address.address}:${server.port}/segment/$index',
+        tempDir: directory.path,
+        partFiles: partFiles,
+        semaphore: semaphore,
+        cancelToken: cancelToken,
+        errors: errors,
+        onSegmentComplete: (_) async {},
+      ),
+    );
+    try {
+      await firstRequestStarted.future.timeout(const Duration(seconds: 2));
+      cancelToken.cancel('stop queued segments');
+      await Future.wait(futures).timeout(const Duration(seconds: 2));
+
+      expect(requests, 1);
+      expect(errors, isEmpty);
+    } finally {
+      if (!allowResponse.isCompleted) allowResponse.complete();
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('confines progress files for traversal task IDs', () async {
     const taskId = '../../catcatch_progress_escape_test';
     final appDir = await AppStorage.directory;

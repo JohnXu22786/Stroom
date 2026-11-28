@@ -211,6 +211,44 @@ void chatTypesGroup2() {
       expect((segments[5] as TextSegment).text, 'step2');
     });
 
+    test('malformed round starts fall back without hiding tool calls', () {
+      final toolCalls = [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')];
+      for (final roundStarts in [
+        [1], // Starts after the first tool call.
+        [0, 2, 1], // Not strictly increasing.
+        [0, 3], // Outside the tool-call range.
+      ]) {
+        final segments = buildAgentChainSegments(
+          reasoningSections: [],
+          textChunks: ['before', 'after'],
+          toolCalls: toolCalls,
+          toolCallRoundStarts: roundStarts,
+        );
+        expect(
+          segments
+              .whereType<ToolCallSegment>()
+              .map((segment) => segment.data.name),
+          ['A', 'B', 'C'],
+          reason: 'Invalid round starts must not omit tool calls: $roundStarts',
+        );
+
+        final blocks = legacyToBlocks(
+          reasoningSections: [],
+          textChunks: ['before', 'after'],
+          toolCalls: toolCalls,
+          toolCallRoundStarts: roundStarts,
+        );
+        expect(
+          blocksToSegments(blocks)
+              .whereType<ToolCallSegment>()
+              .map((segment) => segment.data.name),
+          ['A', 'B', 'C'],
+          reason:
+              'Invalid round starts must not omit migrated calls: $roundStarts',
+        );
+      }
+    });
+
     test('two rounds each with multiple tool calls are interleaved correctly',
         () {
       // Manager output: think1, text1 → TC(A1), TC(B1) → response1 →

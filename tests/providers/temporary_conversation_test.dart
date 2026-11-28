@@ -6,13 +6,25 @@
 //   - the per-second UI ticker lifecycle
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/services/storage_service.dart';
+
+class _GatedDocumentsPathProvider extends PathProviderPlatform {
+  _GatedDocumentsPathProvider(this.path);
+
+  final Future<String?> path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() => path;
+}
 
 /// Helper: create a ProviderContainer with a ConversationsNotifier that has
 /// state pre-set (bypassing async _load from SharedPreferences).
@@ -252,6 +264,51 @@ void main() {
   });
 
   group('expiry auto-deletion', () {
+    test(
+      'journal failure after disposal does not restore state or timer',
+      () async {
+        final root = await Directory.systemTemp.createTemp('temp-expiry-');
+        addTearDown(() => root.delete(recursive: true));
+        final journalPath =
+            '${root.path}/conversation_stream_checkpoints.jsonl';
+        await Directory(journalPath).create();
+
+        final previousPathProvider = PathProviderPlatform.instance;
+        final documentsPath = Completer<String?>();
+        final pathRequested = Completer<void>();
+        PathProviderPlatform.instance = _GatedDocumentsPathProvider(() {
+          pathRequested.complete();
+          return documentsPath.future;
+        }());
+        AppStorage.resetCache();
+        addTearDown(() {
+          PathProviderPlatform.instance = previousPathProvider;
+          AppStorage.resetCache();
+        });
+
+        final container = _createContainer(
+          initialState: [
+            _conv(
+              'expired',
+              isTemporary: true,
+              expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+            ),
+          ],
+        );
+        final notifier = container.read(conversationsProvider.notifier);
+
+        final expiryCheck = notifier.checkTemporaryExpiryNow();
+        await pathRequested.future;
+        expect(notifier.currentConversations, isEmpty);
+
+        container.dispose();
+        documentsPath.complete(root.path);
+        await expiryCheck;
+
+        expect(notifier.hasTemporaryTimerForTesting, isFalse);
+      },
+    );
+
     test('an expired temporary conversation is deleted', () async {
       final container = _createContainer(
         initialState: [

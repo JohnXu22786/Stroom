@@ -328,7 +328,7 @@ Future<void> validateTaskFlow(
         flow.blocks.first.typeKey == BlockType.catcatch) {
       final uri = Uri.tryParse(text.trim());
       if (uri == null ||
-          !['http', 'https'].contains(uri.scheme) ||
+          !['http', 'https'].contains(uri.scheme.toLowerCase()) ||
           uri.host.isEmpty) {
         error = '请输入有效的 HTTP 或 HTTPS 链接';
       }

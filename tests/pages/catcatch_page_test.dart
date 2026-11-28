@@ -128,6 +128,34 @@ void main() {
   });
 
   group('CatCatchPage - Multi-card & Bottom Bar', () {
+    testWidgets('URL validation accepts HTTP(S) and rejects other schemes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _catCatchTestApp(home: const CatCatchPage()),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('catcatch_add_task')));
+      await tester.pump();
+      final urlField = find.byType(TextFormField).first;
+      final startButton = find.widgetWithText(FilledButton, '开始分析');
+
+      for (final url in [
+        'http://example.com/video.mp4',
+        'https://example.com/video.mp4',
+        'HTTP://example.com/video.mp4',
+      ]) {
+        await tester.enterText(urlField, url);
+        await tester.pump();
+        expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      }
+
+      await tester.enterText(urlField, 'ftp://example.com/video.mp4');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNull);
+    });
+
     testWidgets('Empty state shown when no tasks', (tester) async {
       await tester.pumpWidget(
         _catCatchTestApp(home: const CatCatchPage()),

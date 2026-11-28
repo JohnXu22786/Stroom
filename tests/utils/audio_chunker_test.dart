@@ -1888,7 +1888,7 @@ void main() {
           (15.0, 0.5), // 15s tone
           (2.0, 0.0), // 2s silence — EXCELLENT cut point
           (15.0, 0.5), // 15s tone
-          (0.6, 0.0), // 0.6s silence — barely qualifies
+          (1.2, 0.0), // qualifies the adaptive 0.9s minimum
           (15.0, 0.5), // 15s tone
         ],
       );
@@ -1898,21 +1898,20 @@ void main() {
           maxChunkBytes: 10 * 1024 * 1024,
           minSilenceDuration: 0.5,
           minChunkDuration: 10.0,
-          targetChunkDuration: 30.0,
+          targetChunkDuration: 24.3,
           maxChunkDuration: 50.0,
         ),
       );
       final chunks = chunker.split(wav);
 
-      // With targetChunkDuration=30s, the first segment after 2s gap (at ~16s)
-      // is well within minChunk..maxChunk range. The 0.6s gap is a secondary
-      // candidate. The scorer should prefer the 2s gap for its quality, but
-      // since both segments are valid, verify we get non-overlapping chunks.
-      expect(chunks.length, greaterThanOrEqualTo(1));
-      for (final chunk in chunks) {
-        final info = parseWavHeader(chunk);
-        expect(parseWavHeader(chunk).sampleRate, 8000);
-      }
+      expect(chunks, hasLength(3));
+      final firstChunk = parseWavHeader(chunks.first);
+      final lastChunk = parseWavHeader(chunks.last);
+      expect(firstChunk.sampleRate, 8000);
+      expect(lastChunk.sampleRate, 8000);
+      // Both gaps qualify and are equally distant from the 24.3s target. The
+      // longer silence at 16s should win over the shorter one at 32.6s.
+      expect(firstChunk.totalSamples / firstChunk.sampleRate, closeTo(16, 0.5));
     });
 
     test('all chunks are strictly non-overlapping', () {
@@ -1939,27 +1938,29 @@ void main() {
       );
       final chunks = chunker.split(wav);
 
-      // Parse each chunk's PCM data start and duration from the WAV header
+      expect(chunks.length, greaterThan(1));
+      final originalInfo = parseWavHeader(wav);
+      final originalPcm = Uint8List.sublistView(
+        wav,
+        originalInfo.dataOffset,
+        originalInfo.dataOffset + originalInfo.dataSize,
+      );
+      final reconstructedPcm = <int>[];
       for (final chunk in chunks) {
         final info = parseWavHeader(chunk);
         expect(info.dataSize, greaterThan(0));
+        reconstructedPcm.addAll(
+          Uint8List.sublistView(
+            chunk,
+            info.dataOffset,
+            info.dataOffset + info.dataSize,
+          ),
+        );
       }
-
-      // If chunks overlap, their combined duration would exceed the original.
-      // We can verify non-overlap by checking that all chunks are valid WAVs
-      // and no byte range in the original data is included more than once.
-      // The simplest assertion: total PCM data across all chunks should
-      // be close to original data size (not doubled/tripled by overlap).
-      final totalChunkData = chunks.fold<int>(
-        0,
-        (sum, c) => sum + parseWavHeader(c).dataSize,
-      );
-      final originalInfo = parseWavHeader(wav);
-      // With 0 overlap, total chunk data ≈ original data
-      // (Allow small variance due to rounding at frame boundaries)
       expect(
-        totalChunkData,
-        closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1),
+        reconstructedPcm,
+        orderedEquals(originalPcm),
+        reason: 'zero-overlap chunks must preserve each source frame once',
       );
     });
   });
