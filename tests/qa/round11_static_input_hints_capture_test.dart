@@ -1,11 +1,18 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/anki/database/col_dao.dart';
+import 'package:stroom/anki/models/deck.dart';
+import 'package:stroom/anki/models/model.dart' as anki_model;
+import 'package:stroom/anki/providers/anki_actions.dart';
+import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
+import 'package:stroom/pages/anki_page.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/text_storage_shared.dart';
@@ -596,5 +603,130 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('captures Anki deck-name and tags hint slots', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+
+    final container = ProviderContainer(
+      overrides: [
+        ankiDeckListProvider.overrideWith(
+          (ref) async => [Deck(id: 1, name: 'Deck')],
+        ),
+        ankiDeckStatsProvider.overrideWith(
+          (ref, deckId) async => DeckStats(deckName: 'Deck'),
+        ),
+        ankiModelListProvider.overrideWith(
+          (ref) async => [anki_model.Notetype(id: 1, name: 'Basic')],
+        ),
+        ankiActionsProvider.overrideWith(AnkiActions.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(ankiDeckListProvider.future);
+    await container.read(ankiModelListProvider.future);
+
+    final strings = lookupAppLocalizations(const Locale('de', 'DE'));
+
+    Future<void> pumpPage(ThemeData theme) async {
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _captureKey,
+          child: UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              locale: const Locale('de', 'DE'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              theme: theme,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2.5)),
+                child: child!,
+              ),
+              home: const AnkiDroidPage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    Future<void> captureHints(String themeName, ThemeData theme) async {
+      await pumpPage(theme);
+      await tester.tap(find.byTooltip(strings.ankiNewDeckTooltip));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      verifyHintMeasurement(
+        tester,
+        clipped: true,
+        expectedHint: strings.ankiDeckNameHint,
+      );
+      await expectLater(
+        find.byKey(_captureKey),
+        matchesGoldenFile(
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/anki-deck-name-de-320x640-scale2_5-$themeName.png',
+        ),
+      );
+      await tester.tap(find.text(strings.actionCancel));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(strings.ankiAddCardAction));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      verifyHintMeasurement(
+        tester,
+        clipped: true,
+        expectedHint: strings.ankiTagsHint,
+      );
+      final hintFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedInputHint &&
+            widget.data == strings.ankiTagsHint,
+      );
+      await tester.ensureVisible(hintFinder);
+      await tester.pump(const Duration(milliseconds: 100));
+      final field = find.ancestor(
+        of: hintFinder,
+        matching: find.byType(TextField),
+      );
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .requestFocus();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      await expectLater(
+        find.byKey(_captureKey),
+        matchesGoldenFile(
+          '../../docs/ui-constrained-text-qa/round13-form-hints-a/anki-tags-de-320x640-scale2_5-$themeName.png',
+        ),
+      );
+      await tester.enterText(field, 'Mathe Physik');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Mathe Physik'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text(strings.actionCancel).last);
+      await tester.pumpAndSettle();
+    }
+
+    await captureHints(
+      'light',
+      ThemeData.light(useMaterial3: true),
+    );
+    await captureHints(
+      'dark',
+      ThemeData.dark(useMaterial3: true),
+    );
   });
 }
