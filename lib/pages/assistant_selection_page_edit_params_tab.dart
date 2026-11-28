@@ -50,6 +50,7 @@ class _EditDialogVars {
   bool enablePresencePenalty;
   int? seed;
   bool enableSeed;
+  final seedHintStates = WidgetStatesController();
   List<CustomParameter> customParameters;
 
   /// 默认模型显示名（新建话题时应用；null = 暂不设置，新话题回退到
@@ -297,12 +298,15 @@ Widget _buildEditParamsTab({
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                hintText:
-                    AppLocalizations.of(context)!.assistantIntegerSeedHint,
+                hint: ConstrainedInputHint(
+                  AppLocalizations.of(context)!.assistantIntegerSeedHint,
+                  statesController: vars.seedHintStates,
+                ),
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
               keyboardType: TextInputType.number,
+              statesController: vars.seedHintStates,
               controller: seedController,
               onChanged: (v) => setDlgState(() {
                 vars.seed = int.tryParse(v);

@@ -64,6 +64,7 @@ class BatchRenameRuleEditor extends StatefulWidget {
 
 class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
   final _controllers = <String, TextEditingController>{};
+  final _hintStates = <String, WidgetStatesController>{};
   bool? _lastValid;
   late AppLocalizations _strings;
   Key _key(String key) => Key(widget.primary ? key : '${widget.slotId}:$key');
@@ -72,11 +73,16 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
         field,
         () => TextEditingController(text: initial),
       );
+  WidgetStatesController _statesController(String field) =>
+      _hintStates.putIfAbsent(field, WidgetStatesController.new);
 
   @override
   void dispose() {
     for (final c in _controllers.values) {
       c.dispose();
+    }
+    for (final states in _hintStates.values) {
+      states.dispose();
     }
     super.dispose();
   }
@@ -150,13 +156,19 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
         child: TextField(
           key: keyName == null ? null : _key(keyName),
           controller: _controller(field, initial),
+          statesController: _statesController(field),
           decoration: InputDecoration(
             label: ConstrainedText(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            hintText: hint,
+            hint: hint == null
+                ? null
+                : ConstrainedInputHint(
+                    hint,
+                    statesController: _statesController(field),
+                  ),
             helperText: help,
             helperMaxLines: 3,
             border: const OutlineInputBorder(),

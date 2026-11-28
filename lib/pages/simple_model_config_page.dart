@@ -23,7 +23,9 @@ class SimpleModelConfigPage extends StatefulWidget {
 class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
-  final _nameHintStates = MaterialStatesController();
+  final _nameHintStates = WidgetStatesController();
+  final _modelIdHintStates = WidgetStatesController();
+  final _customParamHintStates = <int, WidgetStatesController>{};
   late List<CustomParam> _customParams;
   bool _isSaving = false;
 
@@ -43,6 +45,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
     _nameController.dispose();
     _modelIdController.dispose();
     _nameHintStates.dispose();
+    _modelIdHintStates.dispose();
+    for (final states in _customParamHintStates.values) {
+      states.dispose();
+    }
     super.dispose();
   }
 
@@ -211,8 +217,12 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           const SizedBox(height: 8),
           TextField(
             controller: _modelIdController,
+            statesController: _modelIdHintStates,
             decoration: InputDecoration(
-              hintText: AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
+              hint: ConstrainedInputHint(
+                AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
+                statesController: _modelIdHintStates,
+              ),
               border: OutlineInputBorder(),
             ),
           ),
@@ -353,6 +363,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                       const SizedBox(height: 8),
                       TextFormField(
                         initialValue: param.defaultValue,
+                        statesController: _customParamHintStates.putIfAbsent(
+                          i,
+                          WidgetStatesController.new,
+                        ),
                         decoration: InputDecoration(
                           label: ConstrainedText(
                             AppLocalizations.of(context)!
@@ -360,9 +374,13 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          hintText: localizedParamTypeDefaultValueHint(
-                            AppLocalizations.of(context)!,
-                            param.paramType,
+                          hint: ConstrainedInputHint(
+                            localizedParamTypeDefaultValueHint(
+                              AppLocalizations.of(context)!,
+                              param.paramType,
+                            ),
+                            statesController: _customParamHintStates
+                                .putIfAbsent(i, WidgetStatesController.new),
                           ),
                           border: const OutlineInputBorder(),
                           isDense: true,
