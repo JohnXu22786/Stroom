@@ -186,6 +186,11 @@ class AnkiApkgImporter {
         if (tgtCol.isEmpty) {
           throw AnkiApkgException.unexpectedError(targetDbPath);
         }
+        final secondsPerDay = Duration(days: 1).inSeconds;
+        final sourceToday =
+            (nowSec - (srcCol.first['crt'] as num).toInt()) ~/ secondsPerDay;
+        final targetToday =
+            (nowSec - (tgtCol.first['crt'] as num).toInt()) ~/ secondsPerDay;
         final srcDecks =
             jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
         final tgtDecks =
@@ -359,6 +364,11 @@ class AnkiApkgImporter {
           final id = ++newId;
           final oldDid = card['did'] as int;
           final newDid = deckMap[oldDid] ?? oldDid;
+          final queue = card['queue'] as int;
+          final due = card['due'] as int;
+          final translatedDue = queue == 2 || queue == 3
+              ? due + targetToday - sourceToday
+              : due;
 
           await txn.insert('cards', {
             'id': id,
@@ -368,8 +378,8 @@ class AnkiApkgImporter {
             'mod': nowSec,
             'usn': -1,
             'type': card['type'],
-            'queue': card['queue'],
-            'due': card['due'],
+            'queue': queue,
+            'due': translatedDue,
             'ivl': card['ivl'] ?? 0,
             'factor': card['factor'] ?? 2500,
             'reps': card['reps'] ?? 0,
