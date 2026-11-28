@@ -158,8 +158,9 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => // ignore: invalid_use_of_visible_for_testing_member
-                  showBrowserUserScriptImportDialog(
+              onPressed:
+                  () => // ignore: invalid_use_of_visible_for_testing_member
+                      showBrowserUserScriptImportDialog(
                 context,
                 fetchSource: (_) async => '',
               ),

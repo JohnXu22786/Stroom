@@ -30,7 +30,8 @@ void main() {
       final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
       await (FontLoader(
         family,
-      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
     }
   });
 
@@ -96,7 +97,8 @@ void main() {
       tester,
       size: const Size(1200, 800),
       child: createMessageSearchTestApp(locale: const Locale('en', 'US')),
-      path: '../../docs/ui-constrained-text-qa/round11-static-input-hints/message-search-fitting-en-1200x800-scale1-light.png',
+      path:
+          '../../docs/ui-constrained-text-qa/round11-static-input-hints/message-search-fitting-en-1200x800-scale1-light.png',
     );
     verifyHintMeasurement(tester, clipped: false);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -107,7 +109,8 @@ void main() {
         locale: const Locale('fr', 'FR'),
         textScale: 1.5,
       ),
-      path: '../../docs/ui-constrained-text-qa/round11-static-input-hints/message-search-clipped-fr-320x640-scale1_5-light.png',
+      path:
+          '../../docs/ui-constrained-text-qa/round11-static-input-hints/message-search-clipped-fr-320x640-scale1_5-light.png',
     );
     verifyHintMeasurement(tester, clipped: true);
     expect(find.byType(ConstrainedInputHint), findsOneWidget);
@@ -134,7 +137,8 @@ void main() {
         ),
         home: const TextCreatePage(),
       ),
-      path: '../../docs/ui-constrained-text-qa/round11-static-input-hints/text-create-de-320x640-scale2-light.png',
+      path:
+          '../../docs/ui-constrained-text-qa/round11-static-input-hints/text-create-de-320x640-scale2-light.png',
     );
     verifyHintMeasurement(tester, clipped: true);
     expect(find.byType(ConstrainedInputHint), findsOneWidget);

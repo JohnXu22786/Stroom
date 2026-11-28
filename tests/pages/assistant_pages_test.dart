@@ -351,7 +351,8 @@ void main() {
     final nameField = find.byType(TextField).first;
     expect(
       find.byWidgetPredicate(
-        (widget) => widget is ConstrainedInputHint &&
+        (widget) =>
+            widget is ConstrainedInputHint &&
             widget.data == 'An example assistant name that needs a narrow slot',
       ),
       findsOneWidget,
@@ -363,7 +364,8 @@ void main() {
     );
     expectHintMeasurement(
       tester,
-      hint: 'A much longer assistant description that exceeds its two-line field slot at this text scale.',
+      hint:
+          'A much longer assistant description that exceeds its two-line field slot at this text scale.',
       clipped: true,
     );
     await tester.tap(nameField);

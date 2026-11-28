@@ -73,8 +73,7 @@ void main() {
           (titleFieldWidget.decoration!.hint! as ExcludeSemantics).child,
           isA<ConstrainedInputHint>(),
         );
-        final titleController =
-            titleFieldWidget.controller!;
+        final titleController = titleFieldWidget.controller!;
 
         await tester.tap(titleField);
         await tester.enterText(titleField, 'draft title');

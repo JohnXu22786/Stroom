@@ -132,8 +132,7 @@ void main() {
       ]) {
         expect(
           find.byWidgetPredicate(
-            (widget) =>
-                widget is ConstrainedInputHint && widget.data == hint,
+            (widget) => widget is ConstrainedInputHint && widget.data == hint,
           ),
           findsOneWidget,
         );

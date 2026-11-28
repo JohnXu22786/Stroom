@@ -164,7 +164,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _seedController;
   final _maxTokensHintStates = MaterialStatesController();
   final _seedHintStates = MaterialStatesController();
-  final Map<ReasoningParam, (MaterialStatesController, MaterialStatesController)>
+  final Map<ReasoningParam,
+          (MaterialStatesController, MaterialStatesController)>
       _reasoningValueHintStates = {};
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;

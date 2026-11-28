@@ -440,33 +440,33 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       hint: AppLocalizations.of(context)!
                           .providerParamNameHint('enabled, true'),
                       child: TextFormField(
-                      initialValue: toggle.onValue ?? '',
-                      statesController: _reasoningHintStates(
-                        toggle,
-                        onValue: true,
-                      ),
-                      decoration: InputDecoration(
-                        label: _buildProviderInputLabel(
-                          AppLocalizations.of(context)!
-                              .providerToggleOnValueLabel,
+                        initialValue: toggle.onValue ?? '',
+                        statesController: _reasoningHintStates(
+                          toggle,
+                          onValue: true,
                         ),
-                        hint: ExcludeSemantics(
-                          child: ConstrainedInputHint(
+                        decoration: InputDecoration(
+                          label: _buildProviderInputLabel(
                             AppLocalizations.of(context)!
-                                .providerParamNameHint('enabled, true'),
-                            statesController: _reasoningHintStates(
-                              toggle,
-                              onValue: true,
+                                .providerToggleOnValueLabel,
+                          ),
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!
+                                  .providerParamNameHint('enabled, true'),
+                              statesController: _reasoningHintStates(
+                                toggle,
+                                onValue: true,
+                              ),
                             ),
                           ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
                         ),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        toggle.onValue = v;
-                        setState(() {});
-                      },
+                        onChanged: (v) {
+                          toggle.onValue = v;
+                          setState(() {});
+                        },
                       ),
                     ),
                   ),
@@ -476,33 +476,33 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       hint: AppLocalizations.of(context)!
                           .providerParamNameHint('disabled, false'),
                       child: TextFormField(
-                      initialValue: toggle.offValue ?? '',
-                      statesController: _reasoningHintStates(
-                        toggle,
-                        onValue: false,
-                      ),
-                      decoration: InputDecoration(
-                        label: _buildProviderInputLabel(
-                          AppLocalizations.of(context)!
-                              .providerToggleOffValueLabel,
+                        initialValue: toggle.offValue ?? '',
+                        statesController: _reasoningHintStates(
+                          toggle,
+                          onValue: false,
                         ),
-                        hint: ExcludeSemantics(
-                          child: ConstrainedInputHint(
+                        decoration: InputDecoration(
+                          label: _buildProviderInputLabel(
                             AppLocalizations.of(context)!
-                                .providerParamNameHint('disabled, false'),
-                            statesController: _reasoningHintStates(
-                              toggle,
-                              onValue: false,
+                                .providerToggleOffValueLabel,
+                          ),
+                          hint: ExcludeSemantics(
+                            child: ConstrainedInputHint(
+                              AppLocalizations.of(context)!
+                                  .providerParamNameHint('disabled, false'),
+                              statesController: _reasoningHintStates(
+                                toggle,
+                                onValue: false,
+                              ),
                             ),
                           ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
                         ),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        toggle.offValue = v;
-                        setState(() {});
-                      },
+                        onChanged: (v) {
+                          toggle.offValue = v;
+                          setState(() {});
+                        },
                       ),
                     ),
                   ),

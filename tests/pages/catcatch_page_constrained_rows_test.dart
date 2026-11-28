@@ -57,11 +57,11 @@ void main() {
 
       final urlHint = AppLocalizations.of(
         tester.element(find.byType(CatCatchPage)),
-      )!.catCatchUrlHint;
+      )!
+          .catCatchUrlHint;
       expect(
         find.byWidgetPredicate(
-          (widget) =>
-              widget is ConstrainedInputHint && widget.data == urlHint,
+          (widget) => widget is ConstrainedInputHint && widget.data == urlHint,
         ),
         findsOneWidget,
       );
