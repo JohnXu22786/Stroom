@@ -160,8 +160,7 @@ void main() {
   });
 }
 
-List<String> _footnoteIds(String html) =>
-    RegExp(r'<li id="(fn-[^"]+)">')
-        .allMatches(html)
-        .map((match) => match.group(1)!)
-        .toList();
+List<String> _footnoteIds(String html) => RegExp(r'<li id="(fn-[^"]+)">')
+    .allMatches(html)
+    .map((match) => match.group(1)!)
+    .toList();
