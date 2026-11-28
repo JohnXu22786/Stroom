@@ -2438,6 +2438,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
+      final mode = _imageImportMode;
       _beginImageImport();
       importPending = true;
       await previousImportCommit;
@@ -2448,6 +2449,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (await _handleSelectedImage(
           entry.key,
           entry.value,
+          mode: mode,
           importGeneration: importGeneration,
         )) {
           loadedCount++;
@@ -2485,13 +2487,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<bool> _handleSelectedImage(
     String fileName,
     Uint8List data, {
+    required OcrImageImportMode mode,
     required int importGeneration,
   }) async {
     if (!mounted || importGeneration != _imageImportGeneration) return false;
     try {
-      final payload = await _prepareImagePayload(data);
+      var payload = await _prepareImagePayload(data);
       if (!mounted || importGeneration != _imageImportGeneration) {
         return false;
+      }
+      if (mode == OcrImageImportMode.standard) {
+        payload = await applyOcrImageImportQuality(
+          payload,
+          maxWidth: mode.maxWidth,
+          maxHeight: mode.maxHeight,
+          imageQuality: mode.imageQuality,
+        );
+        if (!mounted || importGeneration != _imageImportGeneration) {
+          return false;
+        }
       }
       setState(() {
         _selectedImages.add(

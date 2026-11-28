@@ -5735,6 +5735,194 @@ void main() {
       expect(prepared.height, 2200);
       expect(prepared.bytes, denseTextImage);
     });
+
+    for (final original in [false, true]) {
+      testWidgets(
+        'app album ${original ? "original" : "standard"} mode applies import quality',
+        (tester) async {
+          final imageBytes = Uint8List.fromList(
+            img.encodePng(img.Image(width: 3000, height: 2200)),
+          );
+          await tester.runAsync(
+            () => _storeAppAlbumImage(
+              name: 'Quality_mode_${original ? "original" : "standard"}',
+              hash:
+                  'ocr_app_album_quality_${original ? "original" : "standard"}',
+              bytes: imageBytes,
+            ),
+          );
+          List<SelectedImage>? selectedImages;
+          final preflightStarted = Completer<void>();
+          final finishPreflight = Completer<int?>();
+
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry()],
+              testImagePayloadPreparer: (bytes) async =>
+                  prepareOcrImagePayloadSync(bytes),
+              testRequestSizePreflight: (_, images) {
+                selectedImages = images;
+                preflightStarted.complete();
+                return finishPreflight.future;
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          if (original) {
+            await tester.tap(find.byKey(const Key('ocr_page_settings')));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('原图 / 高细节'));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.text('相册选择'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('从应用相册选择'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+          await _pumpUntil(
+            tester,
+            () => find
+                .text('Quality_mode_${original ? "original" : "standard"}.png')
+                .evaluate()
+                .isNotEmpty,
+          );
+          await tester.tap(
+            find.text('Quality_mode_${original ? "original" : "standard"}.png'),
+          );
+          await _pumpUntil(
+            tester,
+            () => find.text('确定 (1)').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          await _pumpUntil(
+            tester,
+            () => find.text('已选 1 张图片').evaluate().isNotEmpty,
+          );
+          await tester.pump(const Duration(seconds: 3));
+          await tester.pumpAndSettle();
+          expect(find.text('已选 1 张图片'), findsOneWidget);
+          tester
+              .widget<FilledButton>(
+                find.ancestor(
+                  of: find.text('开始识别'),
+                  matching: find.byType(FilledButton),
+                ),
+              )
+              .onPressed!
+              .call();
+          await tester.pump();
+          await _pumpUntil(tester, () => preflightStarted.isCompleted);
+
+          final selected = selectedImages!.single;
+          final decoded = img.decodeImage(selected.bytes)!;
+          expect(decoded.width, original ? 3000 : 2048);
+          expect(decoded.height, original ? 2200 : 1502);
+          expect(selected.format, original ? 'png' : 'jpeg');
+          if (original) expect(selected.bytes, imageBytes);
+          finishPreflight.complete(null);
+        },
+      );
+    }
+
+    testWidgets('app album uses one import mode for an entire batch', (
+      tester,
+    ) async {
+      final imageBytes = Uint8List.fromList(
+        img.encodePng(img.Image(width: 3000, height: 2200)),
+      );
+      await tester.runAsync(() async {
+        await _storeAppAlbumImage(
+          name: 'Quality_batch_a',
+          hash: 'ocr_app_album_quality_batch_a',
+          bytes: imageBytes,
+        );
+        await _storeAppAlbumImage(
+          name: 'Quality_batch_b',
+          hash: 'ocr_app_album_quality_batch_b',
+          bytes: imageBytes,
+        );
+      });
+      final firstPreparationStarted = Completer<void>();
+      final finishFirstPreparation = Completer<void>();
+      final preflightStarted = Completer<void>();
+      final finishPreflight = Completer<int?>();
+      var preparationCount = 0;
+      List<SelectedImage>? selectedImages;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImagePayloadPreparer: (bytes) async {
+            if (preparationCount++ == 0) {
+              firstPreparationStarted.complete();
+              await finishFirstPreparation.future;
+            }
+            return prepareOcrImagePayloadSync(bytes);
+          },
+          testRequestSizePreflight: (_, images) {
+            selectedImages = images;
+            preflightStarted.complete();
+            return finishPreflight.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await _pumpUntil(
+        tester,
+        () =>
+            find.text('Quality_batch_a.png').evaluate().isNotEmpty &&
+            find.text('Quality_batch_b.png').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('Quality_batch_a.png'));
+      await _pumpUntil(tester, () => find.text('确定 (1)').evaluate().isNotEmpty);
+      await tester.tap(find.text('Quality_batch_b.png'));
+      await _pumpUntil(tester, () => find.text('确定 (2)').evaluate().isNotEmpty);
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+      await _pumpUntil(tester, () => firstPreparationStarted.isCompleted);
+
+      await tester.tap(find.byKey(const Key('ocr_page_settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('原图 / 高细节'));
+      await tester.pumpAndSettle();
+      finishFirstPreparation.complete();
+
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 2 张图片').evaluate().isNotEmpty,
+      );
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      tester
+          .widget<FilledButton>(
+            find.ancestor(
+              of: find.text('开始识别'),
+              matching: find.byType(FilledButton),
+            ),
+          )
+          .onPressed!
+          .call();
+      await tester.pump();
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
+
+      expect(selectedImages, hasLength(2));
+      for (final selected in selectedImages!) {
+        final decoded = img.decodeImage(selected.bytes)!;
+        expect(decoded.width, 2048);
+        expect(decoded.height, 1502);
+        expect(selected.format, 'jpeg');
+      }
+      finishPreflight.complete(null);
+    });
   });
 
   testWidgets('successful camera import clears an earlier app album error', (
