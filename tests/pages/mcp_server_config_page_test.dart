@@ -139,7 +139,7 @@ void main() {
     expect(find.byIcon(Icons.save), findsOneWidget);
     expect(find.byIcon(Icons.close), findsOneWidget);
     await tester.tap(find.byIcon(Icons.save));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Abandonner'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -182,23 +182,32 @@ void main() {
       expect(find.text(buttonLabel), findsOneWidget);
     }
 
+    final outerScroll = tester.state<ScrollableState>(
+      find.byType(Scrollable).first,
+    );
     await tester.drag(
       find.byType(SingleChildScrollView).first,
-      const Offset(0, -560),
+      const Offset(0, -500),
     );
-    await tester.pumpAndSettle();
-    for (var attempt = 0;
-        attempt < 20 && find.byType(TextField).evaluate().isEmpty;
-        attempt++) {
-      await tester.drag(find.byType(ListView).last, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(outerScroll.position.pixels, greaterThan(0));
+
     final nameField = find.byType(TextField).first;
     await tester.ensureVisible(nameField);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(viewport.contains(tester.getRect(nameField).topLeft), isTrue);
+
+    final beforeFormScroll = outerScroll.position.pixels;
+    await tester.dragFrom(const Offset(160, 160), const Offset(0, -240));
+    await tester.pump(const Duration(milliseconds: 300));
+    final afterFormScroll = outerScroll.position.pixels;
+    expect(afterFormScroll, greaterThan(beforeFormScroll));
+
+    await tester.dragFrom(const Offset(160, 160), const Offset(0, 480));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(outerScroll.position.pixels, lessThan(afterFormScroll));
     await tester.ensureVisible(find.text('Abandonner'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Abandonner'));
     await tester.pumpAndSettle();
     expect(find.text('Abandonner'), findsNothing);

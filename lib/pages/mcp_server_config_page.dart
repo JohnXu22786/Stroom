@@ -592,10 +592,6 @@ class _McpServerConfigDialogState
     final dialogHeight = MediaQuery.sizeOf(context).height * 0.85;
     final scrollWholeDialog = compactAppBar &&
         kToolbarHeight + _compactAppBarActionsHeight + 120 > dialogHeight;
-    final dialogContentHeight = scrollWholeDialog
-        ? kToolbarHeight + _compactAppBarActionsHeight + dialogHeight
-        : dialogHeight;
-
     return PopScope(
       canPop: !_isEditMode || !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, _) async {
@@ -649,10 +645,10 @@ class _McpServerConfigDialogState
         child: _McpDialogContentScroller(
           width: 560,
           viewportHeight: dialogHeight,
-          contentHeight: dialogContentHeight,
           scroll: scrollWholeDialog,
           child: Scaffold(
             appBar: AppBar(
+              primary: !scrollWholeDialog,
               title: ConstrainedText(
                 title,
                 maxLines: 1,
@@ -1299,24 +1295,53 @@ class _McpDialogContentScroller extends StatelessWidget {
   const _McpDialogContentScroller({
     required this.width,
     required this.viewportHeight,
-    required this.contentHeight,
     required this.scroll,
     required this.child,
   });
 
   final double width;
   final double viewportHeight;
-  final double contentHeight;
   final bool scroll;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final content = SizedBox(height: contentHeight, child: child);
+    final scaffold = child as Scaffold;
+    if (!scroll) {
+      return SizedBox(
+        width: width,
+        height: viewportHeight,
+        child: child,
+      );
+    }
+
+    final body = scaffold.body! as ListView;
+    final scrollableBody = ListView.custom(
+      childrenDelegate: body.childrenDelegate,
+      padding: body.padding,
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      primary: false,
+    );
     return SizedBox(
       width: width,
       height: viewportHeight,
-      child: scroll ? SingleChildScrollView(child: content) : child,
+      child: SingleChildScrollView(
+        child: Material(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: scaffold.appBar!.preferredSize.height,
+                child: scaffold.appBar,
+              ),
+              scrollableBody,
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
