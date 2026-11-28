@@ -209,13 +209,12 @@ class LinkParser extends TextParser {
         if (isDone) {
           break;
         }
-      } else if (char == $lt || char == $gt) {
+      } else if (char == $lt ||
+          char == $gt ||
+          (char <= 0x1f && char != $lf && char != $cr) ||
+          char == 0x7f) {
         return false;
-      } else if (char == $space ||
-          char == $tab ||
-          char == $lf ||
-          char == $cr ||
-          char == $ff) {
+      } else if (char == $space || char == $lf || char == $cr) {
         break;
       } else if (char == $lparen) {
         parenCount++;

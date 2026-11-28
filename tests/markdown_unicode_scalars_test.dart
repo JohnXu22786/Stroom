@@ -145,6 +145,17 @@ void main() {
     );
   });
 
+  test('bare reference destinations reject unescaped ASCII controls', () {
+    for (final control in ['\u0000', '\u000b']) {
+      expect(
+        markdown.markdownToHtml(
+          '[text][foo]\n\n[foo]: target${control}part',
+        ),
+        contains('<p>[text][foo]</p>'),
+      );
+    }
+  });
+
   test(
     'bare reference destinations accept escapes and balanced parentheses',
     () {
