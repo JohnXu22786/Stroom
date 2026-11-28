@@ -33,12 +33,14 @@ the two-second endpoint pause, and the reverse reveal back to the start. The
 static 2× image shows the clipped state with reduced motion enabled.
 
 The before capture uses base `fa9e99c7` and the same `one two three` fixture.
-The production media-picker source in current `main` is unchanged from that
-base. The capture shows only `one` and `two` in the 72 dp chip. The after capture
-shows all three lines in a 96 dp surface. At 2×, the measured line boxes total
-87 dp; 4 dp of vertical padding on both sides plus a 1 dp border allowance
-leaves 87 dp for the text. The chip remains 72 dp wide and its remove action
-stays 6 dp above its top edge.
+The production source in `main` at `49a9327e` includes the fix: compared with
+`fa9e99c7`, `lib/widgets/app_media_picker_dialog.dart` has 35 added and 3
+removed lines to measure the first three wrapped filename lines and size the
+preview chip. The before capture shows only `one` and `two` in the 72 dp chip;
+the after capture shows all three lines in a 96 dp surface. At 2×, the measured
+line boxes total 87 dp; 4 dp of vertical padding on both sides plus a 1 dp
+border allowance leaves 87 dp for the text. The chip remains 72 dp wide and
+its remove action stays 6 dp above its top edge.
 
 Regenerate the production captures with:
 
