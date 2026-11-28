@@ -300,6 +300,7 @@ Future<void> _loadRobotoTestFont() async {
     final bytes = await File(path).readAsBytes();
     await (FontLoader(
       font.$1,
-    )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+    )..addFont(Future.value(ByteData.sublistView(bytes))))
+        .load();
   }
 }

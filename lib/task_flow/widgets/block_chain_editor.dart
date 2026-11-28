@@ -379,8 +379,7 @@ class BlockChainEditor extends StatelessWidget {
               64,
               addBlockTextWidth + 18 + 8 + 12 + 16,
             );
-            final stackControls =
-                showTemporaryOutputControl &&
+            final stackControls = showTemporaryOutputControl &&
                 constraints.maxWidth <
                     temporaryControlWidth + 4 + addButtonWidth;
             final addButton = OutlinedButton.icon(
