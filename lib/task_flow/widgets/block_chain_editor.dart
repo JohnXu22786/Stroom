@@ -193,6 +193,7 @@ class BlockChainEditor extends StatelessWidget {
     final inputTypeStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
+      fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
       color: cs.primary,
     );
     final inputIcon = Container(

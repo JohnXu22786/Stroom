@@ -173,6 +173,7 @@ void main() {
       );
       expect(button, findsOneWidget);
       expect(find.bySemanticsLabel('Block hinzufügen'), findsOneWidget);
+      expect(find.text('Text'), findsOneWidget);
       final height = tester.getSize(button).height;
       expect(height, greaterThanOrEqualTo(44));
       if (scale == 1) {
