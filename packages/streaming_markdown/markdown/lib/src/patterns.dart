@@ -150,6 +150,6 @@ final linkReferenceDefinitionPattern = RegExp(r'^[ ]{0,3}\[');
 /// A alert block is similar to a blockquote, starts with `> [!TYPE]`, and only
 /// 5 types are supported (case-insensitive).
 final alertPattern = RegExp(
-  r'^\s{0,3}>\s{0,3}\\?\[!(note|tip|important|caution|warning)\\?\]\s*$',
+  r'^[ ]{0,3}>[ \t]?\[!(note|tip|important|caution|warning)\]$',
   caseSensitive: false,
 );
