@@ -738,16 +738,19 @@ class TsDemuxer {
 
     while (i + 6 < data.length) {
       if (data[i] == 0xFF && (data[i + 1] & 0xF0) == 0xF0) {
+        final headerLength = (data[i + 1] & 0x01) != 0 ? 7 : 9;
         final frameLength = ((data[i + 3] & 0x03) << 11) |
             (data[i + 4] << 3) |
             ((data[i + 5] >> 5) & 0x07);
 
-        if (frameLength < 7 || i + frameLength > data.length) {
+        if (frameLength < headerLength || i + frameLength > data.length) {
           i++;
           continue;
         }
 
-        frames.add(AacFrame(data: data.sublist(i + 7, i + frameLength)));
+        frames.add(
+          AacFrame(data: data.sublist(i + headerLength, i + frameLength)),
+        );
         i += frameLength;
       } else {
         i++;

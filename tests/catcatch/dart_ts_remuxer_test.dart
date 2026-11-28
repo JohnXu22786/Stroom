@@ -525,6 +525,81 @@ void main() {
   });
 
   group('TsDemuxer - extractAacFrames', () {
+    test('skips the CRC in protected ADTS frames', () {
+      final payload = Uint8List.fromList([0x31, 0x42, 0x53]);
+      // Protected ADTS frame: nine-byte header, including the two-byte CRC.
+      final frame = Uint8List.fromList([
+        0xFF,
+        0xF0,
+        0x4C,
+        0x80,
+        0x01,
+        0x9F,
+        0xFC,
+        0xA5,
+        0x5A,
+        ...payload,
+      ]);
+
+      final frames = TsDemuxer.extractAacFrames(frame);
+
+      expect(frames, hasLength(1));
+      expect(frames.single.data, orderedEquals(payload));
+    });
+
+    test('preserves the complete payload of unprotected ADTS frames', () {
+      final payload = Uint8List.fromList([0x61, 0x72, 0x83]);
+      final frame = Uint8List.fromList([
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x01,
+        0x5F,
+        0xFC,
+        ...payload,
+      ]);
+
+      final frames = TsDemuxer.extractAacFrames(frame);
+
+      expect(frames, hasLength(1));
+      expect(frames.single.data, orderedEquals(payload));
+    });
+
+    test(
+      'ignores protected frames shorter than their header and truncated frames',
+      () {
+        // Declared frame length 8 cannot contain a protected nine-byte header.
+        final tooShort = Uint8List.fromList([
+          0xFF,
+          0xF0,
+          0x4C,
+          0x80,
+          0x01,
+          0x1F,
+          0xFC,
+          0xA5,
+        ]);
+        // Declared frame length 12, but only eleven bytes are available.
+        final truncated = Uint8List.fromList([
+          0xFF,
+          0xF0,
+          0x4C,
+          0x80,
+          0x01,
+          0x9F,
+          0xFC,
+          0xA5,
+          0x5A,
+          0x31,
+          0x42,
+        ]);
+
+        expect(TsDemuxer.extractAacFrames(tooShort), isEmpty);
+        expect(TsDemuxer.extractAacFrames(truncated), isEmpty);
+      },
+    );
+
     test('extracts AAC frames from ADTS data', () {
       // Build a minimal AAC ADTS frame
       // ADTS header: 7 bytes, raw AAC data: 23 bytes, total frame = 30
