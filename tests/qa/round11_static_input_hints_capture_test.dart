@@ -90,6 +90,16 @@ void main() {
     expect(painter.didExceedMaxLines, clipped);
   }
 
+  Finder nativeFieldForHint(String expectedHint) {
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == expectedHint,
+    );
+    return find.ancestor(
+      of: hintFinder,
+      matching: find.byType(TextFormField),
+    );
+  }
+
   testWidgets('captures fitting and clipped message search hint slots', (
     tester,
   ) async {
@@ -177,7 +187,7 @@ void main() {
     final localizedHint =
         '${localizedStrings.paramTypeJsonHint}{"key": "value"}';
     verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
-    final clippedField = find.byType(TextFormField).last;
+    final clippedField = nativeFieldForHint(localizedHint);
     await tester.enterText(clippedField, 'x');
     await tester.enterText(clippedField, '');
     await tester.pump(const Duration(milliseconds: 100));
@@ -218,7 +228,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     verifyHintMeasurement(tester, clipped: true, expectedHint: localizedHint);
-    final darkClippedField = find.byType(TextFormField).last;
+    final darkClippedField = nativeFieldForHint(localizedHint);
     await tester.enterText(darkClippedField, 'x');
     await tester.enterText(darkClippedField, '');
     await tester.pump(const Duration(milliseconds: 100));
