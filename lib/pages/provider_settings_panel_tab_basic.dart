@@ -169,12 +169,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   hint: LayoutBuilder(
                     builder: (context, constraints) {
                       final maxWidth = constraints.maxWidth;
-                      final hintWidth = maxWidth.isFinite
-                          ? (maxWidth - 40).clamp(0.0, maxWidth).toDouble()
-                          : maxWidth;
                       return ClipRect(
                         child: SizedBox(
-                          width: hintWidth,
+                          width: maxWidth.isFinite ? maxWidth : null,
                           child: ExcludeSemantics(
                             child: ConstrainedInputHint(
                               AppLocalizations.of(context)!

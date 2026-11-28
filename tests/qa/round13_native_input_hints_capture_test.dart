@@ -37,6 +37,7 @@ void main() {
     required String screenshot,
     String providerType = 'llm',
     bool checkOcrRequestSize = false,
+    double dialogMaxWidth = 340,
     bool captureMotion = false,
     bool darkTheme = false,
   }) async {
@@ -54,8 +55,8 @@ void main() {
                   ? ThemeData.dark(useMaterial3: true)
                   : ThemeData.light(useMaterial3: true))
               .copyWith(
-            dialogTheme: const DialogThemeData(
-              constraints: BoxConstraints(maxWidth: 340),
+            dialogTheme: DialogThemeData(
+              constraints: BoxConstraints(maxWidth: dialogMaxWidth),
             ),
           ),
           builder: (context, child) => MediaQuery(
@@ -87,7 +88,11 @@ void main() {
     await tester.tap(find.text('Open provider settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    if (!captureMotion) await tester.pumpAndSettle();
+    if (captureMotion) {
+      await tester.pump(const Duration(milliseconds: 500));
+    } else {
+      await tester.pumpAndSettle();
+    }
     expect(tester.takeException(), isNull);
 
     final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
@@ -115,7 +120,20 @@ void main() {
     if (checkOcrRequestSize) {
       final tabs = tester.widget<TabBar>(find.byType(TabBar));
       await tester.tap(find.byWidget(tabs.tabs[1]));
-      await tester.pumpAndSettle();
+      if (captureMotion) {
+        final requestSizeHint = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedInputHint &&
+              widget.data == strings.providerUseAppDefault,
+        );
+        for (var frame = 0;
+            frame < 10 && requestSizeHint.evaluate().isEmpty;
+            frame++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+      } else {
+        await tester.pumpAndSettle();
+      }
 
       final hintText = strings.providerUseAppDefault;
       final hintFinder = find.byWidgetPredicate(
@@ -128,7 +146,11 @@ void main() {
         const Key('ocr_provider_request_size_budget_mib'),
       );
       await tester.tap(field);
-      await tester.pumpAndSettle();
+      if (captureMotion) {
+        await tester.pump();
+      } else {
+        await tester.pumpAndSettle();
+      }
       final input = tester.widget<TextField>(field);
       final hint = tester.widget<ConstrainedInputHint>(hintFinder);
       expect(input.statesController, hint.statesController);
@@ -310,6 +332,125 @@ void main() {
       screenshot:
           '../../docs/ui-constrained-text-qa/round13-form-hints-b/provider-ocr-budget-de-320x640-scale2-light.png',
     );
+  });
+
+  testWidgets('OCR hint stays stationary when it fits beside the MiB suffix', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await openProviderPanel(
+      tester,
+      size: const Size(420, 640),
+      locale: const Locale('en', 'US'),
+      textScale: 1,
+      providerType: 'ocr',
+      checkOcrRequestSize: true,
+      dialogMaxWidth: 420,
+      captureMotion: true,
+      screenshot: '',
+    );
+
+    final hintText = AppLocalizations.of(tester.element(find.byType(Dialog)))!
+        .providerUseAppDefault;
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == hintText,
+    );
+    final textFinder = find.descendant(
+      of: hintFinder,
+      matching: find.byType(ConstrainedText),
+    );
+    final layoutBuilderFinder = find.ancestor(
+      of: hintFinder,
+      matching: find.byType(LayoutBuilder),
+    );
+    final text = tester.widget<ConstrainedText>(textFinder);
+    final context = tester.element(textFinder);
+    final painter = TextPainter(
+      text: TextSpan(text: hintText, style: text.style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+      maxLines: 1,
+    )..layout();
+    final slotWidth = tester
+        .renderObject<RenderBox>(layoutBuilderFinder)
+        .constraints
+        .maxWidth;
+    final clipFinder = find.descendant(
+      of: layoutBuilderFinder,
+      matching: find.byType(ClipRect),
+    );
+    final hintSlot = tester.widget<ClipRect>(clipFinder).child! as SizedBox;
+    expect(
+      hintSlot.width,
+      closeTo(slotWidth, 0.01),
+      reason: 'The hint must use the complete width already reserved for it.',
+    );
+    expect(
+      painter.width,
+      lessThanOrEqualTo(slotWidth),
+      reason: 'The complete localized hint fits the actual hint slot.',
+    );
+    expect(
+      painter.width,
+      greaterThan(slotWidth - 40),
+      reason: 'The hint is wider than the old hard-coded reduced slot.',
+    );
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(
+      find.ancestor(of: textFinder, matching: find.byType(OverflowBox)),
+      findsNothing,
+      reason: 'A fitting hint must remain stationary.',
+    );
+  });
+
+  testWidgets('clipped OCR hint reveals text while keeping MiB visible', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await openProviderPanel(
+      tester,
+      size: const Size(320, 640),
+      locale: const Locale('de', 'DE'),
+      textScale: 2,
+      providerType: 'ocr',
+      checkOcrRequestSize: true,
+      captureMotion: true,
+      screenshot: '',
+    );
+
+    final hintText = AppLocalizations.of(tester.element(find.byType(Dialog)))!
+        .providerUseAppDefault;
+    final hintFinder = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedInputHint && widget.data == hintText,
+    );
+    final textFinder = find.descendant(
+      of: hintFinder,
+      matching: find.byType(ConstrainedText),
+    );
+    final hintTextFinder = find.descendant(
+      of: textFinder,
+      matching: find.text(hintText),
+    );
+    expect(hintTextFinder, findsOneWidget);
+    final startLeft = tester.getTopLeft(hintTextFinder).dx;
+    await tester.pump(const Duration(milliseconds: 1000));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      tester.getTopLeft(hintTextFinder).dx,
+      lessThan(startLeft),
+      reason: 'The localized hint exceeds the real slot and must reveal.',
+    );
+    expect(find.text('MiB'), findsOneWidget);
+    final suffixOpacity = tester.widget<AnimatedOpacity>(
+      find
+          .ancestor(
+              of: find.text('MiB'), matching: find.byType(AnimatedOpacity))
+          .first,
+    );
+    expect(suffixOpacity.opacity, 1);
   });
 
   testWidgets('OCR provider request-size hint keeps its dark theme styling', (
