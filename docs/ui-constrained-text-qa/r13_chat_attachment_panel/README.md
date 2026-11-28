@@ -1,7 +1,7 @@
 # Chat attachment panel constrained viewport
 
 These screenshots capture the production `showChatAttachmentPanel` route in a
-320 dp wide Flutter widget-test viewport. The fitting state is English (US),
+320 dp wide Flutter widget-test viewport with the debug banner disabled. The fitting state is English (US),
 320 × 640 logical pixels, 1× text scale, light theme. The constrained top and
 lower states are German, 320 × 320 logical pixels, 2.5× text scale, light
 theme: the first shows the initial scroll position, and the second shows the

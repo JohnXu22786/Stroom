@@ -308,6 +308,7 @@ Future<void> _openPanel(
     RepaintBoundary(
       key: _captureKey,
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: theme,
         locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
