@@ -337,6 +337,8 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
                         startActivity(launchIntent);
                         result.success(true);
 
+                    } else {
+                        result.success(false);
                     }
                 }catch (Exception e){
                     result.error("open app failure", e.getMessage(),e);
