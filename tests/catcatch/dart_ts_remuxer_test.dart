@@ -455,7 +455,8 @@ void main() {
       section[offset++] = 0x00; // no ES descriptors
 
       final packets = <TsPacket>[
-        TsPacket(pid: 0x0000, payload: _buildPat(pmtPid), payloadUnitStart: true),
+        TsPacket(
+            pid: 0x0000, payload: _buildPat(pmtPid), payloadUnitStart: true),
       ];
       var sectionOffset = 0;
       while (sectionOffset < section.length) {
@@ -463,8 +464,8 @@ void main() {
         final prefixLength = isStart ? 1 : 0;
         final sectionChunkLength =
             section.length - sectionOffset < 184 - prefixLength
-            ? section.length - sectionOffset
-            : 184 - prefixLength;
+                ? section.length - sectionOffset
+                : 184 - prefixLength;
         final payload = Uint8List(prefixLength + sectionChunkLength);
         if (isStart) payload[0] = 0; // pointer_field
         payload.setRange(prefixLength, payload.length, section, sectionOffset);
