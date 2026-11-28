@@ -6,8 +6,10 @@ void showAddCustomParameterDialog(
   void Function(String name, String type, dynamic value) onAdd,
 ) {
   final nameController = TextEditingController();
+  final nameHintStates = WidgetStatesController();
   String type = 'string';
   final valueController = TextEditingController();
+  final valueHintStates = WidgetStatesController();
   String? jsonError;
 
   void validateJsonValue() {
@@ -42,14 +44,18 @@ void showAddCustomParameterDialog(
             children: [
               TextField(
                 controller: nameController,
+                statesController: nameHintStates,
                 decoration: InputDecoration(
                   label: ConstrainedText(
                     AppLocalizations.of(context)!.assistantParameterName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  hintText:
-                      AppLocalizations.of(context)!.assistantParameterNameHint,
+                  hint: ConstrainedInputHint(
+                    AppLocalizations.of(context)!.assistantParameterNameHint,
+                    statesController: nameHintStates,
+                    hasError: hasInvalidName,
+                  ),
                   border: const OutlineInputBorder(),
                   errorText: hasInvalidName
                       ? AppLocalizations.of(context)!
@@ -128,6 +134,7 @@ void showAddCustomParameterDialog(
                   Expanded(
                     child: TextField(
                       controller: valueController,
+                      statesController: valueHintStates,
                       // JSON 值是多行代码：拉高输入框便于编辑
                       minLines: type == 'json' ? 4 : 1,
                       maxLines: type == 'json' ? 8 : 1,
@@ -146,17 +153,21 @@ void showAddCustomParameterDialog(
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        hintText: type == 'boolean'
-                            ? AppLocalizations.of(context)!
-                                .assistantTrueFalseHint
-                            : type == 'number'
-                                ? AppLocalizations.of(context)!
-                                    .assistantNumberHint
-                                : type == 'json'
-                                    ? AppLocalizations.of(context)!
-                                        .assistantJsonHint('{"key": "value"}')
-                                    : AppLocalizations.of(context)!
-                                        .assistantValueHint,
+                        hint: ConstrainedInputHint(
+                          type == 'boolean'
+                              ? AppLocalizations.of(context)!
+                                  .assistantTrueFalseHint
+                              : type == 'number'
+                                  ? AppLocalizations.of(context)!
+                                      .assistantNumberHint
+                                  : type == 'json'
+                                      ? AppLocalizations.of(context)!
+                                          .assistantJsonHint('{"key": "value"}')
+                                      : AppLocalizations.of(context)!
+                                          .assistantValueHint,
+                          statesController: valueHintStates,
+                          hasError: jsonError != null,
+                        ),
                         border: const OutlineInputBorder(),
                         errorText: jsonError,
                         errorMaxLines: 3,
@@ -249,6 +260,8 @@ void showAddCustomParameterDialog(
     WidgetsBinding.instance.addPostFrameCallback((_) {
       nameController.dispose();
       valueController.dispose();
+      nameHintStates.dispose();
+      valueHintStates.dispose();
     });
   });
 }

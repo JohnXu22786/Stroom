@@ -27,6 +27,14 @@ class FakeServer:
         self.calls.append("kill")
 
 
+class RaisingCloseLog:
+    closed = False
+
+    def close(self):
+        self.closed = True
+        raise OSError("close failed")
+
+
 class CaptureProcessCleanupTest(unittest.TestCase):
     def test_timeout_kills_and_reaps_server_and_cleans_log(self):
         self.assert_cleanup(
@@ -38,6 +46,18 @@ class CaptureProcessCleanupTest(unittest.TestCase):
         self.assert_cleanup(
             FakeServer(), ["terminate", ("wait", 10)]
         )
+
+    def test_log_is_removed_even_when_close_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "server.log"
+            log_path.write_text("server output", encoding="utf-8")
+            server_log = RaisingCloseLog()
+
+            with self.assertRaisesRegex(OSError, "close failed"):
+                cleanup_server(FakeServer(), server_log, log_path)
+
+            self.assertTrue(server_log.closed)
+            self.assertFalse(log_path.exists())
 
     def assert_cleanup(self, server, expected_calls):
         with tempfile.TemporaryDirectory() as directory:

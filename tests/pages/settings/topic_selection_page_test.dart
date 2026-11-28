@@ -853,6 +853,9 @@ void main() {
     expect(tester.getSemantics(editable).getSemanticsData().hint, hint);
     expect(tester.widget<EditableText>(editable).controller.text, 'Neuer Name');
     semantics.dispose();
+    await tester.tap(find.text(l10n.actionConfirm).last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(tester.takeException(), isNull);
   });
 
