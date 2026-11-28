@@ -219,6 +219,27 @@ void main() {
     });
   });
 
+  group('MermaidTemplates - flowchart node ID collisions', () {
+    test(
+      'rewrites node IDs and references without changing labels or comments',
+      () {
+        const code = '''graph TD
+  Node[Existing node]
+  Node2[Another existing node]''';
+        const snippet = '''  Node[Node label] --> Node2[Node]
+  %% Node comment''';
+
+        final result = MermaidTemplates.assignUniqueFlowchartNodeIds(
+          code,
+          snippet,
+        );
+
+        expect(result, '''  Node1[Node label] --> Node21[Node]
+  %% Node comment''');
+      },
+    );
+  });
+
   group('MermaidTemplates - requirement diagram relationships', () {
     test(
       'uses supported element-to-requirement relationships in the template',
