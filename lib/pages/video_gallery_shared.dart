@@ -2,7 +2,7 @@ import '../widgets/constrained_text.dart';
 
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -15,11 +15,14 @@ import 'video_gallery_web_source.dart';
 class VideoPlayerPage extends StatefulWidget {
   final String filePath;
   final String displayName;
+  @visibleForTesting
+  final VideoPlayerController Function(String source)? controllerFactory;
 
   const VideoPlayerPage({
     super.key,
     required this.filePath,
     required this.displayName,
+    this.controllerFactory,
   });
 
   @override
@@ -53,12 +56,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
           return;
         }
         _webVideoSource = source;
-        controller = VideoPlayerController.networkUrl(Uri.parse(source));
+        controller = widget.controllerFactory?.call(source) ??
+            VideoPlayerController.networkUrl(Uri.parse(source));
       } else {
-        controller = VideoPlayerController.file(File(widget.filePath));
+        controller = widget.controllerFactory?.call(widget.filePath) ??
+            VideoPlayerController.file(File(widget.filePath));
       }
       _videoPlayerController = controller;
       await controller.initialize();
+      if (!mounted) return;
 
       _chewieController = ChewieController(
         videoPlayerController: controller,
@@ -79,6 +85,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         setState(() => _initialized = true);
       }
     } catch (e) {
+      if (!mounted) return;
       debugPrint('VideoPlayerPage init error: $e');
       // Dispose controller to prevent resource leak on init failure
       _videoPlayerController?.dispose();

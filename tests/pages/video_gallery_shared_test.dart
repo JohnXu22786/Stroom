@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/video_gallery_shared.dart';
+import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 void main() {
@@ -20,6 +24,54 @@ void main() {
     expect(videoMimeTypeForPath('videos/sample.mpeg'), 'video/mpeg');
     expect(videoMimeTypeForPath('videos/sample.mpg'), 'video/mpeg');
   });
+
+  testWidgets(
+    'disposal during initialization does not create a late Chewie controller',
+    (tester) async {
+      final controller = _PendingVideoPlayerController();
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  PageRouteBuilder<void>(
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                    pageBuilder: (_, _, _) => VideoPlayerPage(
+                      filePath: '/videos/sample.mp4',
+                      displayName: 'sample-video.mp4',
+                      controllerFactory: (_) => controller,
+                    ),
+                  ),
+                ),
+                child: const Text('open video'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open video'));
+      await tester.pump();
+      expect(controller.initializeCalls, 1);
+
+      navigatorKey.currentState!.pop();
+      await tester.pump();
+      expect(controller.disposeCalls, 1);
+
+      controller.finishInitialization.complete();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(VideoPlayerPage), findsNothing);
+      expect(controller.playCalls, 0);
+      expect(controller.disposeCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final testCase in [
     (locale: const Locale('en'), error: 'Could not load video'),
@@ -79,4 +131,33 @@ class _FailingVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<void> dispose(int playerId) async {}
+}
+
+class _PendingVideoPlayerController extends VideoPlayerController {
+  _PendingVideoPlayerController() : super.file(File('/videos/sample.mp4'));
+
+  final Completer<void> finishInitialization = Completer<void>();
+  int initializeCalls = 0;
+  int disposeCalls = 0;
+  int playCalls = 0;
+
+  @override
+  Future<void> initialize() {
+    initializeCalls++;
+    return finishInitialization.future;
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls++;
+    await super.dispose();
+  }
+
+  @override
+  Future<void> setLooping(bool looping) async {}
+
+  @override
+  Future<void> play() async {
+    playCalls++;
+  }
 }

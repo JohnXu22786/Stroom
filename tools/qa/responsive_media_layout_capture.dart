@@ -35,25 +35,26 @@ class _ResponsiveMediaLayoutCaptureState
 
   @override
   Widget build(BuildContext context) {
-    return MediaQuery(
-      data: MediaQueryData(
-        textScaler: TextScaler.linear(_textScale),
-        disableAnimations: Uri.base.queryParameters['static'] == '1',
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('fr', 'FR'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        brightness: Brightness.light,
       ),
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('fr', 'FR'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          brightness: Brightness.light,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(_textScale),
+          disableAnimations: Uri.base.queryParameters['static'] == '1',
         ),
-        home: _component == 'mermaid'
-            ? const _MermaidCapture()
-            : const _MediaPickerCapture(),
+        child: child!,
       ),
+      home: _component == 'mermaid'
+          ? const _MermaidCapture()
+          : const _MediaPickerCapture(),
     );
   }
 }
@@ -76,10 +77,7 @@ class _MediaPickerCapture extends StatelessWidget {
                 multiSelect: true,
                 loadRecords: () async => const [
                   _CaptureRecord(
-                    id: 'one',
-                    name: 'photo-alpha.png',
-                    folder: '',
-                  ),
+                      id: 'one', name: 'photo-alpha.png', folder: ''),
                 ],
                 loadFolders: () async => <String>{},
                 readFile: (_) async => Uint8List.fromList([1, 2, 3]),
