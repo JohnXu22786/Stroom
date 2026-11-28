@@ -143,8 +143,8 @@ List<Map<String, int>> computeRecentTaskCounts({
     void countTask(DateTime createdAt, DateTime? statusChangedAt) {
       if (isAfterStart(createdAt) && isBeforeOrAtEnd(createdAt)) {
         totalCount++;
-        final effective = statusChangedAt ?? createdAt;
-        if (effective.isAfter(unreadThreshold)) {
+        if (createdAt.isAfter(unreadThreshold) ||
+            (statusChangedAt?.isAfter(unreadThreshold) ?? false)) {
           unreadCount++;
         }
       }
