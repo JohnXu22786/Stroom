@@ -266,6 +266,8 @@ void main() {
         await tester.drag(find.byType(ListView).last, const Offset(0, -240));
         await tester.pump(const Duration(milliseconds: 100));
         final nameField = find.byType(TextField).first;
+        await tester.ensureVisible(nameField);
+        await tester.pumpAndSettle();
         await tester.tap(nameField);
         await tester.pump();
         expect(tester.testTextInput.isVisible, isTrue);

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -9,6 +12,23 @@ import 'package:stroom/widgets/constrained_text.dart';
 // Unit owner: vertical_mcp_arguments_hint.
 // Functional suite mapping: feature-ui.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<void> loadProductionFonts() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  }
+
   Future<void> openStdioConfig(
     WidgetTester tester, {
     double textScale = 1,
@@ -81,6 +101,164 @@ void main() {
 
     expect(helper, findsOneWidget);
     expect(tester.getSize(helper).height, greaterThan(20));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('French compact AppBar actions grow to fit at 4x', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final discardLabel = find.text('Abandonner');
+    expect(discardLabel, findsOneWidget);
+    final labelContext = tester.element(discardLabel);
+    final painter = TextPainter(
+      text: TextSpan(
+        text: 'Abandonner',
+        style: DefaultTextStyle.of(labelContext).style,
+      ),
+      textDirection: Directionality.of(labelContext),
+      textScaler: MediaQuery.textScalerOf(labelContext),
+      locale: Localizations.localeOf(labelContext),
+    )..layout(maxWidth: tester.getSize(discardLabel).width);
+    expect(painter.computeLineMetrics().length, greaterThan(1));
+
+    final actionButton = find
+        .ancestor(of: discardLabel, matching: find.byType(TextButton))
+        .first;
+    final actionSlot = find
+        .ancestor(
+          of: actionButton,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is SizedBox &&
+                widget.height != null &&
+                widget.height! > 72,
+          ),
+        )
+        .first;
+    final labelRect = tester.getRect(discardLabel);
+    final slotRect = tester.getRect(actionSlot);
+    final appBarRect = tester.getRect(find.byType(AppBar).last);
+    final dialogRect = tester.getRect(find.byType(Dialog));
+    expect(slotRect.height, greaterThan(72));
+    expect(slotRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+    expect(slotRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    expect(appBarRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+    expect(appBarRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    expect(appBarRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+    for (final label in [find.text('Enregistrer'), discardLabel]) {
+      final button =
+          find.ancestor(of: label, matching: find.byType(TextButton)).first;
+      expect(dialogRect.contains(tester.getRect(button).topLeft), isTrue);
+      expect(dialogRect.contains(tester.getRect(button).bottomRight), isTrue);
+    }
+    expect(find.text('Enregistrer'), findsOneWidget);
+    expect(find.byIcon(Icons.save), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.save));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Abandonner'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('French compact AppBar actions scroll within a short dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final viewport = const Rect.fromLTWH(0, 0, 320, 320);
+    final dialogTitle = find.text('Nouveau serveur MCP');
+    expect(dialogTitle, findsOneWidget);
+    final titleRect = tester.getRect(dialogTitle);
+    expect(titleRect.top, greaterThanOrEqualTo(0));
+    expect(titleRect.bottom, lessThanOrEqualTo(320));
+    for (final (label, buttonLabel) in [
+      (find.text('Enregistrer'), 'Enregistrer'),
+      (find.text('Abandonner'), 'Abandonner'),
+    ]) {
+      final button =
+          find.ancestor(of: label, matching: find.byType(TextButton)).first;
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      final buttonRect = tester.getRect(button);
+      final labelRect = tester.getRect(label);
+      expect(viewport.contains(buttonRect.topLeft), isTrue);
+      expect(viewport.contains(buttonRect.bottomRight), isTrue);
+      expect(buttonRect.contains(labelRect.topLeft), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+      expect(find.text(buttonLabel), findsOneWidget);
+    }
+
+    final outerScroll = tester.state<ScrollableState>(
+      find.byType(Scrollable).first,
+    );
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -500),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(outerScroll.position.pixels, greaterThan(0));
+
+    final nameField = find.byType(TextField).first;
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(viewport.contains(tester.getRect(nameField).topLeft), isTrue);
+
+    final beforeFormScroll = outerScroll.position.pixels;
+    await tester.dragFrom(const Offset(160, 160), const Offset(0, -240));
+    await tester.pump(const Duration(milliseconds: 300));
+    final afterFormScroll = outerScroll.position.pixels;
+    expect(afterFormScroll, greaterThan(beforeFormScroll));
+
+    await tester.dragFrom(const Offset(160, 160), const Offset(0, 480));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(outerScroll.position.pixels, lessThan(afterFormScroll));
+    await tester.ensureVisible(find.text('Abandonner'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('English compact AppBar action retains 48 dp at 1x', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await openStdioConfig(tester, stdio: false);
+
+    final saveLabel = find.text('Save');
+    expect(saveLabel, findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(appBar.bottom!.preferredSize.height, 96);
+    expect(find.text('Discard'), findsOneWidget);
+    expect(find.byIcon(Icons.save), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -333,5 +511,74 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+  testWidgets('French compact AppBar actions remain reachable with keyboard', (
+    tester,
+  ) async {
+    await loadProductionFonts();
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await openStdioConfig(
+      tester,
+      textScale: 4,
+      locale: const Locale('fr', 'FR'),
+      stdio: false,
+    );
+
+    final form = find.byType(ListView).last;
+    final preKeyboardAppBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(preKeyboardAppBar.primary, isTrue);
+    expect(preKeyboardAppBar.bottom!.preferredSize.height, 320);
+    expect(tester.getSize(form).height, 168);
+    final formScrollable = tester.state<ScrollableState>(
+      find.descendant(of: form, matching: find.byType(Scrollable)),
+    );
+    var scrollAttempts = 0;
+    while (find.byType(TextField).evaluate().isEmpty && scrollAttempts < 25) {
+      formScrollable.position.jumpTo(formScrollable.position.pixels + 240);
+      await tester.pump(const Duration(milliseconds: 100));
+      scrollAttempts++;
+    }
+    final nameField = find.byType(TextField).first;
+    expect(nameField, findsOneWidget);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(nameField);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final appBar = tester.widget<AppBar>(find.byType(AppBar).last);
+    expect(appBar.primary, isTrue);
+    expect(appBar.bottom!.preferredSize.height, 160);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(tester.getSize(form).height, 140);
+    final visibleArea = const Rect.fromLTWH(0, 0, 320, 380);
+    await tester.ensureVisible(nameField);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(visibleArea.contains(tester.getRect(nameField).topLeft), isTrue);
+    expect(visibleArea.contains(tester.getRect(nameField).bottomRight), isTrue);
+    for (final label in [find.text('Enregistrer'), find.text('Abandonner')]) {
+      final button =
+          find.ancestor(of: label, matching: find.byType(TextButton)).first;
+      await tester.ensureVisible(button);
+      await tester.pump(const Duration(milliseconds: 300));
+      final buttonRect = tester.getRect(button);
+      final labelRect = tester.getRect(label);
+      expect(visibleArea.contains(buttonRect.topLeft), isTrue);
+      expect(visibleArea.contains(buttonRect.bottomRight), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.topLeft), isTrue);
+      expect(buttonRect.inflate(0.5).contains(labelRect.bottomRight), isTrue);
+    }
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
