@@ -198,11 +198,14 @@ class PlatformTutorialPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: config.color,
-                      borderRadius: BorderRadius.circular(16),
+                      shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
                     child: Text(
