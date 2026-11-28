@@ -236,7 +236,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     StepType? firstIncomplete;
     int firstIncompleteIndex = -1;
     for (int i = 0; i < resumeSnapshot.steps.length; i++) {
-      if (!resumeSnapshot.steps[i].completed) {
+      if (!resumeSnapshot.steps[i].completed &&
+          !resumeSnapshot.steps[i].skipped) {
         firstIncomplete = resumeSnapshot.steps[i].type;
         firstIncompleteIndex = i;
         break;
